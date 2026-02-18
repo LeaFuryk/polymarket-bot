@@ -52,28 +52,31 @@ class DecisionEngine:
                 temperature=self._config.temperature,
                 system=SYSTEM_PROMPT,
                 messages=[{"role": "user", "content": prompt}],
-                response_format={
-                    "type": "json_schema",
-                    "json_schema": {
-                        "name": "trading_decision",
-                        "strict": True,
-                        "schema": TRADING_DECISION_SCHEMA,
-                    },
-                },
+                tools=[{
+                    "name": "trading_decision",
+                    "description": "Submit your trading decision",
+                    "input_schema": TRADING_DECISION_SCHEMA,
+                }],
+                tool_choice={"type": "tool", "name": "trading_decision"},
             )
 
             latency_ms = (time.monotonic() - start) * 1000
 
-            # Extract JSON from response
-            text = response.content[0].text
-            data = json.loads(text)
+            # Extract structured data from tool_use block
+            data = None
+            for block in response.content:
+                if block.type == "tool_use":
+                    data = block.input
+                    break
+            if data is None:
+                raise ValueError("No tool_use block in response")
 
             decision = TradingDecision(
                 action=Action(data["action"]),
                 token_side=TokenSide(data.get("token_side", "up")),
                 order_type=OrderType(data["order_type"]),
                 size=float(data["size"]),
-                limit_price=data.get("limit_price"),
+                limit_price=data.get("limit_price") or None,
                 ttl_seconds=int(data.get("ttl_seconds", 300)),
                 confidence=float(data["confidence"]),
                 reasoning=data.get("reasoning", ""),
