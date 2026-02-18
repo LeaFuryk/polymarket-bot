@@ -38,14 +38,18 @@ class PolymarketRestClient:
             logger.exception("Failed to fetch orderbook")
             return OrderbookSnapshot()
 
-        bids = [
-            OrderbookLevel(price=float(b["price"]), size=float(b["size"]))
-            for b in (raw.get("bids") or [])
-        ]
-        asks = [
-            OrderbookLevel(price=float(a["price"]), size=float(a["size"]))
-            for a in (raw.get("asks") or [])
-        ]
+        # py-clob-client returns OrderBookSummary with OrderSummary items
+        # that have .price/.size as strings, or it may return a dict
+        raw_bids = raw.bids if hasattr(raw, "bids") else (raw.get("bids") or [])
+        raw_asks = raw.asks if hasattr(raw, "asks") else (raw.get("asks") or [])
+
+        def _parse_level(item) -> OrderbookLevel:
+            if hasattr(item, "price"):
+                return OrderbookLevel(price=float(item.price), size=float(item.size))
+            return OrderbookLevel(price=float(item["price"]), size=float(item["size"]))
+
+        bids = [_parse_level(b) for b in raw_bids]
+        asks = [_parse_level(a) for a in raw_asks]
         # Sort bids descending, asks ascending
         bids.sort(key=lambda x: x.price, reverse=True)
         asks.sort(key=lambda x: x.price)
@@ -63,7 +67,10 @@ class PolymarketRestClient:
             raw = await loop.run_in_executor(
                 None, partial(self._client.get_last_trade_price, tid)
             )
-            return float(raw.get("price", 0)) if raw else None
+            if raw is None:
+                return None
+            price = raw.price if hasattr(raw, "price") else raw.get("price", 0)
+            return float(price) if price else None
         except Exception:
             logger.exception("Failed to fetch last trade price")
             return None

@@ -216,12 +216,14 @@ class TradingAgent:
             self._trade_log.write_resolution(resolution)
             self._last_resolution = resolution
 
-            # Update session stats
-            if resolution_pnl >= 0:
-                self._session_wins += 1
-            else:
-                self._session_losses += 1
-            self._session_resolution_pnl += resolution_pnl
+            # Update session stats (skip flat resolutions with no position)
+            had_position = resolution_pnl != 0.0
+            if had_position:
+                if resolution_pnl > 0:
+                    self._session_wins += 1
+                else:
+                    self._session_losses += 1
+                self._session_resolution_pnl += resolution_pnl
 
             logger.info(
                 "Resolution: %s winner=%s pnl=%.4f | Session: W%d/L%d total_pnl=%.4f",

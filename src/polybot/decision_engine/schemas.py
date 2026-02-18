@@ -24,10 +24,10 @@ TRADING_DECISION_SCHEMA = {
             "description": "Number of shares to trade (0 for HOLD)",
         },
         "limit_price": {
-            "type": ["number", "null"],
+            "type": "number",
             "minimum": 0,
             "maximum": 1,
-            "description": "Limit price for LIMIT orders (null for MARKET)",
+            "description": "Limit price for LIMIT orders (0 for MARKET)",
         },
         "ttl_seconds": {
             "type": "integer",

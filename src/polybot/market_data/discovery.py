@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import time
 
@@ -75,6 +76,13 @@ class MarketDiscovery:
         condition_id = market.get("conditionId", "")
 
         clob_token_ids = market.get("clobTokenIds")
+        # Gamma API returns clobTokenIds as a JSON-encoded string, not a list
+        if isinstance(clob_token_ids, str):
+            try:
+                clob_token_ids = json.loads(clob_token_ids)
+            except (ValueError, TypeError):
+                logger.warning("Could not parse clobTokenIds string for slug=%s", slug)
+                return None
         if not clob_token_ids or len(clob_token_ids) < 2:
             logger.warning("Missing clobTokenIds for slug=%s", slug)
             return None
