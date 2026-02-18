@@ -343,6 +343,55 @@ def _btc_volatility(
 
 
 # ---------------------------------------------------------------------------
+# BTC candle indicators (use snapshot.btc_candles)
+# ---------------------------------------------------------------------------
+
+@register("btc_candle_momentum")
+def _btc_candle_momentum(
+    snap: MarketSnapshot, params: dict, _session: SessionContext | None,
+) -> IndicatorResult | None:
+    """Up/down ratio of last N 5-min BTC candles."""
+    window = params.get("window", 6)
+    candles = snap.btc_candles
+    if len(candles) < window:
+        return None
+    recent = candles[-window:]
+    up_count = sum(1 for c in recent if c.direction == "up")
+    ratio = up_count / window
+    if ratio >= 0.67:
+        signal = "bullish momentum"
+    elif ratio <= 0.33:
+        signal = "bearish momentum"
+    else:
+        signal = "mixed"
+    return IndicatorResult(
+        name=f"BTC Candle Momentum ({window})",
+        value=ratio,
+        label=f"{up_count}/{window} up ({signal})",
+    )
+
+
+@register("btc_candle_ma_cross")
+def _btc_candle_ma_cross(
+    snap: MarketSnapshot, params: dict, _session: SessionContext | None,
+) -> IndicatorResult | None:
+    """MA5 vs MA12 crossover on 5-min BTC candle closes."""
+    candles = snap.btc_candles
+    if len(candles) < 12:
+        return None
+    closes = [c.close for c in candles]
+    ma5 = statistics.mean(closes[-5:])
+    ma12 = statistics.mean(closes[-12:])
+    diff = ma5 - ma12
+    signal = "bullish cross" if diff > 0 else "bearish cross"
+    return IndicatorResult(
+        name="BTC Candle MA Cross (5/12)",
+        value=diff,
+        label=f"${diff:+.0f} ({signal})",
+    )
+
+
+# ---------------------------------------------------------------------------
 # Session indicators
 # ---------------------------------------------------------------------------
 

@@ -35,6 +35,8 @@ class AiConfig(BaseModel):
     max_tokens: int = 1024
     temperature: float = 0.0
     api_key: str = ""
+    input_cost_per_mtok: float = 3.0
+    output_cost_per_mtok: float = 8.0
 
 
 class SimulatorConfig(BaseModel):

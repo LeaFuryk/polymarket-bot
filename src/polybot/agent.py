@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import signal
 import time
@@ -32,6 +33,7 @@ from polybot.models import (
     ResolutionRecord,
     TokenSide,
     TradeRecord,
+    TradingDecision,
 )
 from polybot.resolution import ResolutionTracker
 from polybot.risk.manager import RiskManager
@@ -96,6 +98,10 @@ class TradingAgent:
         self._recent_trades: list[TradeRecord] = []
         self._resolutions_since_reflection: int = 0
 
+        # Restore persisted state
+        self._state_path = Path(config.logging.log_dir) / "agent_state.json"
+        self._load_agent_state()
+
         # Current candle market
         self._current_market: CandleMarket | None = None
 
@@ -111,6 +117,10 @@ class TradingAgent:
         self._session_resolution_pnl = 0.0
         self._last_resolution: ResolutionRecord | None = None
 
+        # AI cost tracking
+        self._total_api_cost: float = 0.0
+        self._last_cycle_api_cost: float = 0.0
+
     async def run(self) -> None:
         """Main entry point — run the trading loop until shutdown."""
         _setup_logging(self._config)
@@ -119,6 +129,9 @@ class TradingAgent:
         loop = asyncio.get_running_loop()
         for sig in (signal.SIGINT, signal.SIGTERM):
             loop.add_signal_handler(sig, self._handle_signal)
+
+        # Load BTC 5-min candle history before starting the loop
+        await self._market_data.btc_feed.load_candle_history(200)
 
         try:
             if self._config.logging.dashboard_enabled:
@@ -237,12 +250,19 @@ class TradingAgent:
                 self._recent_resolutions = self._recent_resolutions[-20:]
 
             self._resolutions_since_reflection += 1
-            if self._resolutions_since_reflection >= 6:
+            self._save_agent_state()
+            if self._resolutions_since_reflection >= 3:
                 logger.info("Triggering reflection after %d resolutions", self._resolutions_since_reflection)
                 self._resolutions_since_reflection = 0
                 await self._knowledge_manager.reflect(
                     self._recent_resolutions, self._recent_trades,
                 )
+                # Deduct reflection API cost
+                reflection_cost = self._knowledge_manager.last_reflection_cost
+                if reflection_cost > 0:
+                    self._portfolio.cash -= reflection_cost
+                    self._total_api_cost += reflection_cost
+                    logger.info("Reflection API cost: $%.4f (session total: $%.4f)", reflection_cost, self._total_api_cost)
 
         # Reset positions for new market
         self._portfolio.reset_positions()
@@ -341,9 +361,34 @@ class TradingAgent:
         if indicators_text:
             logger.debug("Indicators: %s", indicators_text[:200])
 
-        decision, latency_ms = await self._decision_engine.decide(
+        decision, latency_ms, api_cost = await self._decision_engine.decide(
             features, feedback_context=feedback_context, indicators_text=indicators_text,
+            ai_cycle_cost=self._last_cycle_api_cost, ai_session_cost=self._total_api_cost,
         )
+
+        # Deduct API cost from cash (the bot pays for its own brain)
+        self._portfolio.cash -= api_cost
+        self._total_api_cost += api_cost
+        self._last_cycle_api_cost = api_cost
+        logger.info("API cost: $%.4f (session total: $%.4f)", api_cost, self._total_api_cost)
+
+        # Hard confidence gate: override low-confidence trades to HOLD
+        if decision.action != Action.HOLD and decision.confidence < 0.6:
+            logger.info(
+                "Overriding %s to HOLD — confidence %.2f < 0.6 threshold",
+                decision.action.value, decision.confidence,
+            )
+            decision = TradingDecision(
+                action=Action.HOLD,
+                order_type=OrderType.MARKET,
+                size=0.0,
+                confidence=decision.confidence,
+                reasoning=f"Overridden: confidence {decision.confidence:.2f} below 0.6 threshold. "
+                          f"Original: {decision.reasoning[:100]}",
+                market_view=decision.market_view,
+                token_side=decision.token_side,
+            )
+
         self._last_action = f"{decision.action.value} {decision.token_side.value} {decision.size:.1f}"
         self._last_reasoning = decision.reasoning[:120]
         self._last_token_side = decision.token_side.value
@@ -399,6 +444,9 @@ class TradingAgent:
             fill=fill, risk_blocked=risk_blocked, risk_reason=risk_reason,
         )
 
+        # 11. Write dashboard JSON
+        self._write_dashboard_json(cycle, snapshot)
+
         return snapshot
 
     def _log_cycle(
@@ -434,6 +482,11 @@ class TradingAgent:
             risk_block_reason=risk_reason,
         )
 
+        # Attach candle metadata for dashboard
+        if self._current_market:
+            record.candle_slug = self._current_market.slug
+            record.extra["time_remaining"] = self._current_market.time_remaining()
+
         if decision:
             record.action = decision.action
             record.order_type = decision.order_type
@@ -453,11 +506,149 @@ class TradingAgent:
 
         self._trade_log.write(record)
 
-        # Track trades with fills for reflection
-        if fill:
-            self._recent_trades.append(record)
-            if len(self._recent_trades) > 20:
-                self._recent_trades = self._recent_trades[-20:]
+        # Track all trades (including HOLDs) for dashboard and reflection
+        self._recent_trades.append(record)
+        if len(self._recent_trades) > 50:
+            self._recent_trades = self._recent_trades[-50:]
+
+    # --- Dashboard Data Writer ---
+
+    def _write_dashboard_json(self, cycle: int, snapshot) -> None:
+        """Write dashboard_data.json for the web dashboard."""
+        from datetime import datetime, timezone
+
+        try:
+            dashboard_path = Path(self._config.logging.log_dir) / "dashboard_data.json"
+            dashboard_path.parent.mkdir(parents=True, exist_ok=True)
+
+            up_mid = snapshot.orderbook.midpoint if snapshot else None
+            down_mid = snapshot.down_orderbook.midpoint if snapshot else None
+            portfolio_value = self._portfolio.total_value_at_market(
+                up_mid or 0.5, down_mid
+            )
+
+            total_games = self._session_wins + self._session_losses
+            win_rate = (self._session_wins / total_games * 100) if total_games > 0 else 0.0
+
+            # Build current market info
+            current_market = {}
+            if self._current_market:
+                m = self._current_market
+                current_market = {
+                    "slug": m.slug,
+                    "title": m.title,
+                    "polymarket_url": f"https://polymarket.com/event/{m.slug}",
+                    "time_remaining": m.time_remaining(),
+                    "up_mid": up_mid,
+                    "down_mid": down_mid,
+                }
+
+            # BTC info
+            btc_info = {}
+            if snapshot and snapshot.btc_price:
+                btc_info = {
+                    "price_usd": snapshot.btc_price.price_usd,
+                    "change_24h_pct": snapshot.btc_price.change_24h_pct,
+                    "last_candle_direction": (
+                        snapshot.btc_candles[-1].direction if snapshot.btc_candles else "unknown"
+                    ),
+                }
+
+            # Positions
+            positions = {
+                "up_shares": self._portfolio.up_position.shares,
+                "up_avg_entry": self._portfolio.up_position.avg_entry_price,
+                "down_shares": self._portfolio.down_position.shares,
+                "down_avg_entry": self._portfolio.down_position.avg_entry_price,
+            }
+
+            # Trades list
+            trades = []
+            for t in self._recent_trades:
+                trade_entry = {
+                    "timestamp": datetime.fromtimestamp(t.timestamp, tz=timezone.utc).isoformat(),
+                    "cycle": t.cycle_number,
+                    "action": t.action.value,
+                    "token_side": t.token_side.value,
+                    "size": t.decision_size,
+                    "fill_price": t.fill_price,
+                    "confidence": t.confidence,
+                    "reasoning": t.reasoning,
+                    "market_view": t.market_view,
+                    "candle_slug": t.candle_slug,
+                    "polymarket_url": (
+                        f"https://polymarket.com/event/{t.candle_slug}" if t.candle_slug else ""
+                    ),
+                    "time_remaining_at_trade": t.extra.get("time_remaining", 0),
+                }
+                trades.append(trade_entry)
+
+            # Resolutions list
+            resolutions = []
+            for r in self._recent_resolutions:
+                resolutions.append({
+                    "timestamp": datetime.fromtimestamp(r.timestamp, tz=timezone.utc).isoformat(),
+                    "slug": r.slug,
+                    "winner": r.winner,
+                    "btc_open": r.btc_open,
+                    "btc_close": r.btc_close,
+                    "btc_move": r.btc_close - r.btc_open,
+                    "pnl": r.total_pnl,
+                })
+
+            data = {
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+                "session": {
+                    "wins": self._session_wins,
+                    "losses": self._session_losses,
+                    "win_rate": win_rate,
+                    "total_pnl": self._session_resolution_pnl,
+                    "total_fees": self._portfolio.total_fees,
+                    "total_ai_cost": self._total_api_cost,
+                    "cash": self._portfolio.cash,
+                    "portfolio_value": portfolio_value,
+                    "initial_cash": self._config.agent.initial_cash,
+                    "cycles_run": cycle,
+                },
+                "current_market": current_market,
+                "btc": btc_info,
+                "positions": positions,
+                "trades": trades,
+                "resolutions": resolutions,
+                "risk": {
+                    "daily_pnl": self._risk.state.daily_pnl,
+                    "daily_trades": self._risk.state.daily_trades,
+                    "daily_fees": self._risk.state.daily_fees,
+                    "max_drawdown": self._risk.state.max_drawdown,
+                    "is_halted": self._risk.state.is_halted,
+                },
+            }
+
+            dashboard_path.write_text(json.dumps(data, indent=2) + "\n")
+        except Exception:
+            logger.debug("Failed to write dashboard JSON", exc_info=True)
+
+    # --- Agent State Persistence ---
+
+    def _load_agent_state(self) -> None:
+        """Load persisted state (resolution counter) from disk."""
+        try:
+            if self._state_path.exists():
+                data = json.loads(self._state_path.read_text())
+                self._resolutions_since_reflection = data.get("resolutions_since_reflection", 0)
+                logger.info("Loaded agent state: resolutions_since_reflection=%d", self._resolutions_since_reflection)
+        except Exception:
+            logger.warning("Could not load agent state, starting fresh")
+
+    def _save_agent_state(self) -> None:
+        """Save agent state to disk after each market transition."""
+        try:
+            self._state_path.parent.mkdir(parents=True, exist_ok=True)
+            self._state_path.write_text(json.dumps({
+                "resolutions_since_reflection": self._resolutions_since_reflection,
+            }, indent=2) + "\n")
+        except Exception:
+            logger.warning("Could not save agent state")
 
     # --- Rich Dashboard ---
 
@@ -545,6 +736,13 @@ class TradingAgent:
             r = self._last_resolution
             res_info += f"  | Last: {r.slug} → {r.winner} (${r.btc_open:.0f}→${r.btc_close:.0f})"
         grid.add_row("Resolutions", res_info)
+
+        # AI Costs
+        ai_cost_info = (
+            f"Session: ${self._total_api_cost:.4f}  "
+            f"Last Cycle: ${self._last_cycle_api_cost:.4f}"
+        )
+        grid.add_row("AI Costs", ai_cost_info)
 
         # Pending orders
         pending = self._orderbook.pending_orders

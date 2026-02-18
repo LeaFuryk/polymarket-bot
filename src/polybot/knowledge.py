@@ -78,6 +78,10 @@ class KnowledgeManager:
         self._cache_time: float = 0.0
         self._cache_ttl: float = 60.0
 
+        # API cost tracking
+        self.last_reflection_cost: float = 0.0
+        self.total_api_cost: float = 0.0
+
     def load_knowledge(self) -> str:
         """Read all .md files in knowledge_dir, concatenate, cache for 60s."""
         now = time.monotonic()
@@ -195,8 +199,22 @@ class KnowledgeManager:
                 messages=[{"role": "user", "content": prompt}],
             )
 
+            # Compute reflection API cost
+            input_cost = response.usage.input_tokens * (self._ai_config.input_cost_per_mtok / 1_000_000)
+            output_cost = response.usage.output_tokens * (self._ai_config.output_cost_per_mtok / 1_000_000)
+            self.last_reflection_cost = input_cost + output_cost
+            self.total_api_cost += self.last_reflection_cost
+            logger.info("Reflection API cost: $%.4f (total: $%.4f)", self.last_reflection_cost, self.total_api_cost)
+
             text = response.content[0].text
-            data = json.loads(text)
+            # Strip markdown code fences that Claude sometimes wraps JSON in
+            stripped = text.strip()
+            if stripped.startswith("```"):
+                # Remove opening fence (```json or ```)
+                stripped = stripped.split("\n", 1)[1] if "\n" in stripped else stripped[3:]
+                if stripped.endswith("```"):
+                    stripped = stripped[:-3].strip()
+            data = json.loads(stripped)
 
             # Write updated files
             if "trading_patterns" in data:

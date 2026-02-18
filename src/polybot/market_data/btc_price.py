@@ -8,7 +8,7 @@ import time
 import httpx
 
 from polybot.config import ApiConfig
-from polybot.models import BtcPrice
+from polybot.models import BtcCandle, BtcPrice
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +23,75 @@ class BtcPriceFeed:
         self._client = httpx.AsyncClient(timeout=10.0)
         self._cache: BtcPrice | None = None
         self._cache_time: float = 0.0
+        self._candles: list[BtcCandle] = []
+
+    @property
+    def candles(self) -> list[BtcCandle]:
+        return self._candles
+
+    async def load_candle_history(self, limit: int = 200) -> None:
+        """Fetch historical 5-min OHLCV candles from Binance."""
+        try:
+            resp = await self._client.get(
+                "https://api.binance.com/api/v3/klines",
+                params={
+                    "symbol": "BTCUSDT",
+                    "interval": "5m",
+                    "limit": limit,
+                },
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            self._candles = [
+                BtcCandle(
+                    open_time=float(k[0]) / 1000,
+                    open=float(k[1]),
+                    high=float(k[2]),
+                    low=float(k[3]),
+                    close=float(k[4]),
+                    volume=float(k[5]),
+                    close_time=float(k[6]) / 1000,
+                )
+                for k in data
+            ]
+            logger.info("Loaded %d 5-min BTC candles", len(self._candles))
+        except Exception:
+            logger.exception("Failed to load BTC candle history")
+
+    async def append_latest_candle(self) -> None:
+        """Fetch the latest 2 candles and append the completed one if new."""
+        try:
+            resp = await self._client.get(
+                "https://api.binance.com/api/v3/klines",
+                params={
+                    "symbol": "BTCUSDT",
+                    "interval": "5m",
+                    "limit": 2,
+                },
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            if not data:
+                return
+            # The first candle is the most recently completed one
+            completed = data[0]
+            candle = BtcCandle(
+                open_time=float(completed[0]) / 1000,
+                open=float(completed[1]),
+                high=float(completed[2]),
+                low=float(completed[3]),
+                close=float(completed[4]),
+                volume=float(completed[5]),
+                close_time=float(completed[6]) / 1000,
+            )
+            # Only append if newer than last stored
+            if not self._candles or candle.open_time > self._candles[-1].open_time:
+                self._candles.append(candle)
+                # Cap at 200
+                if len(self._candles) > 200:
+                    self._candles = self._candles[-200:]
+        except Exception:
+            logger.exception("Failed to append latest BTC candle")
 
     async def get_price(self) -> BtcPrice | None:
         now = time.time()

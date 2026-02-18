@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from polybot.models import FeatureVector
+import statistics
+
+from polybot.models import BtcCandle, FeatureVector
 
 SYSTEM_PROMPT = """\
 You are an AI trading agent operating on Polymarket BTC 5-minute candle prediction markets. \
@@ -30,20 +32,25 @@ You make paper-trading decisions based on market data analysis.
 - Limit orders in fast-rotating markets are wasted decisions.
 
 ## Your Decision Framework
-1. **Assess BTC direction**: Is BTC likely to go up or down in this candle?
+1. **Assess BTC direction for THIS 5-min candle**: Use the 5-min candle history, NOT the 24h change. \
+Even on a -3% day, ~40% of 5-min candles are UP. Focus on recent micro-momentum (last 3-6 candles). \
+The 24h change tells you the daily trend but is NOT predictive for the next 5-min candle.
 2. **Choose your token**: BUY Up if bullish, BUY Down if bearish
 3. **Check the spread**: Wide spreads eat into profit, but moderate spreads (2-5%) are normal here
 4. **Size appropriately**: 20-100 shares is a reasonable range. Scale with confidence.
-5. **Act decisively**: If you have >= 0.4 confidence and > 60s remaining, TRADE.
+5. **Act decisively**: If you have >= 0.6 confidence and > 60s remaining, TRADE.
 
 ## Risk Rules (MUST FOLLOW)
 - NEVER recommend buying if cash is insufficient
 - NEVER recommend selling more shares than currently held for that token
 - If the spread is extremely wide (>8%), prefer HOLD
-- If confidence is below 0.3, HOLD
+- If confidence is below 0.6, HOLD
 - Size should be proportional to confidence and edge
 - Maximum position should not exceed the risk limits provided
 - If time_remaining < 15 seconds, HOLD (resolution too close)
+- Each decision cycle costs ~$0.005 in API fees, deducted from your cash.
+  A trade must have enough expected edge to cover trading fees + AI costs.
+  Minimum expected profit per trade should exceed $0.01.
 
 ## Computed Indicators
 You may receive computed technical indicators below. These are dynamically selected \
@@ -60,7 +67,10 @@ based on past performance. Use them as supporting signals, not sole decision dri
 """
 
 
-def format_feature_vector(fv: FeatureVector, feedback_context: str = "", indicators_text: str = "") -> str:
+def format_feature_vector(
+    fv: FeatureVector, feedback_context: str = "", indicators_text: str = "",
+    ai_cycle_cost: float = 0.0, ai_session_cost: float = 0.0,
+) -> str:
     """Format a FeatureVector into a clear prompt for Claude."""
     up_ob = fv.market.orderbook
     down_ob = fv.market.down_orderbook
@@ -108,8 +118,50 @@ def format_feature_vector(fv: FeatureVector, feedback_context: str = "", indicat
             "",
             "## BTC Context",
             f"- BTC Price: ${fv.market.btc_price.price_usd:,.2f}",
-            f"- BTC 24h Change: {fv.market.btc_price.change_24h_pct:+.2f}%",
+            f"- BTC 24h Change: {fv.market.btc_price.change_24h_pct:+.2f}% "
+            "(⚠ NOT predictive for 5-min candles — ~40% go opposite to daily trend)",
         ])
+
+    # BTC 5-min candle history
+    candles = fv.market.btc_candles
+    if candles:
+        lines.extend(["", "## BTC 5-Min Candle History"])
+
+        # Last 12 candles up/down ratio
+        last_12 = candles[-12:] if len(candles) >= 12 else candles
+        up_count = sum(1 for c in last_12 if c.direction == "up")
+        down_count = len(last_12) - up_count
+        lines.append(f"- Last {len(last_12)} candles: {up_count} UP / {down_count} DOWN")
+
+        # Last 6 candles as compact OHLC table
+        last_6 = candles[-6:] if len(candles) >= 6 else candles
+        lines.append("")
+        lines.append("Last candles (newest last):")
+        lines.append("| # | Open | Close | Direction | Body% |")
+        lines.append("|---|------|-------|-----------|-------|")
+        for i, c in enumerate(last_6, 1):
+            lines.append(
+                f"| {i} | ${c.open:,.0f} | ${c.close:,.0f} | {c.direction.upper()} | {c.body_pct:+.3f}% |"
+            )
+
+        # MA5 vs MA12 crossover
+        closes = [c.close for c in candles]
+        if len(closes) >= 12:
+            ma5 = statistics.mean(closes[-5:])
+            ma12 = statistics.mean(closes[-12:])
+            cross_signal = "BULLISH" if ma5 > ma12 else "BEARISH"
+            lines.append(f"- MA5: ${ma5:,.0f} vs MA12: ${ma12:,.0f} → {cross_signal} crossover")
+
+        # MA50 if enough data
+        if len(closes) >= 50:
+            ma50 = statistics.mean(closes[-50:])
+            trend = "above" if closes[-1] > ma50 else "below"
+            lines.append(f"- MA50: ${ma50:,.0f} (price {trend} MA50)")
+
+        # Last 15min net BTC move (3 candles)
+        if len(candles) >= 3:
+            net_move = candles[-1].close - candles[-3].open
+            lines.append(f"- Last 15min net BTC move: ${net_move:+,.0f}")
 
     # Positions (both tokens)
     lines.extend([
@@ -133,6 +185,8 @@ def format_feature_vector(fv: FeatureVector, feedback_context: str = "", indicat
         "## Portfolio",
         f"- Cash Available: ${fv.portfolio_cash:.2f}",
         f"- Total Portfolio Value: ${fv.portfolio_total_value:.2f}",
+        f"- AI Operating Cost This Cycle: ~${ai_cycle_cost:.4f}",
+        f"- Total AI Costs This Session: ${ai_session_cost:.4f}",
     ])
 
     # Risk state
