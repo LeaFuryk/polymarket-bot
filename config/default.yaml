@@ -1,0 +1,42 @@
+market:
+  # Polymarket condition ID for the market to trade
+  # Example: US Presidential Election 2024 Winner
+  condition_id: "0x"
+  clob_api_url: "https://clob.polymarket.com"
+  # Token ID for the specific outcome to trade (YES token)
+  token_id: ""
+
+api:
+  polymarket_host: "https://clob.polymarket.com"
+  coingecko_url: "https://api.coingecko.com/api/v3"
+  polymarket_ws_url: "wss://ws-subscriptions-clob.polymarket.com/ws/market"
+
+agent:
+  decision_interval: 60       # seconds between decision cycles
+  initial_cash: 10000.0       # starting paper balance in USDC
+  max_cycles: 0               # 0 = unlimited
+
+ai:
+  model: "claude-sonnet-4-5-20250929"
+  max_tokens: 1024
+  temperature: 0.0            # deterministic for reproducibility
+
+simulator:
+  base_slippage_bps: 5        # base slippage in basis points
+  proportional_factor: 0.5    # slippage multiplier for size/liquidity
+  fee_bps: 20                 # Polymarket taker fee (20bps = 0.2%)
+  limit_order_ttl: 300        # default TTL for limit orders (seconds)
+
+risk:
+  max_position_pct: 0.25      # max 25% of portfolio in single position
+  max_spread_pct: 0.05        # skip if spread > 5%
+  min_liquidity: 100.0        # minimum orderbook depth in USDC
+  daily_loss_limit_pct: 0.10  # stop trading if daily loss > 10%
+  max_concentration_pct: 0.50 # max 50% of portfolio in all positions
+
+logging:
+  log_dir: "logs"
+  jsonl_enabled: true
+  sqlite_enabled: true
+  dashboard_enabled: true
+  dashboard_refresh_rate: 2   # seconds

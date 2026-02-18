@@ -1,0 +1,108 @@
+"""YAML + environment variable configuration loading."""
+
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+import yaml
+from dotenv import load_dotenv
+from pydantic import BaseModel, Field
+
+
+class MarketConfig(BaseModel):
+    condition_id: str = "0x"
+    clob_api_url: str = "https://clob.polymarket.com"
+    token_id: str = ""
+    series_slug: str = "btc-updown-5m"
+
+
+class ApiConfig(BaseModel):
+    polymarket_host: str = "https://clob.polymarket.com"
+    coingecko_url: str = "https://api.coingecko.com/api/v3"
+    polymarket_ws_url: str = "wss://ws-subscriptions-clob.polymarket.com/ws/market"
+
+
+class AgentConfig(BaseModel):
+    decision_interval: int = 60
+    initial_cash: float = 10000.0
+    max_cycles: int = 0
+    resolution_buffer_seconds: int = 10
+
+
+class AiConfig(BaseModel):
+    model: str = "claude-sonnet-4-5-20250929"
+    max_tokens: int = 1024
+    temperature: float = 0.0
+    api_key: str = ""
+
+
+class SimulatorConfig(BaseModel):
+    base_slippage_bps: float = 5.0
+    proportional_factor: float = 0.5
+    fee_bps: float = 20.0
+    limit_order_ttl: int = 300
+
+
+class RiskConfig(BaseModel):
+    max_position_pct: float = 0.25
+    max_spread_pct: float = 0.05
+    min_liquidity: float = 100.0
+    daily_loss_limit_pct: float = 0.10
+    max_concentration_pct: float = 0.50
+
+
+class LoggingConfig(BaseModel):
+    log_dir: str = "logs"
+    knowledge_dir: str = "data/knowledge"
+    jsonl_enabled: bool = True
+    sqlite_enabled: bool = True
+    dashboard_enabled: bool = True
+    dashboard_refresh_rate: int = 2
+
+
+class AppConfig(BaseModel):
+    market: MarketConfig = Field(default_factory=MarketConfig)
+    api: ApiConfig = Field(default_factory=ApiConfig)
+    agent: AgentConfig = Field(default_factory=AgentConfig)
+    ai: AiConfig = Field(default_factory=AiConfig)
+    simulator: SimulatorConfig = Field(default_factory=SimulatorConfig)
+    risk: RiskConfig = Field(default_factory=RiskConfig)
+    logging: LoggingConfig = Field(default_factory=LoggingConfig)
+
+
+def _apply_env_overrides(config: AppConfig) -> None:
+    """Apply POLYBOT_* environment variable overrides."""
+    env_map: dict[str, tuple[object, str, type]] = {
+        "POLYBOT_MARKET_CONDITION_ID": (config.market, "condition_id", str),
+        "POLYBOT_MARKET_TOKEN_ID": (config.market, "token_id", str),
+        "POLYBOT_AI_API_KEY": (config.ai, "api_key", str),
+        "POLYBOT_AI_MODEL": (config.ai, "model", str),
+        "POLYBOT_AGENT_DECISION_INTERVAL": (config.agent, "decision_interval", int),
+        "POLYBOT_AGENT_INITIAL_CASH": (config.agent, "initial_cash", float),
+        "POLYBOT_AGENT_MAX_CYCLES": (config.agent, "max_cycles", int),
+        "POLYBOT_RISK_DAILY_LOSS_LIMIT_PCT": (config.risk, "daily_loss_limit_pct", float),
+        "POLYBOT_KNOWLEDGE_DIR": (config.logging, "knowledge_dir", str),
+    }
+    for env_key, (section, attr, typ) in env_map.items():
+        val = os.environ.get(env_key)
+        if val is not None:
+            setattr(section, attr, typ(val))
+
+
+def load_config(config_path: str | Path | None = None) -> AppConfig:
+    """Load config from YAML file with env var overrides."""
+    load_dotenv()
+
+    data: dict = {}
+    if config_path is None:
+        config_path = Path("config/default.yaml")
+    config_path = Path(config_path)
+
+    if config_path.exists():
+        with open(config_path) as f:
+            data = yaml.safe_load(f) or {}
+
+    config = AppConfig(**data)
+    _apply_env_overrides(config)
+    return config
