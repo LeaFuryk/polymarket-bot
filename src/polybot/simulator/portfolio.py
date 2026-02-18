@@ -19,6 +19,8 @@ class Portfolio:
         self.down_position = PositionState()
         self.total_fees = 0.0
         self.total_slippage_cost = 0.0
+        # Accumulated realized PnL from trades closed during current market
+        self._market_trading_pnl: float = 0.0
 
     @property
     def position(self) -> PositionState:
@@ -116,6 +118,7 @@ class Portfolio:
 
         pnl = (fill.fill_price - pos.avg_entry_price) * fill.size
         pos.realized_pnl += pnl
+        self._market_trading_pnl += pnl
 
         pos.shares -= fill.size
         self.cash -= fill.total_cost
@@ -132,9 +135,10 @@ class Portfolio:
     def resolve_market(self, winner: str) -> float:
         """Settle positions at resolution: winning token = $1, losing = $0.
 
-        Returns total realized PnL from resolution.
+        Returns total PnL for this market (closed trades + resolution settlement).
         """
-        resolution_pnl = 0.0
+        # Start with PnL from trades closed during this market
+        resolution_pnl = self._market_trading_pnl
 
         if winner == "up":
             # Up token pays $1
@@ -165,7 +169,11 @@ class Portfolio:
                 self.up_position.realized_pnl -= cost_basis
                 resolution_pnl -= cost_basis
 
-        logger.info("Market resolved: winner=%s, resolution_pnl=%.4f", winner, resolution_pnl)
+        logger.info(
+            "Market resolved: winner=%s, resolution_pnl=%.4f (trading=%.4f, settlement=%.4f)",
+            winner, resolution_pnl, self._market_trading_pnl,
+            resolution_pnl - self._market_trading_pnl,
+        )
         self.reset_positions()
         return resolution_pnl
 
@@ -173,3 +181,4 @@ class Portfolio:
         """Clear both positions for a new market."""
         self.up_position = PositionState()
         self.down_position = PositionState()
+        self._market_trading_pnl = 0.0

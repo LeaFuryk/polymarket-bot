@@ -32,17 +32,22 @@ class DecisionEngine:
     def __init__(self, config: AiConfig) -> None:
         self._config = config
         self._client = anthropic.AsyncAnthropic(api_key=config.api_key)
+        self.session_api_cost: float = 0.0
 
     async def decide(
         self, features: FeatureVector, feedback_context: str = "",
         indicators_text: str = "",
-    ) -> tuple[TradingDecision, float]:
+        ai_cycle_cost: float = 0.0, ai_session_cost: float = 0.0,
+    ) -> tuple[TradingDecision, float, float]:
         """Get a trading decision from Claude.
 
         Returns:
-            Tuple of (decision, latency_ms)
+            Tuple of (decision, latency_ms, api_cost_usd)
         """
-        prompt = format_feature_vector(features, feedback_context=feedback_context, indicators_text=indicators_text)
+        prompt = format_feature_vector(
+            features, feedback_context=feedback_context, indicators_text=indicators_text,
+            ai_cycle_cost=ai_cycle_cost, ai_session_cost=ai_session_cost,
+        )
         start = time.monotonic()
 
         try:
@@ -61,6 +66,12 @@ class DecisionEngine:
             )
 
             latency_ms = (time.monotonic() - start) * 1000
+
+            # Compute API cost
+            input_cost = response.usage.input_tokens * (self._config.input_cost_per_mtok / 1_000_000)
+            output_cost = response.usage.output_tokens * (self._config.output_cost_per_mtok / 1_000_000)
+            api_cost = input_cost + output_cost
+            self.session_api_cost += api_cost
 
             # Extract structured data from tool_use block
             data = None
@@ -84,17 +95,18 @@ class DecisionEngine:
             )
 
             logger.info(
-                "AI decision: %s %s %.2f @ confidence=%.2f (%.0fms)",
+                "AI decision: %s %s %.2f @ confidence=%.2f (%.0fms, cost=$%.4f)",
                 decision.action.value,
                 decision.order_type.value,
                 decision.size,
                 decision.confidence,
                 latency_ms,
+                api_cost,
             )
 
-            return decision, latency_ms
+            return decision, latency_ms, api_cost
 
         except Exception:
             latency_ms = (time.monotonic() - start) * 1000
             logger.exception("AI decision failed, using HOLD fallback")
-            return HOLD_FALLBACK, latency_ms
+            return HOLD_FALLBACK, latency_ms, 0.0

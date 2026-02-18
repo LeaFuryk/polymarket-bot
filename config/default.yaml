@@ -13,7 +13,7 @@ api:
 
 agent:
   decision_interval: 60       # seconds between decision cycles
-  initial_cash: 10000.0       # starting paper balance in USDC
+  initial_cash: 1000.0       # starting paper balance in USDC
   max_cycles: 0               # 0 = unlimited
 
 ai:

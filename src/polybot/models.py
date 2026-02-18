@@ -62,6 +62,28 @@ class BtcPrice(BaseModel):
     change_24h_pct: float = 0.0
 
 
+class BtcCandle(BaseModel):
+    """A single 5-minute OHLCV candle from Binance."""
+
+    open_time: float
+    open: float
+    high: float
+    low: float
+    close: float
+    volume: float
+    close_time: float
+
+    @property
+    def direction(self) -> str:
+        return "up" if self.close >= self.open else "down"
+
+    @property
+    def body_pct(self) -> float:
+        if self.open == 0:
+            return 0.0
+        return (self.close - self.open) / self.open * 100
+
+
 class OrderbookLevel(BaseModel):
     price: float
     size: float
@@ -121,6 +143,9 @@ class MarketSnapshot(BaseModel):
 
     # BTC price history for BTC-based indicators (momentum, volatility)
     btc_price_history: list[float] = Field(default_factory=list)
+
+    # BTC 5-min candle history for micro-trend analysis
+    btc_candles: list[BtcCandle] = Field(default_factory=list)
 
     # Dual-token fields for candle markets
     up_token_id: str = ""

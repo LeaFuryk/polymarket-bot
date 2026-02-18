@@ -74,6 +74,9 @@ class MarketDataProvider:
 
         btc_price = await self._btc.get_price()
 
+        # Append latest 5-min BTC candle
+        await self._btc.append_latest_candle()
+
         # Track midpoint history (Up token)
         if up_orderbook.midpoint is not None:
             self._price_history.append(up_orderbook.midpoint)
@@ -97,6 +100,7 @@ class MarketDataProvider:
             btc_price=btc_price,
             price_history=list(self._price_history),
             btc_price_history=list(self._btc_price_history),
+            btc_candles=self._btc.candles,
         )
 
     def update_from_ws(

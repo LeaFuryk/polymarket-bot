@@ -12,10 +12,10 @@ An AI-powered paper trading agent that trades Polymarket BTC 5-minute candle pre
 |-----------|------------|
 | Language | Python 3.11+ |
 | AI Brain | Claude (Anthropic API) with structured JSON output |
-| Market Data | Polymarket CLOB REST API, CoinGecko, Binance klines |
+| Market Data | Polymarket CLOB REST API, CoinGecko, Binance klines + 5-min OHLCV |
 | Data Models | Pydantic v2 |
 | Config | YAML + `.env` overrides |
-| Dashboard | Rich live terminal UI |
+| Dashboard | Rich live terminal UI + standalone web dashboard |
 | Logging | JSONL (daily-rotating trade + resolution logs) |
 | Package | `setuptools` with `src/` layout |
 
@@ -39,13 +39,13 @@ An AI-powered paper trading agent that trades Polymarket BTC 5-minute candle pre
 | Polymarket CLOB | None (public) | Orderbooks, last trade prices |
 | Polymarket Gamma | None | Market discovery by slug pattern |
 | CoinGecko | None | Live BTC price + 24h change |
-| Binance klines | None | Historical BTC price for resolution fallback |
+| Binance klines | None | Historical BTC price for resolution fallback + 5-min OHLCV candle history |
 
 ---
 
 ## How It Works
 
-The bot runs a continuous loop of 5-minute cycles. Each cycle it discovers the current BTC candle market on Polymarket, gathers data, asks Claude for a trading decision, simulates execution, and logs everything. Every 6 candle resolutions, Claude reflects on its performance and updates its own knowledge base and indicator configuration.
+The bot runs a continuous loop of 5-minute cycles. Each cycle it discovers the current BTC candle market on Polymarket, gathers data (including 200 historical 5-min BTC candles for micro-trend analysis), asks Claude for a trading decision, simulates execution, and logs everything. Every 3 candle resolutions, Claude reflects on its performance and updates its own knowledge base and indicator configuration.
 
 ### The Self-Improving Loop
 
@@ -63,24 +63,25 @@ Decide ──► Trade ──► Resolve ──► Reflect ──► Adjust Inpu
   │          │
   │          └─ Simulated execution with slippage + 20bps fees
   │
-  └─ Claude reads: orderbook, BTC price, positions, risk state,
-     computed indicators, past learnings → outputs structured JSON
+  └─ Claude reads: orderbook, BTC 5-min candle history, positions,
+     risk state, computed indicators, past learnings → outputs JSON
 ```
 
-### Decision Cycle (10 steps)
+### Decision Cycle (11 steps)
 
 Each cycle (~60 seconds) the agent executes:
 
 1. **Discover market** — Query Gamma API for the active BTC 5-min candle. Detect rotation to a new candle.
 2. **Resolution buffer** — Skip trading if <10 seconds remain (too close to expiry).
-3. **Fetch snapshot** — Up + Down orderbooks, BTC spot price, last trade price.
+3. **Fetch snapshot** — Up + Down orderbooks, BTC spot price, latest 5-min candle, last trade price.
 4. **Mark-to-market** — Update unrealized PnL on both token positions.
 5. **Check limit fills** — Scan pending limit orders against current orderbook.
 6. **Pre-trade risk checks** — Daily loss halt, minimum liquidity. Run *before* Claude API call to save cost.
-7. **Build context** — Assemble FeatureVector + feedback context + computed indicators.
+7. **Build context** — Assemble FeatureVector + BTC candle history + feedback context + computed indicators.
 8. **Claude decides** — Structured JSON: `action`, `token_side`, `order_type`, `size`, `confidence`, `reasoning`.
-9. **Post-trade risk checks** — Validate spread, position sizing, concentration, cash sufficiency.
-10. **Execute + log** — Simulate fill, update portfolio, write TradeRecord to JSONL.
+9. **Confidence gate** — Hard override: if confidence < 0.6, the trade is forced to HOLD regardless of Claude's recommendation.
+10. **Post-trade risk checks** — Validate spread, position sizing, concentration, cash sufficiency.
+11. **Execute + log** — Simulate fill, update portfolio, write TradeRecord to JSONL, write dashboard JSON.
 
 ### Market Rotation & Resolution
 
@@ -90,11 +91,12 @@ When a 5-minute candle expires and a new one begins:
 - Winning token positions settle at $1/share, losing at $0
 - Session W/L stats are updated
 - Portfolio positions reset for the new candle
-- Every 6 resolutions → **reflection** is triggered
+- Every 3 resolutions → **reflection** is triggered
+- Resolution counter is persisted to `logs/agent_state.json` so it survives restarts
 
 ### Reflection (Self-Improvement)
 
-After every 6 candle resolutions, the bot calls Claude with:
+After every 3 candle resolutions, the bot calls Claude with:
 - Recent resolution outcomes (W/L, BTC moves, PnL)
 - Recent trade history (actions, confidence, fills)
 - Current knowledge files
@@ -110,7 +112,7 @@ Claude produces:
 
 The bot computes technical indicators controlled by `data/feature_config.json`. Reflection can enable, disable, or tune these indicators based on observed correlation with wins/losses.
 
-**Available indicators (11 total):**
+**Available indicators (13 total):**
 
 | Indicator | Category | What it measures |
 |-----------|----------|------------------|
@@ -121,12 +123,14 @@ The bot computes technical indicators controlled by `data/feature_config.json`. 
 | `orderbook_imbalance` | Orderbook | Bid/ask depth ratio |
 | `spread_trend` | Orderbook | Spread level classification |
 | `token_price_divergence` | Orderbook | Up + Down midpoint deviation from $1 |
-| `btc_momentum` | BTC | BTC price rate of change |
-| `btc_volatility` | BTC | BTC price standard deviation |
+| `btc_momentum` | BTC | BTC spot price rate of change |
+| `btc_volatility` | BTC | BTC spot price standard deviation |
+| `btc_candle_momentum` | BTC Candle | Up/down ratio of last N 5-min candles |
+| `btc_candle_ma_cross` | BTC Candle | MA5 vs MA12 crossover on 5-min candle closes |
 | `session_streak` | Session | Current W/L record |
 | `confidence_calibration` | Session | Avg confidence on wins vs losses |
 
-**Default config** enables 3 indicators: `token_momentum`, `token_volatility`, `orderbook_imbalance`. The reflection system enables others as it identifies useful patterns.
+**Default config** enables 6 indicators: `token_momentum`, `token_volatility`, `orderbook_imbalance`, `btc_momentum`, `btc_candle_momentum`, `btc_candle_ma_cross`. The reflection system enables/disables others as it identifies useful patterns.
 
 ---
 
@@ -169,9 +173,21 @@ A live Rich dashboard will appear showing: current candle market, orderbook stat
 python -m polybot path/to/custom-config.yaml
 ```
 
-### Optional: Plain mode (no dashboard)
+### Optional: Web dashboard
 
-Set `dashboard_enabled: false` in `config/default.yaml` for structured log output instead of the live dashboard.
+The bot writes `logs/dashboard_data.json` every cycle. Open the web dashboard in a browser:
+
+```bash
+# From the project root:
+python -m http.server 8080
+# Then open http://localhost:8080/dashboard/
+```
+
+The dashboard auto-refreshes every 60 seconds and shows: stats cards (win rate, PnL, cash, portfolio value, AI costs), current market with live countdown, BTC price, positions, scrollable trade timeline with expandable reasoning, resolutions table, cumulative PnL chart, and risk panel.
+
+### Optional: Plain mode (no terminal dashboard)
+
+Set `dashboard_enabled: false` in `config/default.yaml` for structured log output instead of the live Rich terminal dashboard.
 
 ### Environment Variable Overrides
 
@@ -195,7 +211,9 @@ polymarket-bot/
 ├── logs/
 │   ├── polybot.log                    # Application log (DEBUG to file, INFO to console)
 │   ├── trades_20260218.jsonl          # One TradeRecord per cycle (daily rotation)
-│   └── resolutions_20260218.jsonl     # One ResolutionRecord per candle close
+│   ├── resolutions_20260218.jsonl     # One ResolutionRecord per candle close
+│   ├── dashboard_data.json            # Live dashboard state (updated each cycle)
+│   └── agent_state.json               # Persisted agent state (survives restarts)
 │
 ├── data/
 │   ├── feature_config.json            # Indicator settings (AI-managed)
@@ -237,17 +255,17 @@ Prints a Rich table with: Total Cycles, Total Trades, Win Rate, Total PnL, Sharp
 
 The bot improves through two mechanisms that compound over time:
 
-### Knowledge Accumulation (every 6 resolutions)
+### Knowledge Accumulation (every 3 resolutions)
 
 ```
-Resolution 1-6: Bot trades, outcomes accumulate
-Resolution 6:   Claude reflection runs
+Resolution 1-3: Bot trades, outcomes accumulate
+Resolution 3:   Claude reflection runs
                  → Analyzes what worked/failed
                  → Writes updated .md knowledge files
                  → These files are injected into every future decision prompt
 
-Resolution 7-12: Bot trades with updated knowledge
-Resolution 12:  Another reflection
+Resolution 4-6: Bot trades with updated knowledge
+Resolution 6:   Another reflection
                  → Builds on previous knowledge
                  → Identifies new patterns or corrects old ones
 
@@ -272,12 +290,12 @@ This means the *input data* to decisions evolves over time, not just the decisio
 
 | Resolutions | What Happens |
 |-------------|--------------|
-| 0 | Bot starts with 3 default indicators + no knowledge |
-| 1-5 | Trading with basic setup, accumulating outcomes |
-| 6 | First reflection — initial patterns identified, first possible indicator change |
-| 7-12 | Trading with first knowledge layer + possibly updated indicators |
-| 12 | Second reflection — patterns refined, more indicator tuning |
-| 18+ | Knowledge compounds; indicator selection stabilized to what works |
+| 0 | Bot starts with 6 default indicators + seeded knowledge (known biases, patterns) |
+| 1-2 | Trading with BTC candle analysis, accumulating outcomes |
+| 3 | First reflection — initial patterns identified, first possible indicator change |
+| 4-6 | Trading with first knowledge layer + possibly updated indicators |
+| 6 | Second reflection — patterns refined, more indicator tuning |
+| 9+ | Knowledge compounds; indicator selection stabilized to what works |
 
 ---
 
@@ -354,8 +372,8 @@ TradingAgent (agent.py) — main orchestration loop
  ├── MarketDiscovery ─── Gamma API
  │   Finds current BTC 5-min candle market by slug pattern
  │
- ├── MarketDataProvider ─── CLOB REST + CoinGecko + (WebSocket)
- │   Assembles MarketSnapshot: orderbooks, BTC price, price histories
+ ├── MarketDataProvider ─── CLOB REST + CoinGecko + Binance 5m OHLCV + (WebSocket)
+ │   Assembles MarketSnapshot: orderbooks, BTC price, 5-min candle history
  │
  ├── RiskManager
  │   Pre-trade: daily halt, min liquidity
@@ -381,10 +399,13 @@ TradingAgent (agent.py) — main orchestration loop
  │
  ├── KnowledgeManager ─── Claude API
  │   Loads .md knowledge files for decisions
- │   Every 6 resolutions: reflection → updated .md + feature_config.json
+ │   Every 3 resolutions: reflection → updated .md + feature_config.json
  │
- └── TradeLog
-     JSONL daily-rotating: trades + resolutions
+ ├── TradeLog
+ │   JSONL daily-rotating: trades + resolutions
+ │
+ └── Web Dashboard (dashboard/index.html)
+     Standalone HTML/CSS/JS — reads logs/dashboard_data.json, auto-refreshes
 ```
 
 ---
@@ -395,15 +416,17 @@ TradingAgent (agent.py) — main orchestration loop
 polymarket-bot/
 ├── config/
 │   └── default.yaml              # Primary configuration
+├── dashboard/
+│   └── index.html                # Standalone web dashboard (no build step)
 ├── data/
 │   ├── feature_config.json       # AI-managed indicator config
 │   └── knowledge/                # AI-written knowledge files
-├── logs/                         # Trade logs, resolution logs, app log
+├── logs/                         # Trade logs, resolution logs, dashboard JSON, agent state
 ├── src/polybot/
 │   ├── __main__.py               # Entry point
 │   ├── agent.py                  # TradingAgent — main loop
 │   ├── config.py                 # AppConfig + YAML + env loading
-│   ├── indicators.py             # Indicator registry + 11 built-in indicators
+│   ├── indicators.py             # Indicator registry + 13 built-in indicators
 │   ├── knowledge.py              # KnowledgeManager + reflection
 │   ├── models.py                 # All Pydantic data models
 │   ├── resolution.py             # Candle winner determination
@@ -416,7 +439,7 @@ polymarket-bot/
 │   ├── logging/
 │   │   └── trade_log.py          # JSONL trade + resolution logging
 │   ├── market_data/
-│   │   ├── btc_price.py          # CoinGecko + Binance BTC feeds
+│   │   ├── btc_price.py          # CoinGecko + Binance BTC feeds + 5-min candle history
 │   │   ├── client.py             # Polymarket CLOB REST client
 │   │   ├── discovery.py          # Gamma API market discovery
 │   │   └── provider.py           # Unified MarketSnapshot facade
