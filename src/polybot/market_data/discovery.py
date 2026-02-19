@@ -123,5 +123,66 @@ class MarketDiscovery:
             logger.warning("Could not parse ISO timestamp: %s", iso_str)
             return 0.0
 
+    async def fetch_market_by_slug(self, slug: str) -> CandleMarket | None:
+        """Fetch a specific candle market by its slug. Used for resolving pending bets."""
+        try:
+            resp = await self._client.get(
+                f"{GAMMA_API_BASE}/events",
+                params={"slug": slug},
+            )
+            resp.raise_for_status()
+            data = resp.json()
+        except Exception:
+            logger.exception("Failed to fetch market for slug=%s", slug)
+            return None
+
+        if not data:
+            logger.warning("No market found for slug=%s", slug)
+            return None
+
+        event = data[0] if isinstance(data, list) else data
+        markets = event.get("markets", [])
+        if not markets:
+            logger.warning("Event has no markets: slug=%s", slug)
+            return None
+
+        market = markets[0]
+        condition_id = market.get("conditionId", "")
+
+        clob_token_ids = market.get("clobTokenIds")
+        if isinstance(clob_token_ids, str):
+            try:
+                clob_token_ids = json.loads(clob_token_ids)
+            except (ValueError, TypeError):
+                logger.warning("Could not parse clobTokenIds string for slug=%s", slug)
+                return None
+        if not clob_token_ids or len(clob_token_ids) < 2:
+            logger.warning("Missing clobTokenIds for slug=%s", slug)
+            return None
+
+        up_token_id = clob_token_ids[0]
+        down_token_id = clob_token_ids[1]
+
+        end_date = market.get("endDate", "")
+        title = event.get("title", slug)
+
+        # Parse the timestamp from the slug suffix
+        try:
+            boundary = int(slug.rsplit("-", 1)[-1])
+        except (ValueError, IndexError):
+            boundary = 0
+        end_time = self._parse_iso_timestamp(end_date) if end_date else float(boundary + CANDLE_INTERVAL)
+        start_time = float(boundary)
+
+        return CandleMarket(
+            condition_id=condition_id,
+            up_token_id=up_token_id,
+            down_token_id=down_token_id,
+            slug=slug,
+            title=title,
+            start_time=start_time,
+            end_time=end_time,
+        )
+
     async def close(self) -> None:
         await self._client.aclose()
