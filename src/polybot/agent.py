@@ -542,6 +542,7 @@ class TradingAgent:
             record.reasoning = decision.reasoning
             record.market_view = decision.market_view
             record.ai_latency_ms = latency_ms
+            record.ai_cost = self._last_cycle_api_cost
 
         if fill:
             record.fill_price = fill.fill_price
@@ -633,6 +634,7 @@ class TradingAgent:
                     "fee": t.fee_amount,
                     "realized_pnl": t.realized_pnl,
                     "unrealized_pnl": t.unrealized_pnl,
+                    "ai_cost": t.ai_cost,
                 }
                 trades.append(trade_entry)
 
@@ -672,6 +674,7 @@ class TradingAgent:
                     "cash": self._portfolio.cash,
                     "portfolio_value": portfolio_value,
                     "initial_cash": self._config.agent.initial_cash,
+                    "market_trading_pnl": self._portfolio.market_trading_pnl,
                     "cycles_run": cycle,
                 },
                 "all_time": {
@@ -872,6 +875,7 @@ class TradingAgent:
                         "fee": t.get("fee_amount", 0),
                         "realized_pnl": t.get("realized_pnl", 0),
                         "unrealized_pnl": t.get("unrealized_pnl", 0),
+                        "ai_cost": t.get("ai_cost", 0),
                     })
             except Exception:
                 logger.debug("Could not load trade file %s", trade_file, exc_info=True)

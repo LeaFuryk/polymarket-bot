@@ -67,7 +67,7 @@
     },
     {
       "name": "btc_candle_ma_cross",
-      "enabled": true,
+      "enabled": false,
       "params": {}
     },
     {

@@ -34,6 +34,9 @@ CHAINLINK_DECIMALS = 8
 class BtcPriceFeed:
     """Fetches BTC/USD price from Chainlink on-chain, with CoinGecko fallback."""
 
+    # Full candle history refresh interval (seconds)
+    _CANDLE_REFRESH_INTERVAL = 600  # 10 minutes
+
     def __init__(self, api_config: ApiConfig) -> None:
         self._coingecko_url = api_config.coingecko_url
         self._rpc_url = api_config.ethereum_rpc_url
@@ -42,13 +45,16 @@ class BtcPriceFeed:
         self._cache: BtcPrice | None = None
         self._cache_time: float = 0.0
         self._candles: list[BtcCandle] = []
+        self._candle_refresh_time: float = 0.0
         # Separate cache for 24h change from CoinGecko (updates less frequently)
         self._24h_change_pct: float = 0.0
         self._24h_change_time: float = 0.0
 
     @property
     def candles(self) -> list[BtcCandle]:
-        return self._candles
+        """Return only completed candles (close_time in the past)."""
+        now = time.time()
+        return [c for c in self._candles if c.close_time < now]
 
     # --- 5-min candle history (Binance — for trend analysis only) ---
 
@@ -77,12 +83,29 @@ class BtcPriceFeed:
                 )
                 for k in data
             ]
+            # Drop the last candle — Binance always includes the in-progress
+            # (incomplete) candle whose close/high/low will change before it
+            # finalizes.  Keeping it would give the AI a wrong direction signal
+            # that append_latest_candle() can never correct.
+            if self._candles:
+                self._candles.pop()
+            self._candle_refresh_time = time.time()
             logger.info("Loaded %d 5-min BTC candles from Binance", len(self._candles))
         except Exception:
             logger.exception("Failed to load BTC candle history")
 
     async def append_latest_candle(self) -> None:
-        """Fetch the latest 2 candles and append the completed one if new."""
+        """Fetch the latest 2 candles and append the completed one if new.
+
+        Also triggers a full refresh every _CANDLE_REFRESH_INTERVAL seconds
+        to correct any accumulated drift.
+        """
+        # Periodic full refresh to correct any stale data
+        if time.time() - self._candle_refresh_time > self._CANDLE_REFRESH_INTERVAL:
+            logger.info("Periodic candle history refresh (every %ds)", self._CANDLE_REFRESH_INTERVAL)
+            await self.load_candle_history(200)
+            return
+
         try:
             resp = await self._client.get(
                 "https://api.binance.com/api/v3/klines",
@@ -107,9 +130,12 @@ class BtcPriceFeed:
                 volume=float(completed[5]),
                 close_time=float(completed[6]) / 1000,
             )
-            # Only append if newer than last stored
+            # Append if newer, or replace the last entry if same open_time
+            # (corrects a stale incomplete candle from the initial load)
             if not self._candles or candle.open_time > self._candles[-1].open_time:
                 self._candles.append(candle)
+            elif candle.open_time == self._candles[-1].open_time:
+                self._candles[-1] = candle
                 # Cap at 200
                 if len(self._candles) > 200:
                     self._candles = self._candles[-200:]

@@ -23,6 +23,11 @@ class Portfolio:
         self._market_trading_pnl: float = 0.0
 
     @property
+    def market_trading_pnl(self) -> float:
+        """PnL from trades closed on the current (unresolved) candle."""
+        return self._market_trading_pnl
+
+    @property
     def position(self) -> PositionState:
         """Legacy accessor — returns combined position summary."""
         combined_shares = self.up_position.shares + self.down_position.shares
