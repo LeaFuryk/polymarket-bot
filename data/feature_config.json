@@ -26,7 +26,7 @@
       "name": "token_mean_reversion",
       "enabled": true,
       "params": {
-        "window": 20
+        "window": 12
       }
     },
     {
@@ -55,14 +55,14 @@
       "name": "btc_volatility",
       "enabled": true,
       "params": {
-        "window": 15
+        "window": 20
       }
     },
     {
       "name": "btc_candle_momentum",
       "enabled": true,
       "params": {
-        "window": 6
+        "window": 4
       }
     },
     {
