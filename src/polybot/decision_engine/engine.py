@@ -11,8 +11,8 @@ import anthropic
 from polybot.config import AiConfig
 from polybot.models import Action, FeatureVector, OrderType, TokenSide, TradingDecision
 
-from .prompts import SYSTEM_PROMPT, format_feature_vector
-from .schemas import TRADING_DECISION_SCHEMA
+from .prompts import SCREENING_PROMPT, SYSTEM_PROMPT, format_feature_vector, format_screening_context
+from .schemas import SCREENING_DECISION_SCHEMA, TRADING_DECISION_SCHEMA
 
 logger = logging.getLogger(__name__)
 
@@ -110,3 +110,62 @@ class DecisionEngine:
             latency_ms = (time.monotonic() - start) * 1000
             logger.exception("AI decision failed, using HOLD fallback")
             return HOLD_FALLBACK, latency_ms, 0.0
+
+    async def screen(
+        self, features: FeatureVector, indicators_text: str = "",
+    ) -> tuple[bool, str, float]:
+        """Pass-1 screen: quick check via Haiku if there's a trade setup.
+
+        Returns:
+            Tuple of (should_trade, reason, api_cost_usd)
+        """
+        prompt = format_screening_context(features, indicators_text)
+        start = time.monotonic()
+
+        try:
+            response = await self._client.messages.create(
+                model=self._config.screen_model,
+                max_tokens=200,
+                temperature=0.0,
+                system=SCREENING_PROMPT,
+                messages=[{"role": "user", "content": prompt}],
+                tools=[{
+                    "name": "screening_decision",
+                    "description": "Should we call the full AI for a trade decision?",
+                    "input_schema": SCREENING_DECISION_SCHEMA,
+                }],
+                tool_choice={"type": "tool", "name": "screening_decision"},
+            )
+
+            latency_ms = (time.monotonic() - start) * 1000
+
+            # Compute cost using screen model pricing
+            input_cost = response.usage.input_tokens * (self._config.screen_input_cost_per_mtok / 1_000_000)
+            output_cost = response.usage.output_tokens * (self._config.screen_output_cost_per_mtok / 1_000_000)
+            api_cost = input_cost + output_cost
+            self.session_api_cost += api_cost
+
+            data = None
+            for block in response.content:
+                if block.type == "tool_use":
+                    data = block.input
+                    break
+            if data is None:
+                raise ValueError("No tool_use block in screening response")
+
+            should_trade = bool(data.get("should_trade", False))
+            reason = data.get("reason", "")
+
+            logger.info(
+                "Screen: %s — %s (%.0fms, cost=$%.4f)",
+                "TRADE" if should_trade else "HOLD",
+                reason[:80],
+                latency_ms,
+                api_cost,
+            )
+
+            return should_trade, reason, api_cost
+
+        except Exception:
+            logger.exception("Screening failed, defaulting to full AI call")
+            return True, "Screening failed", 0.0

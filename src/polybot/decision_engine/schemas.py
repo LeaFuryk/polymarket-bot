@@ -1,5 +1,22 @@
 """JSON schema for Claude structured output (constrained decoding)."""
 
+# Pass-1 screening schema (Haiku — fast & cheap)
+SCREENING_DECISION_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "should_trade": {
+            "type": "boolean",
+            "description": "True if there is a plausible trade setup, False if HOLD is the best action",
+        },
+        "reason": {
+            "type": "string",
+            "description": "Brief 1-2 sentence explanation",
+        },
+    },
+    "required": ["should_trade", "reason"],
+    "additionalProperties": False,
+}
+
 TRADING_DECISION_SCHEMA = {
     "type": "object",
     "properties": {

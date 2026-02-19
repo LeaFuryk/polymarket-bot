@@ -69,7 +69,7 @@ Decide ──► Trade ──► Resolve ──► Reflect ──► Adjust Inpu
      risk state, computed indicators, past learnings → outputs JSON
 ```
 
-### Decision Cycle (12 steps)
+### Decision Cycle (14 steps)
 
 Each cycle (~60 seconds) the agent executes:
 
@@ -80,12 +80,13 @@ Each cycle (~60 seconds) the agent executes:
 5. **Check limit fills** — Scan pending limit orders against current orderbook.
 6. **Pre-trade risk checks** — Daily loss halt, minimum liquidity. Run *before* Claude API call to save cost.
 7. **Rules-based pre-filter** — Cheap checks (time remaining, choppy market, entry pricing, candle streaks) skip obvious HOLDs without calling Claude, saving 60-70% of AI costs.
-8. **Build context** — Assemble FeatureVector + BTC candle history + feedback context + computed indicators.
-9. **Claude decides** — Structured JSON: `action`, `token_side`, `order_type`, `size`, `confidence`, `reasoning`.
-10. **Confidence gate** — Hard override: if confidence < 0.6, the trade is forced to HOLD regardless of Claude's recommendation.
-10b. **Calibration gate** — Checks stated confidence against historical calibration data. If the actual win rate at that confidence level is below break-even (55%), the trade is overridden to HOLD.
-11. **Post-trade risk checks** — Validate spread, position sizing, concentration, cash sufficiency.
-12. **Execute + log** — Simulate fill, update portfolio, write TradeRecord to JSONL, write dashboard JSON.
+8. **Two-pass screening** — If enabled, Haiku (fast/cheap) screens "is there a trade?" before calling Sonnet. Costs ~$0.0003 vs ~$0.005 for full decision. Skipped when positions are open.
+9. **Build context** — Assemble FeatureVector + BTC candle history + feedback context + computed indicators.
+10. **Claude decides** — Structured JSON: `action`, `token_side`, `order_type`, `size`, `confidence`, `reasoning`.
+11. **Confidence gate** — Hard override: if confidence < 0.6, the trade is forced to HOLD regardless of Claude's recommendation.
+12. **Calibration gate** — Checks stated confidence against historical calibration data. If the actual win rate at that confidence level is below break-even (55%), the trade is overridden to HOLD.
+13. **Post-trade risk checks** — Validate spread, position sizing, concentration, cash sufficiency.
+14. **Execute + log** — Simulate fill, update portfolio, write TradeRecord to JSONL, write dashboard JSON.
 
 ### Market Rotation & Resolution
 
