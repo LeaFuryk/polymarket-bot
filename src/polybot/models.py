@@ -283,6 +283,7 @@ class TradeRecord(BaseModel):
     reasoning: str = ""
     market_view: str = ""
     ai_latency_ms: float = 0.0
+    ai_cost: float = 0.0
 
     # Execution result
     fill_price: float | None = None

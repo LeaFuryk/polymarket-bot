@@ -936,7 +936,7 @@ function calcStats(resolutions) {
 
 function calcTradeStats(trades) {
   let invested = 0, returned = 0, buys = 0, sells = 0, holds = 0;
-  let confSum = 0, confN = 0, totalFees = 0;
+  let confSum = 0, confN = 0, totalFees = 0, totalAiCost = 0;
   let startCash = null, endCash = null, startPortfolio = null, endPortfolio = null;
   for (const t of trades) {
     // Track first/last cash & portfolio snapshots for session boundaries
@@ -945,6 +945,7 @@ function calcTradeStats(trades) {
       endCash = t.cash;
       endPortfolio = t.portfolio_value;
     }
+    totalAiCost += t.ai_cost || 0;
     if (t.risk_blocked) continue;
     const cost = (t.size || 0) * (t.fill_price || 0);
     if (t.action === 'BUY') { invested += cost; buys++; }
@@ -954,7 +955,7 @@ function calcTradeStats(trades) {
     totalFees += t.fee || 0;
   }
   return {
-    invested, returned, buys, sells, holds, totalFees,
+    invested, returned, buys, sells, holds, totalFees, totalAiCost,
     avgConf: confN > 0 ? confSum / confN : 0,
     startCash, endCash, startPortfolio, endPortfolio,
     hasCashData: startCash !== null,
@@ -1239,14 +1240,34 @@ function render(d) {
     <div class="metric-value ${signCls(stats.pnl)}">${fmt$(stats.pnl, 4)}</div>
     <div class="metric-sub">${stats.count} resolutions</div></div>`;
 
+  // Open Trade PnL: realized P&L from buy/sell round-trips on the current unresolved candle
   if (showLive) {
-    // Live session: real-time values from bot state
+    const mtp = s.market_trading_pnl || 0;
+    mh += `<div class="metric" data-tip="Realized P&L from trades closed on the current (unresolved) candle. This is already reflected in cash but not yet in resolution PnL. Resets to $0 on each candle rotation."><div class="metric-label">Open Trade PnL</div>
+      <div class="metric-value ${signCls(mtp)}">${fmt$(mtp, 4)}</div>
+      <div class="metric-sub">current candle</div></div>`;
+  }
+
+  if (showLive && isOv) {
+    // Overview: show global bot state with initial_cash reference
     mh += `<div class="metric" data-tip="Current available cash in the bot's wallet. This is undeployed capital that can be used for new trades."><div class="metric-label">Cash</div>
       <div class="metric-value v-cyan">${fmt$(s.cash, 2)}</div>
       <div class="metric-sub">initial: ${fmt$(s.initial_cash, 0)}</div></div>`;
     mh += `<div class="metric" data-tip="Total value: cash + current market value of all open token positions. Tracks overall account performance."><div class="metric-label">Portfolio</div>
       <div class="metric-value v-blue">${fmt$(s.portfolio_value, 2)}</div>
       <div class="metric-sub">${pnlSign(s.portfolio_value - s.initial_cash)}${fmtNum(s.portfolio_value - s.initial_cash, 2)} from start</div></div>`;
+  } else if (showLive && ts.hasCashData) {
+    // Live session/day view with per-trade snapshots: show session-scoped start→current
+    const sessionStartCash = ts.startCash;
+    const sessionStartPort = ts.startPortfolio;
+    const cashDelta = s.cash - sessionStartCash;
+    const portDelta = s.portfolio_value - sessionStartPort;
+    mh += `<div class="metric" data-tip="Current cash for this session. Shows change from the session's starting cash, not the all-time initial balance."><div class="metric-label">Cash</div>
+      <div class="metric-value v-cyan">${fmt$(s.cash, 2)}</div>
+      <div class="metric-sub">start: ${fmt$(sessionStartCash, 2)} (${pnlSign(cashDelta)}${fmtNum(cashDelta, 2)})</div></div>`;
+    mh += `<div class="metric" data-tip="Current portfolio value for this session. Shows change from the session's starting value."><div class="metric-label">Portfolio</div>
+      <div class="metric-value v-blue">${fmt$(s.portfolio_value, 2)}</div>
+      <div class="metric-sub">start: ${fmt$(sessionStartPort, 2)} (${pnlSign(portDelta)}${fmtNum(portDelta, 2)})</div></div>`;
   } else if (ts.hasCashData) {
     // Historical session with per-trade cash snapshots: show start→end cash & portfolio
     const cashDelta = ts.endCash - ts.startCash;
@@ -1266,6 +1287,20 @@ function render(d) {
       <div class="metric-value v-blue">${fmt$(ts.returned, 2)}</div>
       <div class="metric-sub">${ts.sells} sell orders</div></div>`;
   }
+
+  // AI Cost: use bot's live total for any live view, per-trade sums for historical
+  const aiCostVal = showLive ? s.total_ai_cost : ts.totalAiCost;
+  const aiCostSub = showLive ? 'current session' : ts.totalAiCost > 0 ? `${fd.trades.length} cycles` : 'no data';
+  mh += `<div class="metric" data-tip="Total cost of Claude API calls for AI decisions and reflections. This is deducted from the bot's cash — the bot pays for its own brain."><div class="metric-label">AI Cost</div>
+    <div class="metric-value v-amber">${fmt$(aiCostVal, 4)}</div>
+    <div class="metric-sub">${aiCostSub}</div></div>`;
+
+  // Trading Fees: use bot's live total for any live view, per-trade sums for historical
+  const feesVal = showLive ? s.total_fees : ts.totalFees;
+  const feesSub = showLive ? 'current session' : `${ts.buys + ts.sells} fills`;
+  mh += `<div class="metric" data-tip="Total simulated Polymarket trading fees (20bps per fill). Deducted from cash on each executed trade."><div class="metric-label">Fees</div>
+    <div class="metric-value v-red">${fmt$(feesVal, 4)}</div>
+    <div class="metric-sub">${feesSub}</div></div>`;
 
   mh += `<div class="metric" data-tip="Average confidence level the AI assigned to its BUY/SELL decisions. Higher means the bot was more certain about its trades."><div class="metric-label">Avg Conf</div>
     <div class="metric-value ${ts.avgConf >= 0.6 ? 'v-green' : ts.avgConf > 0 ? 'v-amber' : ''}">${ts.avgConf > 0 ? fmtPct(ts.avgConf * 100, 0) : '--'}</div>

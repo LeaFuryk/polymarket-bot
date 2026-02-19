@@ -12,7 +12,7 @@ An AI-powered paper trading agent that trades Polymarket BTC 5-minute candle pre
 |-----------|------------|
 | Language | Python 3.11+ |
 | AI Brain | Claude (Anthropic API) with structured JSON output |
-| Market Data | Chainlink on-chain BTC/USD (primary), CoinGecko (24h change), Binance 5-min OHLCV |
+| Market Data | Binance BTC/USDT spot (primary), Chainlink on-chain (cross-ref), CoinGecko (24h change), Binance 5-min OHLCV |
 | Data Models | Pydantic v2 |
 | Config | YAML + `.env` overrides |
 | Dashboard | Rich live terminal UI + standalone web dashboard |
@@ -199,7 +199,7 @@ python -m http.server 8080
 # Then open http://localhost:8080/dashboard/
 ```
 
-The dashboard auto-refreshes every 60 seconds and shows: stats cards (win rate, PnL, cash, portfolio value, AI costs), current market with live countdown, BTC price, positions, scrollable trade timeline with expandable reasoning, resolutions table, cumulative PnL chart, and risk panel.
+The dashboard auto-refreshes every 60 seconds and shows: stats cards (win rate, PnL, open trade PnL, cash, portfolio value, AI cost, trading fees, avg confidence), current market with live countdown, BTC price, positions, scrollable trade timeline with expandable reasoning, resolutions table, cumulative PnL chart, and risk panel. Cash and Portfolio metrics are scoped to the selected view — overview shows all-time values, while individual sessions show start-to-current deltas for that session. The full accounting formula is: `cash = initial_cash + resolution_pnl + open_trade_pnl - fees - ai_cost`.
 
 ### Optional: Plain mode (no terminal dashboard)
 
