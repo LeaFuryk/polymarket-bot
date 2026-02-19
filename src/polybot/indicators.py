@@ -575,6 +575,57 @@ def _volatility_30m(
     )
 
 
+@register("flat_market_edge")
+def _flat_market_edge(
+    snap: MarketSnapshot, params: dict, session: SessionContext | None,
+) -> IndicatorResult | None:
+    """Detect flat/near-flat BTC conditions where UP wins by default.
+
+    Polymarket rule: BTC close >= open → UP wins. Equal price = UP wins.
+    When BTC is barely moving (<$5 range), UP has a structural edge that
+    may be underpriced in the market.
+    """
+    candles = snap.btc_candles
+    if len(candles) < 3:
+        return None
+
+    # Check recent candles for flat patterns
+    flat_threshold = params.get("flat_threshold", 5.0)  # $ threshold for "flat"
+    recent = candles[-6:] if len(candles) >= 6 else candles
+    flat_count = sum(1 for c in recent if abs(c.close - c.open) < flat_threshold)
+    flat_ratio = flat_count / len(recent)
+
+    # Check if UP token is underpriced in flat conditions
+    up_ask = snap.orderbook.best_ask
+    up_mid = snap.orderbook.midpoint
+
+    signal_parts = [f"{flat_count}/{len(recent)} flat candles"]
+
+    if flat_ratio >= 0.5 and up_mid is not None and up_mid < 0.50:
+        signal_parts.append(f"UP underpriced at {up_mid:.3f} — structural edge")
+        signal = " | ".join(signal_parts)
+        return IndicatorResult(
+            name="Flat Market Edge",
+            value=flat_ratio,
+            label=f"{signal}",
+        )
+    elif flat_ratio >= 0.5:
+        signal_parts.append("flat market — UP wins ties")
+        signal = " | ".join(signal_parts)
+        return IndicatorResult(
+            name="Flat Market Edge",
+            value=flat_ratio,
+            label=f"{signal}",
+        )
+
+    # Not flat enough to signal
+    return IndicatorResult(
+        name="Flat Market Edge",
+        value=flat_ratio,
+        label=f"{flat_count}/{len(recent)} flat candles (no edge)",
+    )
+
+
 @register("volume_trend")
 def _volume_trend(
     snap: MarketSnapshot, params: dict, _session: SessionContext | None,

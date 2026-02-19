@@ -104,6 +104,13 @@
       "name": "volume_trend",
       "enabled": true,
       "params": {}
+    },
+    {
+      "name": "flat_market_edge",
+      "enabled": true,
+      "params": {
+        "flat_threshold": 5.0
+      }
     }
   ]
 }
