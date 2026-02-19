@@ -22,6 +22,7 @@ from polybot.indicators import (
     format_indicators,
 )
 from polybot.knowledge import KnowledgeManager
+from polybot.prefilter import PreFilter
 from polybot.logging.trade_log import TradeLog
 from polybot.market_data.discovery import MarketDiscovery
 from polybot.market_data.provider import MarketDataProvider
@@ -132,6 +133,9 @@ class TradingAgent:
             self._market_data.btc_feed,
             rest_client=self._market_data._rest,
         )
+
+        # Rules-based pre-filter (skips AI on obvious HOLDs)
+        self._prefilter = PreFilter()
 
         # Knowledge / feedback learning
         self._knowledge_manager = KnowledgeManager(config.logging.knowledge_dir, config.ai)
@@ -372,6 +376,19 @@ class TradingAgent:
             self._last_action = "BLOCKED (pre-trade)"
             self._last_risk_status = reasons
             self._log_cycle(cycle, snapshot, risk_blocked=True, risk_reason=reasons)
+            return snapshot
+
+        # 4b. Rules-based pre-filter (skip AI on obvious HOLDs)
+        has_position = (
+            self._portfolio.up_position.shares > 0
+            or self._portfolio.down_position.shares > 0
+        )
+        pf_result = self._prefilter.check(time_remaining, snapshot, has_position)
+        if pf_result.should_skip:
+            self._last_action = f"HOLD (pre-filter: {pf_result.reason[:60]})"
+            self._last_reasoning = pf_result.reason
+            self._log_cycle(cycle, snapshot, risk_blocked=False, risk_reason="")
+            self._write_dashboard_json(cycle, snapshot)
             return snapshot
 
         # 5. Build feature vector and get AI decision
@@ -676,6 +693,9 @@ class TradingAgent:
                     "initial_cash": self._config.agent.initial_cash,
                     "market_trading_pnl": self._portfolio.market_trading_pnl,
                     "cycles_run": cycle,
+                    "prefilter_skip_rate": self._prefilter.skip_rate,
+                    "prefilter_skipped": self._prefilter.total_skipped,
+                    "prefilter_checked": self._prefilter.total_checks,
                 },
                 "all_time": {
                     "wins": all_time_wins,
@@ -982,10 +1002,12 @@ class TradingAgent:
             res_info += f"  | Last: {r.slug} → {r.winner} (${r.btc_open:.0f}→${r.btc_close:.0f})"
         grid.add_row("Resolutions", res_info)
 
-        # AI Costs
+        # AI Costs + Pre-filter stats
         ai_cost_info = (
             f"Session: ${self._total_api_cost:.4f}  "
-            f"Last Cycle: ${self._last_cycle_api_cost:.4f}"
+            f"Last Cycle: ${self._last_cycle_api_cost:.4f}  "
+            f"Pre-filter: {self._prefilter.total_skipped}/{self._prefilter.total_checks} skipped "
+            f"({self._prefilter.skip_rate:.0%})"
         )
         grid.add_row("AI Costs", ai_cost_info)
 

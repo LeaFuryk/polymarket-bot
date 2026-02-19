@@ -69,7 +69,7 @@ Decide ──► Trade ──► Resolve ──► Reflect ──► Adjust Inpu
      risk state, computed indicators, past learnings → outputs JSON
 ```
 
-### Decision Cycle (11 steps)
+### Decision Cycle (12 steps)
 
 Each cycle (~60 seconds) the agent executes:
 
@@ -79,11 +79,12 @@ Each cycle (~60 seconds) the agent executes:
 4. **Mark-to-market** — Update unrealized PnL on both token positions.
 5. **Check limit fills** — Scan pending limit orders against current orderbook.
 6. **Pre-trade risk checks** — Daily loss halt, minimum liquidity. Run *before* Claude API call to save cost.
-7. **Build context** — Assemble FeatureVector + BTC candle history + feedback context + computed indicators.
-8. **Claude decides** — Structured JSON: `action`, `token_side`, `order_type`, `size`, `confidence`, `reasoning`.
-9. **Confidence gate** — Hard override: if confidence < 0.6, the trade is forced to HOLD regardless of Claude's recommendation.
-10. **Post-trade risk checks** — Validate spread, position sizing, concentration, cash sufficiency.
-11. **Execute + log** — Simulate fill, update portfolio, write TradeRecord to JSONL, write dashboard JSON.
+7. **Rules-based pre-filter** — Cheap checks (time remaining, choppy market, entry pricing, candle streaks) skip obvious HOLDs without calling Claude, saving 60-70% of AI costs.
+8. **Build context** — Assemble FeatureVector + BTC candle history + feedback context + computed indicators.
+9. **Claude decides** — Structured JSON: `action`, `token_side`, `order_type`, `size`, `confidence`, `reasoning`.
+10. **Confidence gate** — Hard override: if confidence < 0.6, the trade is forced to HOLD regardless of Claude's recommendation.
+11. **Post-trade risk checks** — Validate spread, position sizing, concentration, cash sufficiency.
+12. **Execute + log** — Simulate fill, update portfolio, write TradeRecord to JSONL, write dashboard JSON.
 
 ### Market Rotation & Resolution
 
