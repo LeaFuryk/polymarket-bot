@@ -21,6 +21,8 @@ class ApiConfig(BaseModel):
     polymarket_host: str = "https://clob.polymarket.com"
     coingecko_url: str = "https://api.coingecko.com/api/v3"
     polymarket_ws_url: str = "wss://ws-subscriptions-clob.polymarket.com/ws/market"
+    ethereum_rpc_url: str = "https://ethereum.publicnode.com"
+    chainlink_btcusd_address: str = "0xF4030086522a5bEEa4988F8cA5B36dbC97BeE88c"
 
 
 class AgentConfig(BaseModel):
@@ -85,6 +87,7 @@ def _apply_env_overrides(config: AppConfig) -> None:
         "POLYBOT_AGENT_MAX_CYCLES": (config.agent, "max_cycles", int),
         "POLYBOT_RISK_DAILY_LOSS_LIMIT_PCT": (config.risk, "daily_loss_limit_pct", float),
         "POLYBOT_KNOWLEDGE_DIR": (config.logging, "knowledge_dir", str),
+        "POLYBOT_ETHEREUM_RPC_URL": (config.api, "ethereum_rpc_url", str),
     }
     for env_key, (section, attr, typ) in env_map.items():
         val = os.environ.get(env_key)

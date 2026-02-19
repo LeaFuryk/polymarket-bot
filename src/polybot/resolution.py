@@ -55,7 +55,8 @@ class ResolutionTracker:
                 )
                 btc_open = btc_close  # will resolve as "down" (tie goes to down)
 
-        winner = "up" if btc_close > btc_open else "down"
+        # Polymarket rule: "greater than or equal to" → UP wins on tie
+        winner = "up" if btc_close >= btc_open else "down"
 
         logger.info(
             "Resolved %s: open=$%.2f close=$%.2f → winner=%s",
