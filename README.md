@@ -12,7 +12,7 @@ An AI-powered paper trading agent that trades Polymarket BTC 5-minute candle pre
 |-----------|------------|
 | Language | Python 3.11+ |
 | AI Brain | Claude (Anthropic API) with structured JSON output |
-| Market Data | Polymarket CLOB REST API, CoinGecko, Binance klines + 5-min OHLCV |
+| Market Data | Chainlink on-chain BTC/USD (primary), CoinGecko (24h change), Binance 5-min OHLCV |
 | Data Models | Pydantic v2 |
 | Config | YAML + `.env` overrides |
 | Dashboard | Rich live terminal UI + standalone web dashboard |
@@ -38,8 +38,10 @@ An AI-powered paper trading agent that trades Polymarket BTC 5-minute candle pre
 |-----|------|---------|
 | Polymarket CLOB | None (public) | Orderbooks, last trade prices |
 | Polymarket Gamma | None | Market discovery by slug pattern |
-| CoinGecko | None | Live BTC price + 24h change |
-| Binance klines | None | Historical BTC price for resolution fallback + 5-min OHLCV candle history |
+| Chainlink BTC/USD (on-chain) | None (public RPC) | **Primary BTC price** — matches Polymarket resolution source |
+| CoinGecko | None | 24h change % (convenience metric only) |
+| Binance klines | None | 5-min OHLCV candle history for micro-trend analysis; historical price fallback |
+| Ethereum RPC | None | Read Chainlink price feed aggregator contract |
 
 ---
 
@@ -87,7 +89,8 @@ Each cycle (~60 seconds) the agent executes:
 
 When a 5-minute candle expires and a new one begins:
 - All pending limit orders are cancelled
-- The old candle is resolved by comparing BTC price at open vs close
+- The old candle is resolved by comparing BTC price at open vs close (from Chainlink)
+- Resolves "Up" if close >= open, "Down" otherwise (equal price = Up wins)
 - Winning token positions settle at $1/share, losing at $0
 - Session W/L stats are updated
 - Portfolio positions reset for the new candle
@@ -201,6 +204,7 @@ Set `dashboard_enabled: false` in `config/default.yaml` for structured log outpu
 | `POLYBOT_MARKET_CONDITION_ID` | Pin a specific market | auto-discovered |
 | `POLYBOT_RISK_DAILY_LOSS_LIMIT_PCT` | Daily loss halt threshold | `0.10` |
 | `POLYBOT_KNOWLEDGE_DIR` | Knowledge files directory | `data/knowledge` |
+| `POLYBOT_ETHEREUM_RPC_URL` | Ethereum RPC for Chainlink reads | `https://ethereum.publicnode.com` |
 
 ---
 
@@ -372,8 +376,8 @@ TradingAgent (agent.py) — main orchestration loop
  ├── MarketDiscovery ─── Gamma API
  │   Finds current BTC 5-min candle market by slug pattern
  │
- ├── MarketDataProvider ─── CLOB REST + CoinGecko + Binance 5m OHLCV + (WebSocket)
- │   Assembles MarketSnapshot: orderbooks, BTC price, 5-min candle history
+ ├── MarketDataProvider ─── CLOB REST + Chainlink + Binance 5m OHLCV + (WebSocket)
+ │   Assembles MarketSnapshot: orderbooks, Chainlink BTC price, 5-min candle history
  │
  ├── RiskManager
  │   Pre-trade: daily halt, min liquidity
@@ -439,7 +443,7 @@ polymarket-bot/
 │   ├── logging/
 │   │   └── trade_log.py          # JSONL trade + resolution logging
 │   ├── market_data/
-│   │   ├── btc_price.py          # CoinGecko + Binance BTC feeds + 5-min candle history
+│   │   ├── btc_price.py          # Chainlink on-chain (primary) + CoinGecko (24h) + Binance (candles)
 │   │   ├── client.py             # Polymarket CLOB REST client
 │   │   ├── discovery.py          # Gamma API market discovery
 │   │   └── provider.py           # Unified MarketSnapshot facade

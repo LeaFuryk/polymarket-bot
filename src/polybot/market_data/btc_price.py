@@ -1,4 +1,12 @@
-"""BTC spot price feed from CoinGecko free API."""
+"""BTC spot price feed — Chainlink on-chain (primary) + CoinGecko (24h change fallback).
+
+Resolution source for Polymarket BTC 5-min candles is the Chainlink BTC/USD
+data stream (https://data.chain.link/streams/btc-usd). We read the on-chain
+Chainlink Price Feed aggregator to match this as closely as possible.
+
+Binance klines are used only for 5-min OHLCV candle history (micro-trend
+analysis). They are NOT used for resolution-critical pricing.
+"""
 
 from __future__ import annotations
 
@@ -14,20 +22,33 @@ logger = logging.getLogger(__name__)
 
 CACHE_TTL = 30  # seconds
 
+# Chainlink BTC/USD Price Feed on Ethereum mainnet
+# latestRoundData() function selector
+LATEST_ROUND_DATA_SELECTOR = "0xfeaf968c"
+# Chainlink BTC/USD uses 8 decimal places
+CHAINLINK_DECIMALS = 8
+
 
 class BtcPriceFeed:
-    """Fetches BTC/USD price with caching to respect rate limits."""
+    """Fetches BTC/USD price from Chainlink on-chain, with CoinGecko fallback."""
 
     def __init__(self, api_config: ApiConfig) -> None:
-        self._base_url = api_config.coingecko_url
+        self._coingecko_url = api_config.coingecko_url
+        self._rpc_url = api_config.ethereum_rpc_url
+        self._chainlink_address = api_config.chainlink_btcusd_address
         self._client = httpx.AsyncClient(timeout=10.0)
         self._cache: BtcPrice | None = None
         self._cache_time: float = 0.0
         self._candles: list[BtcCandle] = []
+        # Separate cache for 24h change from CoinGecko (updates less frequently)
+        self._24h_change_pct: float = 0.0
+        self._24h_change_time: float = 0.0
 
     @property
     def candles(self) -> list[BtcCandle]:
         return self._candles
+
+    # --- 5-min candle history (Binance — for trend analysis only) ---
 
     async def load_candle_history(self, limit: int = 200) -> None:
         """Fetch historical 5-min OHLCV candles from Binance."""
@@ -54,7 +75,7 @@ class BtcPriceFeed:
                 )
                 for k in data
             ]
-            logger.info("Loaded %d 5-min BTC candles", len(self._candles))
+            logger.info("Loaded %d 5-min BTC candles from Binance", len(self._candles))
         except Exception:
             logger.exception("Failed to load BTC candle history")
 
@@ -93,14 +114,78 @@ class BtcPriceFeed:
         except Exception:
             logger.exception("Failed to append latest BTC candle")
 
-    async def get_price(self) -> BtcPrice | None:
+    # --- Chainlink on-chain price (primary — matches Polymarket resolution source) ---
+
+    async def _fetch_chainlink_price(self) -> float | None:
+        """Read latestRoundData() from Chainlink BTC/USD aggregator on Ethereum.
+
+        Returns BTC price in USD or None on failure.
+        """
+        try:
+            resp = await self._client.post(
+                self._rpc_url,
+                json={
+                    "jsonrpc": "2.0",
+                    "method": "eth_call",
+                    "params": [
+                        {
+                            "to": self._chainlink_address,
+                            "data": LATEST_ROUND_DATA_SELECTOR,
+                        },
+                        "latest",
+                    ],
+                    "id": 1,
+                },
+            )
+            resp.raise_for_status()
+            result = resp.json()
+
+            if "error" in result:
+                logger.warning("Chainlink RPC error: %s", result["error"])
+                return None
+
+            hex_data = result.get("result", "")
+            if not hex_data or hex_data == "0x" or len(hex_data) < 66:
+                logger.warning("Chainlink returned empty/invalid data")
+                return None
+
+            # latestRoundData returns: (uint80 roundId, int256 answer, uint256 startedAt,
+            #                           uint256 updatedAt, uint80 answeredInRound)
+            # Each value is 32 bytes (64 hex chars). answer is at offset 32-64 bytes.
+            # Strip "0x" prefix, then answer starts at char 64 (second 32-byte word)
+            hex_clean = hex_data[2:]
+            answer_hex = hex_clean[64:128]
+            answer_int = int(answer_hex, 16)
+
+            # Handle signed int256 (if somehow negative, which shouldn't happen for price)
+            if answer_int >= 2**255:
+                answer_int -= 2**256
+
+            price = answer_int / (10 ** CHAINLINK_DECIMALS)
+
+            if price <= 0:
+                logger.warning("Chainlink returned non-positive price: %s", price)
+                return None
+
+            logger.debug("Chainlink BTC/USD: $%.2f", price)
+            return price
+
+        except Exception:
+            logger.exception("Failed to fetch Chainlink BTC/USD price")
+            return None
+
+    # --- CoinGecko (fallback + 24h change) ---
+
+    async def _fetch_coingecko_24h_change(self) -> float:
+        """Fetch 24h change % from CoinGecko. Returns 0.0 on failure."""
         now = time.time()
-        if self._cache and (now - self._cache_time) < CACHE_TTL:
-            return self._cache
+        # Only refresh every 5 minutes — 24h change is a slow-moving metric
+        if (now - self._24h_change_time) < 300:
+            return self._24h_change_pct
 
         try:
             resp = await self._client.get(
-                f"{self._base_url}/simple/price",
+                f"{self._coingecko_url}/simple/price",
                 params={
                     "ids": "bitcoin",
                     "vs_currencies": "usd",
@@ -109,22 +194,72 @@ class BtcPriceFeed:
             )
             resp.raise_for_status()
             data = resp.json().get("bitcoin", {})
-
-            price = BtcPrice(
-                price_usd=data.get("usd", 0.0),
-                change_24h_pct=data.get("usd_24h_change", 0.0),
-            )
-            self._cache = price
-            self._cache_time = now
-            return price
-
+            self._24h_change_pct = data.get("usd_24h_change", 0.0)
+            self._24h_change_time = now
+            return self._24h_change_pct
         except Exception:
-            logger.exception("Failed to fetch BTC price")
-            return self._cache  # return stale cache on error
+            logger.debug("CoinGecko 24h change fetch failed, using cached value")
+            return self._24h_change_pct
+
+    async def _fetch_coingecko_price(self) -> float | None:
+        """Fallback: fetch BTC price from CoinGecko if Chainlink is unavailable."""
+        try:
+            resp = await self._client.get(
+                f"{self._coingecko_url}/simple/price",
+                params={
+                    "ids": "bitcoin",
+                    "vs_currencies": "usd",
+                    "include_24hr_change": "true",
+                },
+            )
+            resp.raise_for_status()
+            data = resp.json().get("bitcoin", {})
+            self._24h_change_pct = data.get("usd_24h_change", 0.0)
+            self._24h_change_time = time.time()
+            return data.get("usd")
+        except Exception:
+            logger.exception("CoinGecko price fetch also failed")
+            return None
+
+    # --- Main price method ---
+
+    async def get_price(self) -> BtcPrice | None:
+        """Get current BTC/USD price. Chainlink primary, CoinGecko fallback."""
+        now = time.time()
+        if self._cache and (now - self._cache_time) < CACHE_TTL:
+            return self._cache
+
+        # Try Chainlink first (matches Polymarket resolution source)
+        price_usd = await self._fetch_chainlink_price()
+        source = "chainlink"
+
+        if price_usd is None:
+            # Fallback to CoinGecko
+            logger.warning("Chainlink unavailable, falling back to CoinGecko")
+            price_usd = await self._fetch_coingecko_price()
+            source = "coingecko"
+
+        if price_usd is None:
+            logger.error("All BTC price sources failed")
+            return self._cache  # return stale cache
+
+        # Get 24h change from CoinGecko (non-blocking, cached separately)
+        change_24h = await self._fetch_coingecko_24h_change()
+
+        price = BtcPrice(
+            price_usd=price_usd,
+            change_24h_pct=change_24h,
+        )
+        self._cache = price
+        self._cache_time = now
+
+        logger.debug("BTC price: $%.2f (source=%s, 24h=%+.2f%%)", price_usd, source, change_24h)
+        return price
 
     async def get_price_at(self, timestamp: float) -> float | None:
         """Get BTC price at a specific timestamp via Binance klines API.
 
+        Used as fallback for resolution when live open price wasn't captured.
         Returns the close price of the 1-minute candle containing the timestamp,
         or None on failure.
         """
@@ -142,7 +277,6 @@ class BtcPriceFeed:
             resp.raise_for_status()
             data = resp.json()
             if data and len(data) > 0:
-                # Kline format: [open_time, open, high, low, close, ...]
                 close_price = float(data[0][4])
                 return close_price
         except Exception:

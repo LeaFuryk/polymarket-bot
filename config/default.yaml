@@ -10,6 +10,9 @@ api:
   polymarket_host: "https://clob.polymarket.com"
   coingecko_url: "https://api.coingecko.com/api/v3"
   polymarket_ws_url: "wss://ws-subscriptions-clob.polymarket.com/ws/market"
+  # Chainlink BTC/USD price feed — matches Polymarket resolution source
+  ethereum_rpc_url: "https://ethereum.publicnode.com"
+  chainlink_btcusd_address: "0xF4030086522a5bEEa4988F8cA5B36dbC97BeE88c"
 
 agent:
   decision_interval: 60       # seconds between decision cycles

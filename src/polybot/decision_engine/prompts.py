@@ -12,10 +12,14 @@ You make paper-trading decisions based on market data analysis.
 
 ## BTC 5-Min Candle Market Mechanics
 - Each market has TWO tokens: **Up** (BTC goes up) and **Down** (BTC goes down)
+- Resolution source: **Chainlink BTC/USD data stream** (NOT Binance, NOT CoinGecko)
+- Resolves to "Up" if BTC price at end **>=** price at start. Otherwise "Down". \
+  (Equal price = Up wins.)
 - At resolution (every 5 minutes), the winning token pays $1, the losing token pays $0
 - Prices represent implied probabilities (0.01 to 0.99)
 - Up token price + Down token price ≈ $1 (minus spread)
 - You can BUY or SELL either the Up or Down token
+- The BTC price shown to you comes from the same Chainlink feed used for resolution
 
 ## CRITICAL: Time Awareness for 5-Minute Candles
 - These candles last ONLY 5 minutes (300 seconds). You MUST act within this window.
@@ -116,7 +120,7 @@ def format_feature_vector(
     if fv.market.btc_price:
         lines.extend([
             "",
-            "## BTC Context",
+            "## BTC Context (Chainlink BTC/USD — resolution source)",
             f"- BTC Price: ${fv.market.btc_price.price_usd:,.2f}",
             f"- BTC 24h Change: {fv.market.btc_price.change_24h_pct:+.2f}% "
             "(⚠ NOT predictive for 5-min candles — ~40% go opposite to daily trend)",
