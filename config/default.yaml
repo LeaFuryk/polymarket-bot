@@ -21,8 +21,10 @@ agent:
 
 ai:
   model: "claude-sonnet-4-5-20250929"
+  screen_model: "claude-haiku-4-5-20251001"
   max_tokens: 1024
   temperature: 0.0            # deterministic for reproducibility
+  two_pass_enabled: true      # Haiku screens first, Sonnet only on trade setups
 
 simulator:
   base_slippage_bps: 5        # base slippage in basis points

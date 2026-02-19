@@ -433,6 +433,23 @@ class TradingAgent:
         if indicators_text:
             logger.debug("Indicators: %s", indicators_text[:200])
 
+        # 5b. Two-pass screening: fast Haiku check before expensive Sonnet call
+        if self._config.ai.two_pass_enabled and not has_position:
+            should_trade, screen_reason, screen_cost = await self._decision_engine.screen(
+                features, indicators_text=indicators_text,
+            )
+            # Deduct screening cost
+            self._portfolio.cash -= screen_cost
+            self._total_api_cost += screen_cost
+            self._last_cycle_api_cost = screen_cost
+
+            if not should_trade:
+                self._last_action = f"HOLD (screen: {screen_reason[:60]})"
+                self._last_reasoning = screen_reason
+                self._log_cycle(cycle, snapshot, risk_blocked=False, risk_reason="")
+                self._write_dashboard_json(cycle, snapshot)
+                return snapshot
+
         decision, latency_ms, api_cost = await self._decision_engine.decide(
             features, feedback_context=feedback_context, indicators_text=indicators_text,
             ai_cycle_cost=self._last_cycle_api_cost, ai_session_cost=self._total_api_cost,

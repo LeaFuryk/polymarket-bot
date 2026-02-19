@@ -34,11 +34,15 @@ class AgentConfig(BaseModel):
 
 class AiConfig(BaseModel):
     model: str = "claude-sonnet-4-5-20250929"
+    screen_model: str = "claude-haiku-4-5-20251001"
     max_tokens: int = 1024
     temperature: float = 0.0
     api_key: str = ""
     input_cost_per_mtok: float = 3.0
     output_cost_per_mtok: float = 8.0
+    screen_input_cost_per_mtok: float = 0.80
+    screen_output_cost_per_mtok: float = 4.0
+    two_pass_enabled: bool = True
 
 
 class SimulatorConfig(BaseModel):

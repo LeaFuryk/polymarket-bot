@@ -6,6 +6,29 @@ import statistics
 
 from polybot.models import BtcCandle, FeatureVector
 
+SCREENING_PROMPT = """\
+You are a fast screening agent for a Polymarket BTC 5-minute candle prediction market bot.
+
+Your job: quickly decide if the current market conditions have a plausible trade setup,
+or if HOLD is clearly the best action. You are NOT making the trade — just screening.
+
+Say should_trade=true if ANY of these apply:
+- There's a clear BTC momentum pattern (3+ consecutive candles same direction)
+- Entry prices are attractive (either token ask < 0.40)
+- BTC has moved significantly in last 15 minutes (>$80)
+- There's an obvious mean reversion setup after a streak
+- Orderbook imbalance suggests directional pressure
+
+Say should_trade=false if ALL of these apply:
+- BTC is choppy/sideways (range < $50 in last 30min)
+- No consecutive candle streak (< 2 same-direction)
+- Entry prices are unattractive (both tokens > 0.45)
+- Time remaining < 90 seconds
+- No clear directional signal
+
+When in doubt, say true (let the full AI decide). Better to pass than to miss.
+"""
+
 SYSTEM_PROMPT = """\
 You are an AI trading agent operating on Polymarket BTC 5-minute candle prediction markets. \
 You make paper-trading decisions based on market data analysis.
@@ -231,4 +254,47 @@ def format_feature_vector(
         "Respond with the structured JSON output.",
     ])
 
+    return "\n".join(lines)
+
+
+def format_screening_context(fv: FeatureVector, indicators_text: str = "") -> str:
+    """Format a compact context for the Pass-1 screening model (Haiku).
+
+    Much shorter than the full feature vector — just the essentials for
+    a TRADE/HOLD decision.
+    """
+    up_ob = fv.market.orderbook
+    down_ob = fv.market.down_orderbook
+
+    lines = [
+        f"Time remaining: {fv.time_remaining:.0f}s",
+        f"Up token: ask={up_ob.best_ask or 'N/A'} bid={up_ob.best_bid or 'N/A'} spread={up_ob.spread_pct:.2%}" if up_ob.spread_pct else "Up token: no data",
+        f"Down token: ask={down_ob.best_ask or 'N/A'} bid={down_ob.best_bid or 'N/A'} spread={down_ob.spread_pct:.2%}" if down_ob.spread_pct else "Down token: no data",
+    ]
+
+    # BTC context
+    if fv.market.btc_price:
+        lines.append(f"BTC: ${fv.market.btc_price.price_usd:,.0f}")
+
+    # Candle summary
+    candles = fv.market.btc_candles
+    if candles:
+        last_6 = candles[-6:] if len(candles) >= 6 else candles
+        up_count = sum(1 for c in last_6 if c.direction == "up")
+        lines.append(f"Last {len(last_6)} candles: {up_count} UP / {len(last_6) - up_count} DOWN")
+        if len(candles) >= 3:
+            net_move = candles[-1].close - candles[-3].open
+            lines.append(f"Last 15min net BTC move: ${net_move:+,.0f}")
+
+    # Positions
+    has_pos = fv.up_position.shares > 0 or fv.down_position.shares > 0
+    if has_pos:
+        lines.append("Has open position: YES (may need exit decision)")
+    else:
+        lines.append("Has open position: NO")
+
+    if indicators_text:
+        lines.extend(["", indicators_text])
+
+    lines.append("\nShould the full AI be called for a trade decision?")
     return "\n".join(lines)
