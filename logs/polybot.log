@@ -1,0 +1,256 @@
+2026-02-19 11:15:16 | INFO     | polybot.agent | TradingAgent starting — cash=1000.00
+2026-02-19 11:15:16 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=200 "HTTP/1.1 200 OK"
+2026-02-19 11:15:16 | INFO     | polybot.market_data.btc_price | Loaded 200 5-min BTC candles from Binance
+2026-02-19 11:15:16 | INFO     | polybot.agent | === Cycle 1 ===
+2026-02-19 11:15:16 | INFO     | httpx | HTTP Request: GET https://gamma-api.polymarket.com/events?slug=btc-updown-5m-1771510500 "HTTP/1.1 200 OK"
+2026-02-19 11:15:16 | INFO     | polybot.market_data.provider | Market set: btc-updown-5m-1771510500 (up=39572656, down=33223514)
+2026-02-19 11:15:16 | INFO     | polybot.agent | Active market: Bitcoin Up or Down - February 19, 9:15AM-9:20AM ET (ends in 283s)
+2026-02-19 11:15:17 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-02-19 11:15:17 | INFO     | httpx | HTTP Request: POST https://ethereum.publicnode.com "HTTP/1.1 200 OK"
+2026-02-19 11:15:18 | INFO     | httpx | HTTP Request: GET https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd&include_24hr_change=true "HTTP/1.1 200 OK"
+2026-02-19 11:15:18 | INFO     | polybot.resolution | Recorded candle open: btc-updown-5m-1771510500 BTC=$66015.60
+2026-02-19 11:15:18 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=39572656388183773396154808690040271453518099000457353848583972723836642678273 "HTTP/2 200 OK"
+2026-02-19 11:15:18 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=33223514802613058949614062128237012925411764442628401811724467423452861872876 "HTTP/2 200 OK"
+2026-02-19 11:15:19 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=39572656388183773396154808690040271453518099000457353848583972723836642678273 "HTTP/2 200 OK"
+2026-02-19 11:15:19 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-02-19 11:15:39 | INFO     | httpx | HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-19 11:15:39 | INFO     | polybot.decision_engine.engine | AI decision: HOLD MARKET 0.00 @ confidence=0.58 (19775ms, cost=$0.0365)
+2026-02-19 11:15:39 | INFO     | polybot.agent | API cost: $0.0365 (session total: $0.0365)
+2026-02-19 11:15:39 | INFO     | polybot.logging.trade_log | Logging trades to logs/trades_20260219.jsonl
+2026-02-19 11:16:39 | INFO     | polybot.agent | === Cycle 2 ===
+2026-02-19 11:16:39 | INFO     | httpx | HTTP Request: GET https://gamma-api.polymarket.com/events?slug=btc-updown-5m-1771510500 "HTTP/1.1 200 OK"
+2026-02-19 11:16:39 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=39572656388183773396154808690040271453518099000457353848583972723836642678273 "HTTP/2 200 OK"
+2026-02-19 11:16:40 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=33223514802613058949614062128237012925411764442628401811724467423452861872876 "HTTP/2 200 OK"
+2026-02-19 11:16:40 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=39572656388183773396154808690040271453518099000457353848583972723836642678273 "HTTP/2 200 OK"
+2026-02-19 11:16:40 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-02-19 11:16:41 | INFO     | httpx | HTTP Request: POST https://ethereum.publicnode.com "HTTP/1.1 200 OK"
+2026-02-19 11:16:41 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-02-19 11:16:57 | INFO     | httpx | HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-19 11:16:57 | INFO     | polybot.decision_engine.engine | AI decision: BUY MARKET 60.00 @ confidence=0.64 (16024ms, cost=$0.0345)
+2026-02-19 11:16:57 | INFO     | polybot.agent | API cost: $0.0345 (session total: $0.0710)
+2026-02-19 11:16:57 | INFO     | polybot.simulator.portfolio | BUY down 60.00 shares @ 0.7710 | cash=953.58 | shares=60.00
+2026-02-19 11:17:57 | INFO     | polybot.agent | === Cycle 3 ===
+2026-02-19 11:17:58 | INFO     | httpx | HTTP Request: GET https://gamma-api.polymarket.com/events?slug=btc-updown-5m-1771510500 "HTTP/1.1 200 OK"
+2026-02-19 11:17:58 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=39572656388183773396154808690040271453518099000457353848583972723836642678273 "HTTP/2 200 OK"
+2026-02-19 11:17:58 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=33223514802613058949614062128237012925411764442628401811724467423452861872876 "HTTP/2 200 OK"
+2026-02-19 11:17:59 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=39572656388183773396154808690040271453518099000457353848583972723836642678273 "HTTP/2 200 OK"
+2026-02-19 11:17:59 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-02-19 11:18:00 | INFO     | httpx | HTTP Request: POST https://ethereum.publicnode.com "HTTP/1.1 200 OK"
+2026-02-19 11:18:00 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-02-19 11:18:17 | INFO     | httpx | HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-19 11:18:17 | INFO     | polybot.decision_engine.engine | AI decision: HOLD MARKET 0.00 @ confidence=0.58 (16996ms, cost=$0.0349)
+2026-02-19 11:18:17 | INFO     | polybot.agent | API cost: $0.0349 (session total: $0.1060)
+2026-02-19 11:19:17 | INFO     | polybot.agent | === Cycle 4 ===
+2026-02-19 11:19:17 | INFO     | httpx | HTTP Request: GET https://gamma-api.polymarket.com/events?slug=btc-updown-5m-1771510500 "HTTP/1.1 200 OK"
+2026-02-19 11:19:17 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=39572656388183773396154808690040271453518099000457353848583972723836642678273 "HTTP/2 200 OK"
+2026-02-19 11:19:18 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=33223514802613058949614062128237012925411764442628401811724467423452861872876 "HTTP/2 200 OK"
+2026-02-19 11:19:18 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=39572656388183773396154808690040271453518099000457353848583972723836642678273 "HTTP/2 200 OK"
+2026-02-19 11:19:18 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-02-19 11:19:19 | INFO     | httpx | HTTP Request: POST https://ethereum.publicnode.com "HTTP/1.1 200 OK"
+2026-02-19 11:19:19 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-02-19 11:19:33 | INFO     | httpx | HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-19 11:19:33 | INFO     | polybot.decision_engine.engine | AI decision: HOLD MARKET 0.00 @ confidence=0.00 (14033ms, cost=$0.0339)
+2026-02-19 11:19:33 | INFO     | polybot.agent | API cost: $0.0339 (session total: $0.1398)
+2026-02-19 11:20:33 | INFO     | polybot.agent | === Cycle 5 ===
+2026-02-19 11:20:33 | INFO     | httpx | HTTP Request: GET https://gamma-api.polymarket.com/events?slug=btc-updown-5m-1771510800 "HTTP/1.1 200 OK"
+2026-02-19 11:20:33 | INFO     | polybot.agent | Market rotation: btc-updown-5m-1771510500 → btc-updown-5m-1771510800
+2026-02-19 11:20:34 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-02-19 11:20:35 | INFO     | httpx | HTTP Request: POST https://ethereum.publicnode.com "HTTP/1.1 200 OK"
+2026-02-19 11:20:35 | INFO     | httpx | HTTP Request: GET https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd&include_24hr_change=true "HTTP/1.1 200 OK"
+2026-02-19 11:20:35 | INFO     | polybot.resolution | BTC resolution for btc-updown-5m-1771510500: open=$66015.60 close=$65915.17 → down
+2026-02-19 11:20:38 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=39572656388183773396154808690040271453518099000457353848583972723836642678273 "HTTP/2 200 OK"
+2026-02-19 11:20:38 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=33223514802613058949614062128237012925411764442628401811724467423452861872876 "HTTP/2 200 OK"
+2026-02-19 11:20:38 | INFO     | polybot.resolution | Polymarket verification for btc-updown-5m-1771510500: UP=0.0100 DOWN=0.9900 (BTC says: down)
+2026-02-19 11:20:38 | INFO     | polybot.resolution | Winner verified for btc-updown-5m-1771510500: down (BTC and Polymarket agree)
+2026-02-19 11:20:38 | INFO     | polybot.simulator.portfolio | Market resolved: winner=down, resolution_pnl=13.7426 (trading=0.0000, settlement=13.7426)
+2026-02-19 11:20:38 | INFO     | polybot.logging.trade_log | Resolution logged: btc-updown-5m-1771510500 winner=down pnl=13.7426
+2026-02-19 11:20:38 | INFO     | polybot.agent | Resolution: btc-updown-5m-1771510500 winner=down pnl=13.7426 | Session: W1/L0 total_pnl=13.7426
+2026-02-19 11:20:38 | INFO     | polybot.market_data.provider | Market set: btc-updown-5m-1771510800 (up=91148404, down=81112995)
+2026-02-19 11:20:38 | INFO     | polybot.agent | Active market: Bitcoin Up or Down - February 19, 9:20AM-9:25AM ET (ends in 261s)
+2026-02-19 11:20:38 | INFO     | polybot.resolution | Recorded candle open: btc-updown-5m-1771510800 BTC=$65915.17
+2026-02-19 11:20:39 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=91148404695931571893042028170695391356726389791189627007487949612334530869927 "HTTP/2 200 OK"
+2026-02-19 11:20:39 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=81112995399761979699258054152154645957526475123021865139721174746215828637798 "HTTP/2 200 OK"
+2026-02-19 11:20:39 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=91148404695931571893042028170695391356726389791189627007487949612334530869927 "HTTP/2 200 OK"
+2026-02-19 11:20:40 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-02-19 11:20:58 | INFO     | httpx | HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-19 11:20:58 | INFO     | polybot.decision_engine.engine | AI decision: BUY MARKET 60.00 @ confidence=0.64 (17848ms, cost=$0.0365)
+2026-02-19 11:20:58 | INFO     | polybot.agent | API cost: $0.0365 (session total: $0.1763)
+2026-02-19 11:20:58 | INFO     | polybot.simulator.portfolio | BUY down 60.00 shares @ 0.4806 | cash=984.58 | shares=60.00
+2026-02-19 11:21:58 | INFO     | polybot.agent | === Cycle 6 ===
+2026-02-19 11:21:58 | INFO     | httpx | HTTP Request: GET https://gamma-api.polymarket.com/events?slug=btc-updown-5m-1771510800 "HTTP/1.1 200 OK"
+2026-02-19 11:21:58 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=91148404695931571893042028170695391356726389791189627007487949612334530869927 "HTTP/2 200 OK"
+2026-02-19 11:21:58 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=81112995399761979699258054152154645957526475123021865139721174746215828637798 "HTTP/2 200 OK"
+2026-02-19 11:21:59 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=91148404695931571893042028170695391356726389791189627007487949612334530869927 "HTTP/2 200 OK"
+2026-02-19 11:21:59 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-02-19 11:22:00 | INFO     | httpx | HTTP Request: POST https://ethereum.publicnode.com "HTTP/1.1 200 OK"
+2026-02-19 11:22:00 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-02-19 11:22:15 | INFO     | httpx | HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-19 11:22:15 | INFO     | polybot.decision_engine.engine | AI decision: HOLD MARKET 0.00 @ confidence=0.58 (14446ms, cost=$0.0353)
+2026-02-19 11:22:15 | INFO     | polybot.agent | API cost: $0.0353 (session total: $0.2117)
+2026-02-19 11:23:15 | INFO     | polybot.agent | === Cycle 7 ===
+2026-02-19 11:23:15 | INFO     | httpx | HTTP Request: GET https://gamma-api.polymarket.com/events?slug=btc-updown-5m-1771510800 "HTTP/1.1 200 OK"
+2026-02-19 11:23:15 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=91148404695931571893042028170695391356726389791189627007487949612334530869927 "HTTP/2 200 OK"
+2026-02-19 11:23:15 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=81112995399761979699258054152154645957526475123021865139721174746215828637798 "HTTP/2 200 OK"
+2026-02-19 11:23:15 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=91148404695931571893042028170695391356726389791189627007487949612334530869927 "HTTP/2 200 OK"
+2026-02-19 11:23:16 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-02-19 11:23:16 | INFO     | httpx | HTTP Request: POST https://ethereum.publicnode.com "HTTP/1.1 200 OK"
+2026-02-19 11:23:17 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-02-19 11:23:32 | INFO     | httpx | HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-19 11:23:32 | INFO     | polybot.decision_engine.engine | AI decision: SELL MARKET 60.00 @ confidence=0.68 (15299ms, cost=$0.0351)
+2026-02-19 11:23:32 | INFO     | polybot.agent | API cost: $0.0351 (session total: $0.2468)
+2026-02-19 11:23:32 | WARNING  | polybot.agent | Post-trade risk blocked SELL down: down spread 13.33% > max 10.00%
+2026-02-19 11:24:32 | INFO     | polybot.agent | === Cycle 8 ===
+2026-02-19 11:24:32 | INFO     | httpx | HTTP Request: GET https://gamma-api.polymarket.com/events?slug=btc-updown-5m-1771510800 "HTTP/1.1 200 OK"
+2026-02-19 11:24:33 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=91148404695931571893042028170695391356726389791189627007487949612334530869927 "HTTP/2 200 OK"
+2026-02-19 11:24:33 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=81112995399761979699258054152154645957526475123021865139721174746215828637798 "HTTP/2 200 OK"
+2026-02-19 11:24:33 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=91148404695931571893042028170695391356726389791189627007487949612334530869927 "HTTP/2 200 OK"
+2026-02-19 11:24:33 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-02-19 11:24:34 | INFO     | httpx | HTTP Request: POST https://ethereum.publicnode.com "HTTP/1.1 200 OK"
+2026-02-19 11:24:34 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-02-19 11:24:50 | INFO     | httpx | HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-19 11:24:50 | INFO     | polybot.decision_engine.engine | AI decision: HOLD MARKET 0.00 @ confidence=0.00 (15693ms, cost=$0.0343)
+2026-02-19 11:24:50 | INFO     | polybot.agent | API cost: $0.0343 (session total: $0.2810)
+2026-02-19 11:25:50 | INFO     | polybot.agent | === Cycle 9 ===
+2026-02-19 11:25:50 | INFO     | httpx | HTTP Request: GET https://gamma-api.polymarket.com/events?slug=btc-updown-5m-1771511100 "HTTP/1.1 200 OK"
+2026-02-19 11:25:50 | INFO     | polybot.agent | Market rotation: btc-updown-5m-1771510800 → btc-updown-5m-1771511100
+2026-02-19 11:25:51 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-02-19 11:25:51 | INFO     | httpx | HTTP Request: POST https://ethereum.publicnode.com "HTTP/1.1 200 OK"
+2026-02-19 11:25:51 | INFO     | httpx | HTTP Request: GET https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd&include_24hr_change=true "HTTP/1.1 200 OK"
+2026-02-19 11:25:51 | INFO     | polybot.resolution | BTC resolution for btc-updown-5m-1771510800: open=$65915.17 close=$66014.00 → up
+2026-02-19 11:25:55 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=91148404695931571893042028170695391356726389791189627007487949612334530869927 "HTTP/2 200 OK"
+2026-02-19 11:25:55 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=81112995399761979699258054152154645957526475123021865139721174746215828637798 "HTTP/2 200 OK"
+2026-02-19 11:25:55 | INFO     | polybot.resolution | Polymarket verification for btc-updown-5m-1771510800: UP=0.9900 DOWN=0.0100 (BTC says: up)
+2026-02-19 11:25:55 | INFO     | polybot.resolution | Winner verified for btc-updown-5m-1771510800: up (BTC and Polymarket agree)
+2026-02-19 11:25:55 | INFO     | polybot.simulator.portfolio | Market resolved: winner=up, resolution_pnl=-28.8349 (trading=0.0000, settlement=-28.8349)
+2026-02-19 11:25:55 | INFO     | polybot.logging.trade_log | Resolution logged: btc-updown-5m-1771510800 winner=up pnl=-28.8349
+2026-02-19 11:25:55 | INFO     | polybot.agent | Resolution: btc-updown-5m-1771510800 winner=up pnl=-28.8349 | Session: W1/L1 total_pnl=-15.0923
+2026-02-19 11:25:55 | INFO     | polybot.market_data.provider | Market set: btc-updown-5m-1771511100 (up=41496808, down=11027010)
+2026-02-19 11:25:55 | INFO     | polybot.agent | Active market: Bitcoin Up or Down - February 19, 9:25AM-9:30AM ET (ends in 245s)
+2026-02-19 11:25:55 | INFO     | polybot.resolution | Recorded candle open: btc-updown-5m-1771511100 BTC=$66014.00
+2026-02-19 11:25:55 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=41496808238594317635548966913303445768518422139333321424205190342872419759028 "HTTP/2 200 OK"
+2026-02-19 11:25:55 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=11027010617547397915166838012878669050944590824909159819656736839314726471646 "HTTP/2 200 OK"
+2026-02-19 11:25:56 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=41496808238594317635548966913303445768518422139333321424205190342872419759028 "HTTP/2 200 OK"
+2026-02-19 11:25:56 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-02-19 11:26:14 | INFO     | httpx | HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-19 11:26:14 | INFO     | polybot.decision_engine.engine | AI decision: BUY MARKET 60.00 @ confidence=0.64 (17936ms, cost=$0.0363)
+2026-02-19 11:26:14 | INFO     | polybot.agent | API cost: $0.0363 (session total: $0.3174)
+2026-02-19 11:26:14 | INFO     | polybot.simulator.portfolio | BUY down 60.00 shares @ 0.4706 | cash=956.15 | shares=60.00
+2026-02-19 11:27:14 | INFO     | polybot.agent | === Cycle 10 ===
+2026-02-19 11:27:14 | INFO     | httpx | HTTP Request: GET https://gamma-api.polymarket.com/events?slug=btc-updown-5m-1771511100 "HTTP/1.1 200 OK"
+2026-02-19 11:27:15 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=41496808238594317635548966913303445768518422139333321424205190342872419759028 "HTTP/2 200 OK"
+2026-02-19 11:27:15 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=11027010617547397915166838012878669050944590824909159819656736839314726471646 "HTTP/2 200 OK"
+2026-02-19 11:27:15 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=41496808238594317635548966913303445768518422139333321424205190342872419759028 "HTTP/2 200 OK"
+2026-02-19 11:27:15 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-02-19 11:27:16 | INFO     | httpx | HTTP Request: POST https://ethereum.publicnode.com "HTTP/1.1 200 OK"
+2026-02-19 11:27:16 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-02-19 11:27:32 | INFO     | httpx | HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-19 11:27:32 | INFO     | polybot.decision_engine.engine | AI decision: HOLD MARKET 0.00 @ confidence=0.58 (15424ms, cost=$0.0356)
+2026-02-19 11:27:32 | INFO     | polybot.agent | API cost: $0.0356 (session total: $0.3530)
+2026-02-19 11:28:32 | INFO     | polybot.agent | === Cycle 11 ===
+2026-02-19 11:28:32 | INFO     | httpx | HTTP Request: GET https://gamma-api.polymarket.com/events?slug=btc-updown-5m-1771511100 "HTTP/1.1 200 OK"
+2026-02-19 11:28:32 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=41496808238594317635548966913303445768518422139333321424205190342872419759028 "HTTP/2 200 OK"
+2026-02-19 11:28:33 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=11027010617547397915166838012878669050944590824909159819656736839314726471646 "HTTP/2 200 OK"
+2026-02-19 11:28:33 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=41496808238594317635548966913303445768518422139333321424205190342872419759028 "HTTP/2 200 OK"
+2026-02-19 11:28:33 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-02-19 11:28:34 | INFO     | httpx | HTTP Request: POST https://ethereum.publicnode.com "HTTP/1.1 200 OK"
+2026-02-19 11:28:34 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-02-19 11:28:50 | INFO     | httpx | HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-19 11:28:50 | INFO     | polybot.decision_engine.engine | AI decision: HOLD MARKET 0.00 @ confidence=0.00 (16044ms, cost=$0.0361)
+2026-02-19 11:28:50 | INFO     | polybot.agent | API cost: $0.0361 (session total: $0.3891)
+2026-02-19 11:29:50 | INFO     | polybot.agent | === Cycle 12 ===
+2026-02-19 11:29:51 | INFO     | httpx | HTTP Request: GET https://gamma-api.polymarket.com/events?slug=btc-updown-5m-1771511100 "HTTP/1.1 200 OK"
+2026-02-19 11:29:51 | INFO     | polybot.agent | Too close to resolution (9s < 10s), skipping
+2026-02-19 11:30:51 | INFO     | polybot.agent | === Cycle 13 ===
+2026-02-19 11:30:51 | INFO     | httpx | HTTP Request: GET https://gamma-api.polymarket.com/events?slug=btc-updown-5m-1771511400 "HTTP/1.1 200 OK"
+2026-02-19 11:30:51 | INFO     | polybot.agent | Market rotation: btc-updown-5m-1771511100 → btc-updown-5m-1771511400
+2026-02-19 11:30:51 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-02-19 11:30:52 | INFO     | httpx | HTTP Request: POST https://ethereum.publicnode.com "HTTP/1.1 200 OK"
+2026-02-19 11:30:52 | INFO     | httpx | HTTP Request: GET https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd&include_24hr_change=true "HTTP/1.1 200 OK"
+2026-02-19 11:30:52 | INFO     | polybot.resolution | BTC resolution for btc-updown-5m-1771511100: open=$66014.00 close=$65957.52 → down
+2026-02-19 11:30:55 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=41496808238594317635548966913303445768518422139333321424205190342872419759028 "HTTP/2 200 OK"
+2026-02-19 11:30:55 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=11027010617547397915166838012878669050944590824909159819656736839314726471646 "HTTP/2 200 OK"
+2026-02-19 11:30:55 | INFO     | polybot.resolution | Polymarket verification for btc-updown-5m-1771511100: UP=0.0100 DOWN=0.9900 (BTC says: down)
+2026-02-19 11:30:55 | INFO     | polybot.resolution | Winner verified for btc-updown-5m-1771511100: down (BTC and Polymarket agree)
+2026-02-19 11:30:55 | INFO     | polybot.simulator.portfolio | Market resolved: winner=down, resolution_pnl=31.7661 (trading=0.0000, settlement=31.7661)
+2026-02-19 11:30:56 | INFO     | polybot.logging.trade_log | Resolution logged: btc-updown-5m-1771511100 winner=down pnl=31.7661
+2026-02-19 11:30:56 | INFO     | polybot.agent | Resolution: btc-updown-5m-1771511100 winner=down pnl=31.7661 | Session: W2/L1 total_pnl=16.6738
+2026-02-19 11:30:56 | INFO     | polybot.agent | Triggering reflection after 3 resolutions
+2026-02-19 11:30:56 | INFO     | polybot.knowledge | Running reflection on 3 resolutions, 11 trades
+2026-02-19 11:33:52 | INFO     | httpx | HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-19 11:33:52 | INFO     | polybot.knowledge | Reflection API cost: $0.0918 (total: $0.0918) | tokens: 8743 in / 8192 out | stop_reason: max_tokens
+2026-02-19 11:33:52 | WARNING  | polybot.knowledge | Reflection output was truncated (hit max_tokens). Skipping parse.
+2026-02-19 11:33:52 | INFO     | polybot.agent | Reflection API cost: $0.0918 (session total: $0.4809)
+2026-02-19 11:33:52 | INFO     | polybot.market_data.provider | Market set: btc-updown-5m-1771511400 (up=11368776, down=10033822)
+2026-02-19 11:33:52 | INFO     | polybot.agent | Active market: Bitcoin Up or Down - February 19, 9:30AM-9:35AM ET (ends in 67s)
+2026-02-19 11:33:53 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-02-19 11:33:53 | INFO     | httpx | HTTP Request: POST https://ethereum.publicnode.com "HTTP/1.1 200 OK"
+2026-02-19 11:33:53 | INFO     | polybot.resolution | Recorded candle open: btc-updown-5m-1771511400 BTC=$65837.65
+2026-02-19 11:33:54 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=113687762039651064516553778562785977624031675682843073912333456720387417382901 "HTTP/2 200 OK"
+2026-02-19 11:33:54 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=100338223485097959308191306908189442403285814677861450810981031560246702570432 "HTTP/2 200 OK"
+2026-02-19 11:33:54 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=113687762039651064516553778562785977624031675682843073912333456720387417382901 "HTTP/2 200 OK"
+2026-02-19 11:33:55 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-02-19 11:34:11 | INFO     | httpx | HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-19 11:34:11 | INFO     | polybot.decision_engine.engine | AI decision: HOLD MARKET 0.00 @ confidence=0.58 (15865ms, cost=$0.0355)
+2026-02-19 11:34:11 | INFO     | polybot.agent | API cost: $0.0355 (session total: $0.5164)
+2026-02-19 11:35:11 | INFO     | polybot.agent | === Cycle 14 ===
+2026-02-19 11:35:11 | INFO     | httpx | HTTP Request: GET https://gamma-api.polymarket.com/events?slug=btc-updown-5m-1771511700 "HTTP/1.1 200 OK"
+2026-02-19 11:35:11 | INFO     | polybot.agent | Market rotation: btc-updown-5m-1771511400 → btc-updown-5m-1771511700
+2026-02-19 11:35:11 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-02-19 11:35:12 | INFO     | httpx | HTTP Request: POST https://ethereum.publicnode.com "HTTP/1.1 200 OK"
+2026-02-19 11:35:12 | INFO     | polybot.resolution | BTC resolution for btc-updown-5m-1771511400: open=$65837.65 close=$65707.58 → down
+2026-02-19 11:35:15 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=113687762039651064516553778562785977624031675682843073912333456720387417382901 "HTTP/2 200 OK"
+2026-02-19 11:35:15 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=100338223485097959308191306908189442403285814677861450810981031560246702570432 "HTTP/2 200 OK"
+2026-02-19 11:35:15 | INFO     | polybot.resolution | Polymarket verification for btc-updown-5m-1771511400: UP=0.0100 DOWN=0.9900 (BTC says: down)
+2026-02-19 11:35:15 | INFO     | polybot.resolution | Winner verified for btc-updown-5m-1771511400: down (BTC and Polymarket agree)
+2026-02-19 11:35:15 | INFO     | polybot.simulator.portfolio | Market resolved: winner=down, resolution_pnl=0.0000 (trading=0.0000, settlement=0.0000)
+2026-02-19 11:35:15 | INFO     | polybot.logging.trade_log | Resolution logged: btc-updown-5m-1771511400 winner=down pnl=0.0000
+2026-02-19 11:35:15 | INFO     | polybot.agent | Resolution: btc-updown-5m-1771511400 winner=down pnl=0.0000 | Session: W2/L1 total_pnl=16.6738
+2026-02-19 11:35:15 | INFO     | polybot.market_data.provider | Market set: btc-updown-5m-1771511700 (up=31734073, down=19905495)
+2026-02-19 11:35:15 | INFO     | polybot.agent | Active market: Bitcoin Up or Down - February 19, 9:35AM-9:40AM ET (ends in 284s)
+2026-02-19 11:35:15 | INFO     | polybot.resolution | Recorded candle open: btc-updown-5m-1771511700 BTC=$65707.58
+2026-02-19 11:35:16 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=31734073052528961719590706375880185358905154821307227262593830001883321931649 "HTTP/2 200 OK"
+2026-02-19 11:35:16 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=19905495353571254772101583292431350700454173817012841127129338516714639842387 "HTTP/2 200 OK"
+2026-02-19 11:35:16 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=31734073052528961719590706375880185358905154821307227262593830001883321931649 "HTTP/2 200 OK"
+2026-02-19 11:35:17 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-02-19 11:35:30 | INFO     | httpx | HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-19 11:35:30 | INFO     | polybot.decision_engine.engine | AI decision: BUY MARKET 60.00 @ confidence=0.66 (12959ms, cost=$0.0352)
+2026-02-19 11:35:30 | INFO     | polybot.agent | API cost: $0.0352 (session total: $0.5516)
+2026-02-19 11:35:30 | INFO     | polybot.simulator.portfolio | BUY down 60.00 shares @ 0.5207 | cash=984.61 | shares=60.00
+2026-02-19 11:36:30 | INFO     | polybot.agent | === Cycle 15 ===
+2026-02-19 11:36:30 | INFO     | httpx | HTTP Request: GET https://gamma-api.polymarket.com/events?slug=btc-updown-5m-1771511700 "HTTP/1.1 200 OK"
+2026-02-19 11:36:30 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=31734073052528961719590706375880185358905154821307227262593830001883321931649 "HTTP/2 200 OK"
+2026-02-19 11:36:30 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=19905495353571254772101583292431350700454173817012841127129338516714639842387 "HTTP/2 200 OK"
+2026-02-19 11:36:31 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=31734073052528961719590706375880185358905154821307227262593830001883321931649 "HTTP/2 200 OK"
+2026-02-19 11:36:31 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-02-19 11:36:32 | INFO     | httpx | HTTP Request: POST https://ethereum.publicnode.com "HTTP/1.1 200 OK"
+2026-02-19 11:36:32 | INFO     | httpx | HTTP Request: GET https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd&include_24hr_change=true "HTTP/1.1 200 OK"
+2026-02-19 11:36:32 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-02-19 11:36:49 | INFO     | httpx | HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-19 11:36:49 | INFO     | polybot.decision_engine.engine | AI decision: HOLD MARKET 0.00 @ confidence=0.58 (17269ms, cost=$0.0358)
+2026-02-19 11:36:49 | INFO     | polybot.agent | API cost: $0.0358 (session total: $0.5874)
+2026-02-19 11:37:49 | INFO     | polybot.agent | === Cycle 16 ===
+2026-02-19 11:37:50 | INFO     | httpx | HTTP Request: GET https://gamma-api.polymarket.com/events?slug=btc-updown-5m-1771511700 "HTTP/1.1 200 OK"
+2026-02-19 11:37:50 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=31734073052528961719590706375880185358905154821307227262593830001883321931649 "HTTP/2 200 OK"
+2026-02-19 11:37:50 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=19905495353571254772101583292431350700454173817012841127129338516714639842387 "HTTP/2 200 OK"
+2026-02-19 11:37:50 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=31734073052528961719590706375880185358905154821307227262593830001883321931649 "HTTP/2 200 OK"
+2026-02-19 11:37:51 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-02-19 11:37:51 | INFO     | httpx | HTTP Request: POST https://ethereum.publicnode.com "HTTP/1.1 200 OK"
+2026-02-19 11:37:52 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-02-19 11:38:08 | INFO     | httpx | HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-19 11:38:08 | INFO     | polybot.decision_engine.engine | AI decision: SELL MARKET 60.00 @ confidence=0.68 (16401ms, cost=$0.0356)
+2026-02-19 11:38:08 | INFO     | polybot.agent | API cost: $0.0356 (session total: $0.6230)
+2026-02-19 11:38:08 | INFO     | polybot.simulator.portfolio | SELL down 60.00 shares @ 0.2297 | pnl=-17.4583 | cash=998.30 | shares=0.00
+2026-02-19 11:39:08 | INFO     | polybot.agent | === Cycle 17 ===
+2026-02-19 11:39:08 | INFO     | httpx | HTTP Request: GET https://gamma-api.polymarket.com/events?slug=btc-updown-5m-1771511700 "HTTP/1.1 200 OK"
+2026-02-19 11:39:09 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=31734073052528961719590706375880185358905154821307227262593830001883321931649 "HTTP/2 200 OK"
+2026-02-19 11:39:09 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=19905495353571254772101583292431350700454173817012841127129338516714639842387 "HTTP/2 200 OK"
+2026-02-19 11:39:09 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=31734073052528961719590706375880185358905154821307227262593830001883321931649 "HTTP/2 200 OK"
+2026-02-19 11:39:10 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-02-19 11:39:10 | INFO     | httpx | HTTP Request: POST https://ethereum.publicnode.com "HTTP/1.1 200 OK"
+2026-02-19 11:39:11 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-02-19 11:39:24 | INFO     | httpx | HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-19 11:39:24 | INFO     | polybot.decision_engine.engine | AI decision: HOLD MARKET 0.00 @ confidence=0.00 (12788ms, cost=$0.0347)
+2026-02-19 11:39:24 | INFO     | polybot.agent | API cost: $0.0347 (session total: $0.6577)
+2026-02-19 11:39:57 | INFO     | polybot.agent | Shutdown signal received
+2026-02-19 11:39:57 | INFO     | polybot.agent | Shutting down components...
+2026-02-19 11:39:57 | INFO     | polybot.agent | Final state — cash=998.26 up_shares=0.00 down_shares=0.00 total=998.26
