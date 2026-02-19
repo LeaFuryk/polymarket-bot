@@ -45,9 +45,9 @@
 
 html { font-size: 15px; -webkit-font-smoothing: antialiased; }
 
-/* Tooltip on hover */
+/* Tooltip on hover — 3 second delay via JS class */
 [data-tip] { position: relative; }
-[data-tip]:hover::after {
+[data-tip].tip-show::after {
   content: attr(data-tip);
   position: absolute;
   bottom: calc(100% + 8px);
@@ -58,16 +58,16 @@ html { font-size: 15px; -webkit-font-smoothing: antialiased; }
   color: var(--text-secondary);
   font: 400 0.72rem/1.4 var(--mono);
   white-space: normal;
-  max-width: 260px;
+  max-width: 280px;
   min-width: 140px;
   border-radius: 6px;
   border: 1px solid var(--border-bright);
   box-shadow: 0 8px 24px rgba(0,0,0,0.5);
   z-index: 500;
   pointer-events: none;
-  animation: tipIn 0.12s ease-out;
+  animation: tipIn 0.18s ease-out;
 }
-[data-tip]:hover::before {
+[data-tip].tip-show::before {
   content: '';
   position: absolute;
   bottom: calc(100% + 3px);
@@ -77,7 +77,7 @@ html { font-size: 15px; -webkit-font-smoothing: antialiased; }
   border-top-color: #1c2233;
   z-index: 501;
   pointer-events: none;
-  animation: tipIn 0.12s ease-out;
+  animation: tipIn 0.18s ease-out;
 }
 @keyframes tipIn { from { opacity: 0; transform: translateX(-50%) translateY(3px); } to { opacity: 1; transform: translateX(-50%); } }
 
@@ -860,10 +860,26 @@ body::after {
 const DATA_URL = '../logs/dashboard_data.json';
 const REFRESH_SEC = 60;
 const CANDLE_DUR = 300;
+const TIP_DELAY = 3000; // 3 seconds before tooltip shows
 let countdownTarget = 0;
 let refreshCountdown = REFRESH_SEC;
 let lastData = null;
 let selectedView = 'overview';
+let _tipTimer = null;
+
+// Tooltip: show after 3 seconds of continuous hover
+document.addEventListener('mouseover', e => {
+  const el = e.target.closest('[data-tip]');
+  if (!el) return;
+  clearTimeout(_tipTimer);
+  _tipTimer = setTimeout(() => el.classList.add('tip-show'), TIP_DELAY);
+});
+document.addEventListener('mouseout', e => {
+  const el = e.target.closest('[data-tip]');
+  if (!el) return;
+  clearTimeout(_tipTimer);
+  el.classList.remove('tip-show');
+});
 
 const $ = id => document.getElementById(id);
 const fmt$ = (v, d=2) => v != null ? '$' + Number(v).toFixed(d) : '--';
@@ -919,16 +935,30 @@ function calcStats(resolutions) {
 }
 
 function calcTradeStats(trades) {
-  let invested = 0, returned = 0, buys = 0, sells = 0, holds = 0, confSum = 0, confN = 0;
+  let invested = 0, returned = 0, buys = 0, sells = 0, holds = 0;
+  let confSum = 0, confN = 0, totalFees = 0;
+  let startCash = null, endCash = null, startPortfolio = null, endPortfolio = null;
   for (const t of trades) {
+    // Track first/last cash & portfolio snapshots for session boundaries
+    if (t.cash != null) {
+      if (startCash === null) { startCash = t.cash; startPortfolio = t.portfolio_value; }
+      endCash = t.cash;
+      endPortfolio = t.portfolio_value;
+    }
     if (t.risk_blocked) continue;
     const cost = (t.size || 0) * (t.fill_price || 0);
     if (t.action === 'BUY') { invested += cost; buys++; }
     else if (t.action === 'SELL') { returned += cost; sells++; }
     else { holds++; }
     if (t.confidence && t.action !== 'HOLD') { confSum += t.confidence; confN++; }
+    totalFees += t.fee || 0;
   }
-  return { invested, returned, buys, sells, holds, avgConf: confN > 0 ? confSum / confN : 0 };
+  return {
+    invested, returned, buys, sells, holds, totalFees,
+    avgConf: confN > 0 ? confSum / confN : 0,
+    startCash, endCash, startPortfolio, endPortfolio,
+    hasCashData: startCash !== null,
+  };
 }
 
 // Returns { days: Map<dateStr, { sessions: [{id, trades, resolutions, startTs, endTs}], ... }> }
@@ -1210,13 +1240,25 @@ function render(d) {
     <div class="metric-sub">${stats.count} resolutions</div></div>`;
 
   if (showLive) {
+    // Live session: real-time values from bot state
     mh += `<div class="metric" data-tip="Current available cash in the bot's wallet. This is undeployed capital that can be used for new trades."><div class="metric-label">Cash</div>
       <div class="metric-value v-cyan">${fmt$(s.cash, 2)}</div>
       <div class="metric-sub">initial: ${fmt$(s.initial_cash, 0)}</div></div>`;
     mh += `<div class="metric" data-tip="Total value: cash + current market value of all open token positions. Tracks overall account performance."><div class="metric-label">Portfolio</div>
       <div class="metric-value v-blue">${fmt$(s.portfolio_value, 2)}</div>
       <div class="metric-sub">${pnlSign(s.portfolio_value - s.initial_cash)}${fmtNum(s.portfolio_value - s.initial_cash, 2)} from start</div></div>`;
+  } else if (ts.hasCashData) {
+    // Historical session with per-trade cash snapshots: show start→end cash & portfolio
+    const cashDelta = ts.endCash - ts.startCash;
+    const portDelta = ts.endPortfolio - ts.startPortfolio;
+    mh += `<div class="metric" data-tip="Cash at the start and end of this session. Shows how much undeployed capital changed across the session."><div class="metric-label">Cash</div>
+      <div class="metric-value v-cyan">${fmt$(ts.endCash, 2)}</div>
+      <div class="metric-sub">start: ${fmt$(ts.startCash, 2)} (${pnlSign(cashDelta)}${fmtNum(cashDelta, 2)})</div></div>`;
+    mh += `<div class="metric" data-tip="Portfolio value (cash + positions) at end of session vs start. Tracks overall account performance for this session."><div class="metric-label">Portfolio</div>
+      <div class="metric-value v-blue">${fmt$(ts.endPortfolio, 2)}</div>
+      <div class="metric-sub">start: ${fmt$(ts.startPortfolio, 2)} (${pnlSign(portDelta)}${fmtNum(portDelta, 2)})</div></div>`;
   } else {
+    // No per-trade snapshots: fall back to invested/returned
     mh += `<div class="metric" data-tip="Total dollars spent buying UP and DOWN tokens during this period. Sum of (shares x price) for all BUY orders."><div class="metric-label">Invested</div>
       <div class="metric-value v-cyan">${fmt$(ts.invested, 2)}</div>
       <div class="metric-sub">${ts.buys} buy orders</div></div>`;
