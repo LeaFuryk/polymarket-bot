@@ -1,17 +1,84 @@
 {
   "indicators": [
-    {"name": "token_momentum", "enabled": true, "params": {"window": 10}},
-    {"name": "token_volatility", "enabled": true, "params": {"window": 20}},
-    {"name": "token_ma_crossover", "enabled": false, "params": {"short_window": 5, "long_window": 20}},
-    {"name": "token_mean_reversion", "enabled": false, "params": {"window": 20}},
-    {"name": "orderbook_imbalance", "enabled": true, "params": {}},
-    {"name": "spread_trend", "enabled": false, "params": {}},
-    {"name": "token_price_divergence", "enabled": false, "params": {}},
-    {"name": "btc_momentum", "enabled": true, "params": {"window": 10}},
-    {"name": "btc_volatility", "enabled": false, "params": {"window": 20}},
-    {"name": "btc_candle_momentum", "enabled": true, "params": {"window": 6}},
-    {"name": "btc_candle_ma_cross", "enabled": true, "params": {}},
-    {"name": "session_streak", "enabled": false, "params": {}},
-    {"name": "confidence_calibration", "enabled": false, "params": {}}
+    {
+      "name": "token_momentum",
+      "enabled": true,
+      "params": {
+        "window": 10
+      }
+    },
+    {
+      "name": "token_volatility",
+      "enabled": true,
+      "params": {
+        "window": 20
+      }
+    },
+    {
+      "name": "token_ma_crossover",
+      "enabled": false,
+      "params": {
+        "short_window": 5,
+        "long_window": 20
+      }
+    },
+    {
+      "name": "token_mean_reversion",
+      "enabled": false,
+      "params": {
+        "window": 20
+      }
+    },
+    {
+      "name": "orderbook_imbalance",
+      "enabled": true,
+      "params": {}
+    },
+    {
+      "name": "spread_trend",
+      "enabled": true,
+      "params": {}
+    },
+    {
+      "name": "token_price_divergence",
+      "enabled": false,
+      "params": {}
+    },
+    {
+      "name": "btc_momentum",
+      "enabled": true,
+      "params": {
+        "window": 10
+      }
+    },
+    {
+      "name": "btc_volatility",
+      "enabled": true,
+      "params": {
+        "window": 20
+      }
+    },
+    {
+      "name": "btc_candle_momentum",
+      "enabled": true,
+      "params": {
+        "window": 6
+      }
+    },
+    {
+      "name": "btc_candle_ma_cross",
+      "enabled": true,
+      "params": {}
+    },
+    {
+      "name": "session_streak",
+      "enabled": false,
+      "params": {}
+    },
+    {
+      "name": "confidence_calibration",
+      "enabled": false,
+      "params": {}
+    }
   ]
 }

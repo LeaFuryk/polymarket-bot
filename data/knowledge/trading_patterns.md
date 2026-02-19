@@ -12,8 +12,17 @@
 
 5. **Volume confirmation**: Higher volume on directional candles confirms momentum; low volume moves are less reliable.
 
+6. **Flat candles are common**: BTC can remain at the same price across multiple 5-min candles. When BTC Open = BTC Close, the "up" outcome wins by default. This creates opportunities when "up" is underpriced during sideways action.
+
 ## Patterns to Watch For
 - Consecutive same-direction candles → potential reversal
 - MA5/MA12 crossover on BTC candle closes → trend shift
 - Large body candles followed by small body → momentum exhaustion
 - Price near MA50 → potential support/resistance
+
+**Flat price action (Open = Close)**: When BTC is consolidating, "up" wins by tie-breaker. Look for underpriced "up" positions during sideways markets.
+
+## Recent Observations
+- All 3 recent candles had BTC Open = BTC Close at $66450, with "up" winning each time
+- This suggests a consolidation phase where directional momentum is weak
+- In flat markets, buying "up" at favorable prices (< 0.50) can be profitable
