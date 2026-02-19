@@ -89,7 +89,10 @@ class TradingAgent:
         self._trade_log = TradeLog(config.logging)
 
         # Resolution tracking
-        self._resolution_tracker = ResolutionTracker(self._market_data.btc_feed)
+        self._resolution_tracker = ResolutionTracker(
+            self._market_data.btc_feed,
+            rest_client=self._market_data._rest,
+        )
 
         # Knowledge / feedback learning
         self._knowledge_manager = KnowledgeManager(config.logging.knowledge_dir, config.ai)
