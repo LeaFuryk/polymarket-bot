@@ -194,7 +194,7 @@ class KnowledgeManager:
         try:
             response = await self._client.messages.create(
                 model=self._ai_config.model,
-                max_tokens=2048,
+                max_tokens=8192,
                 temperature=0.2,
                 messages=[{"role": "user", "content": prompt}],
             )
@@ -204,9 +204,24 @@ class KnowledgeManager:
             output_cost = response.usage.output_tokens * (self._ai_config.output_cost_per_mtok / 1_000_000)
             self.last_reflection_cost = input_cost + output_cost
             self.total_api_cost += self.last_reflection_cost
-            logger.info("Reflection API cost: $%.4f (total: $%.4f)", self.last_reflection_cost, self.total_api_cost)
+            logger.info(
+                "Reflection API cost: $%.4f (total: $%.4f) | tokens: %d in / %d out | stop_reason: %s",
+                self.last_reflection_cost, self.total_api_cost,
+                response.usage.input_tokens, response.usage.output_tokens,
+                response.stop_reason,
+            )
+
+            if response.stop_reason == "max_tokens":
+                logger.warning("Reflection output was truncated (hit max_tokens). Skipping parse.")
+                return
+
+            if not response.content:
+                logger.warning("Reflection returned empty content")
+                return
 
             text = response.content[0].text
+            logger.debug("Reflection raw response (first 500 chars): %s", text[:500])
+
             # Strip markdown code fences that Claude sometimes wraps JSON in
             stripped = text.strip()
             if stripped.startswith("```"):
@@ -214,15 +229,30 @@ class KnowledgeManager:
                 stripped = stripped.split("\n", 1)[1] if "\n" in stripped else stripped[3:]
                 if stripped.endswith("```"):
                     stripped = stripped[:-3].strip()
+
+            # Handle case where Claude prefixes with text before JSON
+            json_start = stripped.find("{")
+            if json_start > 0:
+                logger.debug("Stripping %d chars of prefix text before JSON", json_start)
+                stripped = stripped[json_start:]
+
+            if not stripped:
+                logger.warning("Reflection response was empty after stripping")
+                return
+
             data = json.loads(stripped)
 
             # Write updated files
+            updated = []
             if "trading_patterns" in data:
                 self._write_file("trading_patterns.md", data["trading_patterns"])
+                updated.append("trading_patterns")
             if "self_assessment" in data:
                 self._write_file("self_assessment.md", data["self_assessment"])
+                updated.append("self_assessment")
             if "session_history" in data:
                 self._write_file("session_history.md", data["session_history"])
+                updated.append("session_history")
 
             # Write updated feature config if returned
             if "feature_config" in data and isinstance(data["feature_config"], dict):
@@ -230,16 +260,17 @@ class KnowledgeManager:
                     self._feature_config_path.write_text(
                         json.dumps(data["feature_config"], indent=2) + "\n"
                     )
-                    logger.info("Reflection updated feature config at %s", self._feature_config_path)
+                    updated.append("feature_config")
                 except OSError:
                     logger.warning("Could not write feature config")
 
             # Invalidate cache
             self._cache = None
-            logger.info("Reflection complete — knowledge files updated")
+            logger.info("Reflection complete — updated: %s", ", ".join(updated) or "nothing")
 
-        except json.JSONDecodeError:
-            logger.exception("Reflection returned invalid JSON")
+        except json.JSONDecodeError as e:
+            logger.error("Reflection returned invalid JSON: %s", e)
+            logger.debug("Raw text that failed to parse (first 1000 chars): %s", stripped[:1000] if stripped else "(empty)")
         except Exception:
             logger.exception("Reflection failed")
 

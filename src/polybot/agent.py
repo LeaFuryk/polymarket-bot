@@ -580,6 +580,8 @@ class TradingAgent:
                         f"https://polymarket.com/event/{t.candle_slug}" if t.candle_slug else ""
                     ),
                     "time_remaining_at_trade": t.extra.get("time_remaining", 0),
+                    "risk_blocked": t.risk_blocked,
+                    "risk_block_reason": t.risk_block_reason,
                 }
                 trades.append(trade_entry)
 
@@ -596,6 +598,17 @@ class TradingAgent:
                     "pnl": r.total_pnl,
                 })
 
+            # Merge historical + current session data for full dashboard view
+            all_trades = self._historical_trades + trades
+            all_resolutions = self._historical_resolutions + resolutions
+
+            # Compute all-time stats from all resolutions
+            all_time_pnl = sum(r.get("pnl", 0) for r in all_resolutions)
+            all_time_wins = sum(1 for r in all_resolutions if r.get("pnl", 0) > 0.001)
+            all_time_losses = sum(1 for r in all_resolutions if r.get("pnl", 0) < -0.001)
+            all_time_total = all_time_wins + all_time_losses
+            all_time_win_rate = (all_time_wins / all_time_total * 100) if all_time_total > 0 else 0.0
+
             data = {
                 "updated_at": datetime.now(timezone.utc).isoformat(),
                 "session": {
@@ -610,11 +623,19 @@ class TradingAgent:
                     "initial_cash": self._config.agent.initial_cash,
                     "cycles_run": cycle,
                 },
+                "all_time": {
+                    "wins": all_time_wins,
+                    "losses": all_time_losses,
+                    "win_rate": all_time_win_rate,
+                    "total_pnl": all_time_pnl,
+                    "total_resolutions": len(all_resolutions),
+                    "total_trades": len(all_trades),
+                },
                 "current_market": current_market,
                 "btc": btc_info,
                 "positions": positions,
-                "trades": trades,
-                "resolutions": resolutions,
+                "trades": all_trades,
+                "resolutions": all_resolutions,
                 "risk": {
                     "daily_pnl": self._risk.state.daily_pnl,
                     "daily_trades": self._risk.state.daily_trades,
@@ -631,7 +652,7 @@ class TradingAgent:
     # --- Agent State Persistence ---
 
     def _load_agent_state(self) -> None:
-        """Load persisted state (resolution counter) from disk."""
+        """Load persisted state (resolution counter + history) from disk."""
         try:
             if self._state_path.exists():
                 data = json.loads(self._state_path.read_text())
@@ -639,6 +660,74 @@ class TradingAgent:
                 logger.info("Loaded agent state: resolutions_since_reflection=%d", self._resolutions_since_reflection)
         except Exception:
             logger.warning("Could not load agent state, starting fresh")
+
+        # Load historical resolutions from JSONL log
+        self._historical_resolutions: list[dict] = []
+        self._historical_trades: list[dict] = []
+        self._load_history_from_logs()
+
+    def _load_history_from_logs(self) -> None:
+        """Load past resolutions and trades from JSONL log files for dashboard history."""
+        from datetime import datetime, timezone
+
+        log_dir = Path(self._config.logging.log_dir)
+
+        # Load all resolution JSONL files
+        for res_file in sorted(log_dir.glob("resolutions_*.jsonl")):
+            try:
+                for line in res_file.read_text().strip().split("\n"):
+                    if not line.strip():
+                        continue
+                    r = json.loads(line)
+                    self._historical_resolutions.append({
+                        "timestamp": datetime.fromtimestamp(
+                            r.get("timestamp", 0), tz=timezone.utc
+                        ).isoformat(),
+                        "slug": r.get("slug", ""),
+                        "winner": r.get("winner", ""),
+                        "btc_open": r.get("btc_open", 0),
+                        "btc_close": r.get("btc_close", 0),
+                        "btc_move": r.get("btc_close", 0) - r.get("btc_open", 0),
+                        "pnl": r.get("total_pnl", 0),
+                    })
+            except Exception:
+                logger.debug("Could not load resolution file %s", res_file, exc_info=True)
+
+        # Load all trade JSONL files
+        for trade_file in sorted(log_dir.glob("trades_*.jsonl")):
+            try:
+                for line in trade_file.read_text().strip().split("\n"):
+                    if not line.strip():
+                        continue
+                    t = json.loads(line)
+                    self._historical_trades.append({
+                        "timestamp": datetime.fromtimestamp(
+                            t.get("timestamp", 0), tz=timezone.utc
+                        ).isoformat(),
+                        "cycle": t.get("cycle_number", 0),
+                        "action": t.get("action", "HOLD"),
+                        "token_side": t.get("token_side", "up"),
+                        "size": t.get("decision_size", 0),
+                        "fill_price": t.get("fill_price"),
+                        "confidence": t.get("confidence", 0),
+                        "reasoning": t.get("reasoning", ""),
+                        "market_view": t.get("market_view", ""),
+                        "candle_slug": t.get("candle_slug", ""),
+                        "polymarket_url": (
+                            f"https://polymarket.com/event/{t.get('candle_slug', '')}"
+                            if t.get("candle_slug") else ""
+                        ),
+                        "time_remaining_at_trade": t.get("extra", {}).get("time_remaining", 0),
+                        "risk_blocked": t.get("risk_blocked", False),
+                        "risk_block_reason": t.get("risk_block_reason", ""),
+                    })
+            except Exception:
+                logger.debug("Could not load trade file %s", trade_file, exc_info=True)
+
+        if self._historical_resolutions:
+            logger.info("Loaded %d historical resolutions from logs", len(self._historical_resolutions))
+        if self._historical_trades:
+            logger.info("Loaded %d historical trades from logs", len(self._historical_trades))
 
     def _save_agent_state(self) -> None:
         """Save agent state to disk after each market transition."""

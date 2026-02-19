@@ -32,7 +32,7 @@ simulator:
 
 risk:
   max_position_pct: 0.25      # max 25% of portfolio in single position
-  max_spread_pct: 0.05        # skip if spread > 5%
+  max_spread_pct: 0.10        # skip if spread > 10% (DOWN tokens often have wider spreads)
   min_liquidity: 100.0        # minimum orderbook depth in USDC
   daily_loss_limit_pct: 0.10  # stop trading if daily loss > 10%
   max_concentration_pct: 0.50 # max 50% of portfolio in all positions

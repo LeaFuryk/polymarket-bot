@@ -105,6 +105,16 @@ def format_feature_vector(
         f"- Ask Depth (USDC): {down_ob.ask_depth:.2f}",
     ]
 
+    # Spread comparison to help choose token
+    up_spread_str = f"{up_ob.spread_pct:.2%}" if up_ob.spread_pct else "N/A"
+    down_spread_str = f"{down_ob.spread_pct:.2%}" if down_ob.spread_pct else "N/A"
+    lines.extend([
+        "",
+        f"**Spread comparison**: UP={up_spread_str}, DOWN={down_spread_str}. "
+        "Prefer the token with tighter spread when both sides are viable. "
+        "DOWN tokens often have wider spreads — factor this cost into your edge calculation.",
+    ])
+
     # Last trade price (Up token)
     lines.append(f"- Last Trade Price (Up): {fv.market.last_trade_price or 'N/A'}")
 

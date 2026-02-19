@@ -1,11 +1,13 @@
-"""BTC spot price feed — Chainlink on-chain (primary) + CoinGecko (24h change fallback).
+"""BTC spot price feed — Binance real-time (primary) + Chainlink on-chain (cross-reference).
 
-Resolution source for Polymarket BTC 5-min candles is the Chainlink BTC/USD
-data stream (https://data.chain.link/streams/btc-usd). We read the on-chain
-Chainlink Price Feed aggregator to match this as closely as possible.
+Polymarket resolves using Chainlink BTC/USD Data Streams, but the on-chain
+Chainlink Price Feed aggregator only updates every ~1 hour or 0.5% deviation —
+far too stale for 5-minute candle resolution. We use Binance BTCUSDT spot price
+as the primary source since Chainlink Data Streams aggregate from major CEXs
+including Binance, giving us a close approximation at real-time frequency.
 
-Binance klines are used only for 5-min OHLCV candle history (micro-trend
-analysis). They are NOT used for resolution-critical pricing.
+Chainlink on-chain price is fetched as a secondary cross-reference and logged.
+CoinGecko provides 24h change percentage.
 """
 
 from __future__ import annotations
@@ -221,27 +223,57 @@ class BtcPriceFeed:
             logger.exception("CoinGecko price fetch also failed")
             return None
 
+    # --- Binance real-time spot price (primary) ---
+
+    async def _fetch_binance_price(self) -> float | None:
+        """Fetch BTC/USDT spot price from Binance. Fast and real-time."""
+        try:
+            resp = await self._client.get(
+                "https://api.binance.com/api/v3/ticker/price",
+                params={"symbol": "BTCUSDT"},
+            )
+            resp.raise_for_status()
+            price = float(resp.json()["price"])
+            logger.debug("Binance BTC/USDT: $%.2f", price)
+            return price
+        except Exception:
+            logger.exception("Failed to fetch Binance BTC/USDT price")
+            return None
+
     # --- Main price method ---
 
     async def get_price(self) -> BtcPrice | None:
-        """Get current BTC/USD price. Chainlink primary, CoinGecko fallback."""
+        """Get current BTC/USD price. Binance primary, CoinGecko fallback.
+
+        Also fetches Chainlink on-chain as cross-reference (logged but not used
+        for resolution, since the on-chain feed is too stale for 5-min candles).
+        """
         now = time.time()
         if self._cache and (now - self._cache_time) < CACHE_TTL:
             return self._cache
 
-        # Try Chainlink first (matches Polymarket resolution source)
-        price_usd = await self._fetch_chainlink_price()
-        source = "chainlink"
+        # Primary: Binance real-time spot price
+        price_usd = await self._fetch_binance_price()
+        source = "binance"
 
         if price_usd is None:
             # Fallback to CoinGecko
-            logger.warning("Chainlink unavailable, falling back to CoinGecko")
+            logger.warning("Binance unavailable, falling back to CoinGecko")
             price_usd = await self._fetch_coingecko_price()
             source = "coingecko"
 
         if price_usd is None:
             logger.error("All BTC price sources failed")
             return self._cache  # return stale cache
+
+        # Cross-reference: fetch Chainlink on-chain (async, non-blocking, just for logging)
+        chainlink_price = await self._fetch_chainlink_price()
+        if chainlink_price is not None and price_usd:
+            diff = abs(price_usd - chainlink_price)
+            logger.debug(
+                "Price cross-ref: Binance=$%.2f Chainlink=$%.2f diff=$%.2f",
+                price_usd, chainlink_price, diff,
+            )
 
         # Get 24h change from CoinGecko (non-blocking, cached separately)
         change_24h = await self._fetch_coingecko_24h_change()
