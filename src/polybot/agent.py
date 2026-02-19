@@ -254,7 +254,7 @@ class TradingAgent:
 
             self._resolutions_since_reflection += 1
             self._save_agent_state()
-            if self._resolutions_since_reflection >= 3:
+            if self._resolutions_since_reflection >= 10:
                 logger.info("Triggering reflection after %d resolutions", self._resolutions_since_reflection)
                 self._resolutions_since_reflection = 0
                 await self._knowledge_manager.reflect(
