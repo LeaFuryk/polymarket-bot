@@ -565,7 +565,7 @@ class TradingAgent:
                 "down_avg_entry": self._portfolio.down_position.avg_entry_price,
             }
 
-            # Trades list
+            # Trades list — includes per-trade financial snapshot for session tracking
             trades = []
             for t in self._recent_trades:
                 trade_entry = {
@@ -585,6 +585,12 @@ class TradingAgent:
                     "time_remaining_at_trade": t.extra.get("time_remaining", 0),
                     "risk_blocked": t.risk_blocked,
                     "risk_block_reason": t.risk_block_reason,
+                    # Per-trade financial state (for per-session dashboard metrics)
+                    "cash": t.cash,
+                    "portfolio_value": t.portfolio_value,
+                    "fee": t.fee_amount,
+                    "realized_pnl": t.realized_pnl,
+                    "unrealized_pnl": t.unrealized_pnl,
                 }
                 trades.append(trade_entry)
 
@@ -723,6 +729,12 @@ class TradingAgent:
                         "time_remaining_at_trade": t.get("extra", {}).get("time_remaining", 0),
                         "risk_blocked": t.get("risk_blocked", False),
                         "risk_block_reason": t.get("risk_block_reason", ""),
+                        # Per-trade financial state
+                        "cash": t.get("cash"),
+                        "portfolio_value": t.get("portfolio_value"),
+                        "fee": t.get("fee_amount", 0),
+                        "realized_pnl": t.get("realized_pnl", 0),
+                        "unrealized_pnl": t.get("unrealized_pnl", 0),
                     })
             except Exception:
                 logger.debug("Could not load trade file %s", trade_file, exc_info=True)
