@@ -33,6 +33,7 @@ class SessionContext:
     losses: int = 0
     avg_win_confidence: float = 0.0
     avg_loss_confidence: float = 0.0
+    candle_open_btc: float | None = None  # BTC price at current candle open
 
 
 # ---------------------------------------------------------------------------
@@ -504,22 +505,33 @@ def _streak_magnitude(
 
 @register("btc_vs_candle_open")
 def _btc_vs_candle_open(
-    snap: MarketSnapshot, params: dict, _session: SessionContext | None,
+    snap: MarketSnapshot, params: dict, session: SessionContext | None,
 ) -> IndicatorResult | None:
     """Where is BTC NOW relative to the current 5-min candle open?
 
     This is the key metric for binary candle markets: if BTC is already
     above the candle open, UP is currently winning (and vice versa).
+    Uses the actual recorded candle open price when available (from the
+    resolution tracker), falls back to last completed candle close.
     """
-    if not snap.btc_price or not snap.btc_candles:
+    if not snap.btc_price:
         return None
-    # The current (in-progress) candle open is approximated by the last
-    # completed candle's close — since candles are contiguous.
-    candle_open = snap.btc_candles[-1].close
+
+    # Prefer actual recorded candle open, fallback to last candle close
+    candle_open = None
+    if session and session.candle_open_btc is not None:
+        candle_open = session.candle_open_btc
+    elif snap.btc_candles:
+        candle_open = snap.btc_candles[-1].close
+
+    if candle_open is None:
+        return None
+
     current_price = snap.btc_price.price_usd
     diff = current_price - candle_open
     pct = diff / candle_open * 100 if candle_open else 0
 
+    source = "recorded" if (session and session.candle_open_btc) else "estimated"
     if diff > 0:
         signal = "UP currently winning"
     elif diff < 0:
@@ -530,7 +542,7 @@ def _btc_vs_candle_open(
     return IndicatorResult(
         name="BTC vs Candle Open",
         value=diff,
-        label=f"${diff:+,.0f} ({pct:+.3f}%) — {signal}",
+        label=f"${diff:+,.0f} ({pct:+.3f}%) — {signal} (open ${candle_open:,.0f} [{source}])",
     )
 
 

@@ -38,6 +38,10 @@ class ResolutionTracker:
             market.slug, btc_price,
         )
 
+    def get_candle_open(self, condition_id: str) -> float | None:
+        """Get the recorded BTC open price for the current candle."""
+        return self._open_prices.get(condition_id)
+
     async def _verify_winner_on_polymarket(
         self, market: CandleMarket, btc_winner: str,
     ) -> str:

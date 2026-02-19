@@ -424,9 +424,15 @@ class TradingAgent:
 
         # Compute dynamic indicators
         self._feature_config.load()
+        candle_open_btc = None
+        if self._current_market:
+            candle_open_btc = self._resolution_tracker.get_candle_open(
+                self._current_market.condition_id
+            )
         session_ctx = SessionContext(
             wins=self._session_wins,
             losses=self._session_losses,
+            candle_open_btc=candle_open_btc,
         )
         indicator_results = compute_indicators(snapshot, self._feature_config, session_ctx)
         indicators_text = format_indicators(indicator_results)
@@ -453,6 +459,7 @@ class TradingAgent:
         decision, latency_ms, api_cost = await self._decision_engine.decide(
             features, feedback_context=feedback_context, indicators_text=indicators_text,
             ai_cycle_cost=self._last_cycle_api_cost, ai_session_cost=self._total_api_cost,
+            candle_open_btc=candle_open_btc,
         )
 
         # Deduct API cost from cash (the bot pays for its own brain)
