@@ -38,6 +38,7 @@ class DecisionEngine:
         self, features: FeatureVector, feedback_context: str = "",
         indicators_text: str = "",
         ai_cycle_cost: float = 0.0, ai_session_cost: float = 0.0,
+        candle_open_btc: float | None = None,
     ) -> tuple[TradingDecision, float, float]:
         """Get a trading decision from Claude.
 
@@ -47,6 +48,7 @@ class DecisionEngine:
         prompt = format_feature_vector(
             features, feedback_context=feedback_context, indicators_text=indicators_text,
             ai_cycle_cost=ai_cycle_cost, ai_session_cost=ai_session_cost,
+            candle_open_btc=candle_open_btc,
         )
         start = time.monotonic()
 

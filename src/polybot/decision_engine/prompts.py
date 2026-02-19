@@ -97,6 +97,7 @@ based on past performance. Use them as supporting signals, not sole decision dri
 def format_feature_vector(
     fv: FeatureVector, feedback_context: str = "", indicators_text: str = "",
     ai_cycle_cost: float = 0.0, ai_session_cost: float = 0.0,
+    candle_open_btc: float | None = None,
 ) -> str:
     """Format a FeatureVector into a clear prompt for Claude."""
     up_ob = fv.market.orderbook
@@ -154,10 +155,19 @@ def format_feature_vector(
         lines.extend([
             "",
             "## BTC Context (Chainlink BTC/USD — resolution source)",
-            f"- BTC Price: ${fv.market.btc_price.price_usd:,.2f}",
-            f"- BTC 24h Change: {fv.market.btc_price.change_24h_pct:+.2f}% "
-            "(⚠ NOT predictive for 5-min candles — ~40% go opposite to daily trend)",
+            f"- BTC Price NOW: ${fv.market.btc_price.price_usd:,.2f}",
         ])
+        if candle_open_btc is not None:
+            diff = fv.market.btc_price.price_usd - candle_open_btc
+            who_winning = "UP winning" if diff >= 0 else "DOWN winning"
+            lines.append(
+                f"- BTC at Candle Open: ${candle_open_btc:,.2f} → "
+                f"**Current move: ${diff:+,.2f} ({who_winning})**"
+            )
+        lines.append(
+            f"- BTC 24h Change: {fv.market.btc_price.change_24h_pct:+.2f}% "
+            "(⚠ NOT predictive for 5-min candles — ~40% go opposite to daily trend)"
+        )
 
     # BTC 5-min candle history
     candles = fv.market.btc_candles
