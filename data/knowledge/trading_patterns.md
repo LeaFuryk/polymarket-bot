@@ -38,15 +38,17 @@
 **Session 5 Performance**: 1W-1L (50% win rate, -$6.09)
 **Session 6 Performance**: 2W-2L-1BE (50% win rate, -$1.09)
 **Session 7 Performance**: 3W-2L-1BE (60% win rate, +$7.37)
+**Session 8 Performance**: 4W-2L-2BE (67% win rate, +$43.16)
 
-**Overall Trend-Following**: 13W-7L (65% win rate, +$62.57 total)
+**Overall Trend-Following**: 17W-9L (65% win rate, +$105.73 total)
 
 ### When Trend-Following Works:
 - **Strong sustained trends**: 6+ consecutive candles in same direction
-- **Entry pricing discipline**: Best results at <0.55 (optimal: 0.40-0.51)
+- **Entry pricing discipline**: Best results at <0.55 (optimal: 0.29-0.51)
 - **Momentum acceleration**: BTC moves getting larger, not smaller
 - **Failed reversal attempts**: When mean reversion setups fail 2+ times
 - **Profit-taking discipline**: Exiting profitable positions when price favorable
+- **Small directional moves**: Even $11-$50 moves can continue in trending environments
 
 ### When Trend-Following Fails:
 - **Micro-reversals in larger trends**: Single candle can reverse despite broader momentum
@@ -67,30 +69,35 @@
 - BTC should show sustained directional pressure (>$100 move)
 - Avoid entries when time remaining <90s
 - **CRITICAL**: Don't chase momentum at expensive prices after large moves
-- **CRITICAL**: Exit profitable positions when price favorable (0.78-0.88 range)
+- **CRITICAL**: Exit profitable positions when price favorable (0.66-0.93 range)
 - **NEW**: Recognize when to take losses early vs holding through resolution
+- **NEW**: Small moves ($11-$50) can continue in trending environments
 
 ## Profit-Taking and Exit Discipline
 
-**Session 7 Key Learning**: Smart exits are as important as smart entries.
+**Session 7-8 Evidence**: 5 profit-taking exits, 100% success rate
 
 ### When to Exit Profitably:
-- Position moves 15-20% in your favor (e.g., bought at 0.41, sell at 0.78)
+- Position moves 15-25% in your favor (e.g., bought at 0.37, sell at 0.66-0.93)
 - Time remaining <120s and position is profitable
 - Market shows signs of reversal but you're still in profit
-- Better to lock in +$20-30 than risk holding to resolution
+- Better to lock in +$15-30 than risk holding to resolution
+- **NEW**: Even with >180s remaining, if position up 20%+, consider exit
 
 ### When to Cut Losses:
 - Position moves significantly against you AND setup looks wrong
 - Time remaining >120s but market regime has clearly changed
 - Example: Bought DOWN at 0.23 expecting continuation, but BTC shows UP momentum
 - Taking -$12 loss early can prevent -$22 loss at resolution
+- **NEW**: If bought at bad price (>0.65) and immediately moves against you, exit quickly
 
-### Exit Timing Patterns (Session 7):
+### Exit Timing Patterns (Sessions 7-8):
 - **Cycle 19**: Sold DOWN at 0.78 (bought 0.41) = +$20.82 profit-taking WIN
 - **Cycle 20**: Sold DOWN at 0.78 (bought 0.41) = +$20.82 profit-taking WIN  
 - **Cycle 23**: Sold DOWN at 0.23 (bought 0.23) = breakeven exit, avoided -$12.67 loss
-- **Pattern**: Exiting at 0.78-0.88 when bought at 0.23-0.51 captures most of the edge
+- **Cycle 11**: Sold UP at 0.71 (bought 0.37) = +$20.40 profit-taking WIN
+- **Cycle 15**: Sold DOWN at 0.66 (bought 0.83) = loss-cutting, avoided larger loss
+- **Pattern**: Exiting at 0.66-0.93 when bought at 0.29-0.51 captures most of the edge
 
 ## UPDATED Trading Rules
 
@@ -106,7 +113,7 @@
   - Trend-following: Primary strategy, enter at <0.50
 - If <$50 total range: CHOPPY
   - Mean reversion: Standard confidence (0.60-0.65)
-  - Trend-following: Avoid (no sustained momentum)
+  - Trend-following: Can work if 6+ consecutive candles
 
 **2. Recent Move Check (CRITICAL)**:
 - If BTC just moved >$150 in last 2-3 candles: EXHAUSTION RISK
@@ -115,6 +122,9 @@
   - Consider counter-trend if entry <0.40
 - If moves are consistent $50-100 range: HEALTHY TREND
   - Trend-following at good prices (<0.55) is optimal
+- **NEW**: If moves are small ($11-$50) but consistent direction: MICRO-TREND
+  - Trend-following can work with 6+ consecutive candles
+  - Entry must be excellent (<0.45)
 
 **3. Consecutive Candle Count**:
 - 3-4 consecutive: Ambiguous (could reverse or continue)
@@ -140,12 +150,14 @@
 - **CRITICAL**: After large move (>$150), avoid >0.60 entirely
 
 **5. Exit Discipline (UPDATED)**:
-- When position moves 15-20% in your favor, consider profit-taking
-- Exit targets: 0.78-0.88 range when bought at 0.23-0.51
+- When position moves 15-25% in your favor, consider profit-taking
+- Exit targets: 0.66-0.93 range when bought at 0.23-0.51
 - With <120s remaining and profitable position, strongly consider exit
+- **NEW**: With >180s remaining but position up 20%+, consider exit
 - Don't hold through obvious adverse setups hoping for miracle
 - Early loss-cutting: If setup clearly wrong and >120s remaining, exit at small loss
-- **NEW**: Profit-taking exits have 100% success rate in Session 7 (3 wins)
+- **NEW**: If bought at bad price (>0.65), exit quickly if moves against you
+- **Validated**: Profit-taking exits have 100% success rate (5/5 in Sessions 7-8)
 
 **6. Recent Pattern Performance**:
 - If last 2 similar setups failed: STOP taking that pattern
@@ -157,7 +169,7 @@
 - <60 seconds: CRITICAL - no new entries, exit existing if profitable
 - 60-90 seconds: High-risk zone, only exits or profit-taking
 - 90-180 seconds: Can enter with high conviction (0.62+) and excellent pricing
-- >180 seconds: Normal trading window
+- >180 seconds: Normal trading window, but consider profit-taking if position up 20%+
 
 ### Confidence Calibration by Strategy:
 
@@ -183,14 +195,15 @@
 
 **Profit-Taking Exits**:
 - Confidence: 0.68 (high conviction on exits)
-- When position up 15-20%: strong exit signal
+- When position up 15-25%: strong exit signal
 - When time <120s and profitable: very strong exit signal
+- **NEW**: When position up 20%+ even with >180s: consider exit signal
 
 ## Pattern Recognition Updates
 
 ### Sustained Trend Signature (REFINED):
 - 6+ consecutive same-direction candles
-- BTC moving >$100 over 30 minutes
+- BTC moving >$100 over 30 minutes (or consistent small moves in same direction)
 - Candles maintaining size or growing
 - Failed reversal attempts get rejected quickly
 
@@ -199,7 +212,8 @@
 - AVOID: Mean reversion (78% failure rate in these conditions)
 - Position sizing: Standard (50-60 shares)
 - After large single move (>$150), wait for consolidation
-- **NEW**: Take profits at 0.78-0.88 when bought at 0.23-0.51
+- **NEW**: Take profits at 0.66-0.93 when bought at 0.23-0.51
+- **NEW**: Small consistent moves ($11-$50) can continue with 6+ consecutive candles
 
 ### Momentum Exhaustion Pattern (CRITICAL):
 - BTC moves >$150 in 2-3 candles
@@ -228,12 +242,13 @@
 
 1. **Strategy-Market Alignment**: Match strategy to market regime (choppy vs trending vs exhaustion)
 2. **Entry Discipline**: Best results at 0.23-0.55 for all strategies
-3. **Exit Discipline**: Take profits at 0.78-0.88 when bought at 0.23-0.51
+3. **Exit Discipline**: Take profits at 0.66-0.93 when bought at 0.23-0.51
 4. **Pattern Recognition**: Correctly identify 6+ consecutive candles and broader context
 5. **Patience**: HOLD decisions avoid low-edge setups
 6. **Consistent Sizing**: 50-60 shares on high-conviction setups
 7. **Profit Taking**: Exit profitable positions when price favorable (100% success rate)
 8. **Loss Cutting**: Exit bad setups early when clearly wrong
+9. **Flexibility**: Recognize micro-trends (small consistent moves) can continue
 
 ## Key Failure Modes to Avoid
 
@@ -246,4 +261,5 @@
 7. **Momentum Chasing**: Buying continuation after large move (>$150) at expensive prices (>0.60)
 8. **Ignoring Exhaustion**: Not recognizing exhaustion risk after extreme moves
 9. **Holding Through Losses**: Not exiting when setup clearly wrong and time allows
-10. **Missing Profit-Taking**: Not exiting when position up 15-20% with <120s remaining
+10. **Missing Profit-Taking**: Not exiting when position up 15-25% with favorable conditions
+11. **Greed After Profit**: Holding for last few cents instead of locking in 20%+ gains

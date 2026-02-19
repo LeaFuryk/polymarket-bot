@@ -71,6 +71,45 @@ def _setup_logging(config: AppConfig) -> None:
         root.addHandler(ch)
 
 
+def _compute_pnl_from_trades(trades: list[dict], winner: str) -> float:
+    """Reconstruct PnL for an unresolved candle from its logged trades."""
+    up_shares = 0.0
+    up_cost = 0.0
+    down_shares = 0.0
+    down_cost = 0.0
+
+    for t in trades:
+        if t.get("risk_blocked") or not t.get("fill_price"):
+            continue
+        size = t.get("fill_size") or t.get("size") or t.get("decision_size") or 0
+        price = t["fill_price"]
+        side = t.get("token_side", "up")
+        action = t.get("action", "HOLD")
+
+        if action == "BUY":
+            if side == "up":
+                up_shares += size
+                up_cost += size * price
+            else:
+                down_shares += size
+                down_cost += size * price
+        elif action == "SELL":
+            if side == "up":
+                up_shares -= size
+                up_cost -= size * price
+            else:
+                down_shares -= size
+                down_cost -= size * price
+
+    # Settlement: winning token pays $1, losing pays $0
+    if winner == "up":
+        pnl = (up_shares * 1.0 - up_cost) + (0 - down_cost)
+    else:
+        pnl = (0 - up_cost) + (down_shares * 1.0 - down_cost)
+
+    return pnl
+
+
 class TradingAgent:
     """Main trading loop — glues together all sub-components with market rotation."""
 
@@ -135,6 +174,9 @@ class TradingAgent:
 
         # Load BTC 5-min candle history before starting the loop
         await self._market_data.btc_feed.load_candle_history(200)
+
+        # Resolve any pending bets from previous sessions
+        await self._resolve_pending_bets()
 
         try:
             if self._config.logging.dashboard_enabled:
@@ -657,6 +699,101 @@ class TradingAgent:
             dashboard_path.write_text(json.dumps(data, indent=2) + "\n")
         except Exception:
             logger.debug("Failed to write dashboard JSON", exc_info=True)
+
+    # --- Pending Bet Resolution ---
+
+    async def _resolve_pending_bets(self) -> None:
+        """Check for trades with no matching resolution and resolve them."""
+        # Group historical trades by candle_slug
+        trades_by_slug: dict[str, list[dict]] = {}
+        for t in self._historical_trades:
+            slug = t.get("candle_slug", "")
+            if not slug or slug == "unknown":
+                continue
+            trades_by_slug.setdefault(slug, []).append(t)
+
+        # Index resolved slugs
+        resolved_slugs = {r.get("slug", "") for r in self._historical_resolutions}
+
+        # Find unresolved slugs that have actual fills (not just HOLDs)
+        unresolved = []
+        for slug, trades in trades_by_slug.items():
+            if slug in resolved_slugs:
+                continue
+            has_fill = any(
+                t.get("action") in ("BUY", "SELL") and t.get("fill_price")
+                for t in trades
+            )
+            if not has_fill:
+                continue
+            unresolved.append(slug)
+
+        if not unresolved:
+            return
+
+        # Sort oldest first (slug ends with Unix timestamp)
+        unresolved.sort(key=lambda s: int(s.rsplit("-", 1)[-1]) if s.rsplit("-", 1)[-1].isdigit() else 0)
+
+        logger.info("Found %d unresolved candle(s) with fills: %s", len(unresolved), unresolved)
+
+        for slug in unresolved:
+            try:
+                await self._resolve_single_pending_bet(slug, trades_by_slug[slug])
+            except Exception:
+                logger.exception("Failed to resolve pending bet: %s", slug)
+
+    async def _resolve_single_pending_bet(self, slug: str, trades: list[dict]) -> None:
+        """Resolve a single pending bet by looking up the actual outcome."""
+        from datetime import datetime, timezone
+
+        # Fetch market info from Gamma API
+        market = await self._discovery.fetch_market_by_slug(slug)
+        if market is None:
+            logger.warning("Could not fetch market for pending bet: %s (may be delisted)", slug)
+            return
+
+        # Skip if candle hasn't ended yet
+        now = time.time()
+        if market.end_time > now:
+            logger.info("Skipping pending bet %s — candle still live (ends in %.0fs)", slug, market.end_time - now)
+            return
+
+        # Get BTC open and close prices from Binance historical API
+        btc_open = await self._market_data.btc_feed.get_price_at(market.start_time)
+        btc_close = await self._market_data.btc_feed.get_price_at(market.end_time)
+
+        if btc_open is None or btc_close is None:
+            logger.warning("Could not fetch BTC prices for pending bet: %s (open=%s close=%s)", slug, btc_open, btc_close)
+            return
+
+        # Resolve via the resolution tracker (handles BTC comparison + Polymarket verification)
+        resolution = await self._resolution_tracker.resolve(market, btc_close)
+        # The resolver may not have the open price cached, so override with our fetched values
+        resolution.btc_open = btc_open
+        resolution.btc_close = btc_close
+
+        # Compute PnL from logged trades
+        pnl = _compute_pnl_from_trades(trades, resolution.winner)
+        resolution.total_pnl = pnl
+
+        # Write to resolution log
+        self._trade_log.write_resolution(resolution)
+
+        # Append to historical resolutions for dashboard
+        self._historical_resolutions.append({
+            "timestamp": datetime.fromtimestamp(resolution.timestamp, tz=timezone.utc).isoformat(),
+            "slug": resolution.slug,
+            "winner": resolution.winner,
+            "btc_open": resolution.btc_open,
+            "btc_close": resolution.btc_close,
+            "btc_move": resolution.btc_close - resolution.btc_open,
+            "pnl": resolution.total_pnl,
+        })
+
+        logger.info(
+            "Resolving pending bet: %s — winner=%s, pnl=%.4f (open=$%.2f close=$%.2f)",
+            slug, resolution.winner, pnl, btc_open, btc_close,
+        )
 
     # --- Agent State Persistence ---
 

@@ -97,6 +97,19 @@ When a 5-minute candle expires and a new one begins:
 - Every 3 resolutions → **reflection** is triggered
 - Resolution counter is persisted to `logs/agent_state.json` so it survives restarts
 
+### Pending Bet Recovery on Startup
+
+If the bot crashes or is stopped mid-candle, trades may be logged without a matching resolution. On restart, the bot automatically detects and resolves these:
+
+1. Scans `trades_*.jsonl` for candle slugs with fills (BUY/SELL) but no entry in `resolutions_*.jsonl`
+2. Fetches each unresolved market from the Gamma API and verifies the candle has ended
+3. Looks up BTC open/close prices via Binance historical API
+4. Verifies the winner against Polymarket token prices (settled at ~$1/$0)
+5. Reconstructs PnL from logged fills and writes the missing resolution record
+6. Appends to dashboard history so all-time stats remain accurate
+
+This runs once at startup before the main trading loop begins. Candles that are still live are skipped.
+
 ### Reflection (Self-Improvement)
 
 After every 3 candle resolutions, the bot calls Claude with:
