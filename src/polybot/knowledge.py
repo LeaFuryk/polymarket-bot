@@ -107,6 +107,7 @@ class KnowledgeManager:
         session_wins: int,
         session_losses: int,
         session_pnl: float,
+        calibration_summary: str = "",
     ) -> str:
         """Combine knowledge files + recent resolutions into a prompt block."""
         knowledge = self.load_knowledge()
@@ -130,6 +131,11 @@ class KnowledgeManager:
                 lines.append(
                     f"| {r.slug[-20:]} | {r.winner} | ${btc_move:+.0f} | ${r.total_pnl:+.4f} |"
                 )
+            lines.append("")
+
+        # Confidence calibration data
+        if calibration_summary:
+            lines.append(calibration_summary)
             lines.append("")
 
         # Knowledge from .md files

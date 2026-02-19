@@ -13,6 +13,7 @@ from rich.live import Live
 from rich.table import Table
 from rich.text import Text
 
+from polybot.calibration import ConfidenceCalibrator
 from polybot.config import AppConfig
 from polybot.decision_engine.engine import DecisionEngine
 from polybot.indicators import (
@@ -136,6 +137,11 @@ class TradingAgent:
 
         # Rules-based pre-filter (skips AI on obvious HOLDs)
         self._prefilter = PreFilter()
+
+        # Confidence calibration (tracks stated vs actual win rates)
+        self._calibrator = ConfidenceCalibrator(
+            data_dir=Path(config.logging.log_dir),
+        )
 
         # Knowledge / feedback learning
         self._knowledge_manager = KnowledgeManager(config.logging.knowledge_dir, config.ai)
@@ -278,6 +284,9 @@ class TradingAgent:
             self._trade_log.write_resolution(resolution)
             self._last_resolution = resolution
 
+            # Record outcome for confidence calibration
+            self._calibrator.record_outcome(resolution.slug, resolution.winner)
+
             # Update session stats (skip flat resolutions with no position)
             had_position = resolution_pnl != 0.0
             if had_position:
@@ -409,6 +418,7 @@ class TradingAgent:
             self._session_wins,
             self._session_losses,
             self._session_resolution_pnl,
+            calibration_summary=self._calibrator.get_calibration_summary(),
         )
         logger.debug("Feedback context: %s", feedback_context[:200])
 
@@ -451,6 +461,28 @@ class TradingAgent:
                 token_side=decision.token_side,
             )
 
+        # Calibration gate: check if stated confidence is actually profitable
+        if decision.action != Action.HOLD:
+            cal = self._calibrator.check(decision.confidence)
+            if cal.is_reliable and not cal.should_trade:
+                logger.info(
+                    "Calibration override %s to HOLD — stated %.2f but actual win rate %.0f%% "
+                    "(%d samples, need %.0f%% break-even)",
+                    decision.action.value, decision.confidence,
+                    cal.calibrated_win_rate * 100, cal.sample_count,
+                    self._calibrator._break_even * 100,
+                )
+                decision = TradingDecision(
+                    action=Action.HOLD,
+                    order_type=OrderType.MARKET,
+                    size=0.0,
+                    confidence=decision.confidence,
+                    reasoning=f"Calibration override: {cal.reason}. "
+                              f"Original: {decision.reasoning[:80]}",
+                    market_view=decision.market_view,
+                    token_side=decision.token_side,
+                )
+
         self._last_action = f"{decision.action.value} {decision.token_side.value} {decision.size:.1f}"
         self._last_reasoning = decision.reasoning[:120]
         self._last_token_side = decision.token_side.value
@@ -491,6 +523,15 @@ class TradingAgent:
             if fill.side.value == "SELL":
                 realized = (fill.fill_price - token_pos.avg_entry_price) * fill.size
             self._risk.record_trade(realized, fill.fee_amount)
+
+            # Register with calibration tracker (BUY only — SELLs are exits)
+            if decision.action == Action.BUY and self._current_market:
+                self._calibrator.register_trade(
+                    slug=self._current_market.slug,
+                    confidence=decision.confidence,
+                    token_side=decision.token_side.value,
+                    entry_price=fill.fill_price,
+                )
 
         # 9. Post-fill mark-to-market
         if up_mid is not None:
@@ -696,6 +737,7 @@ class TradingAgent:
                     "prefilter_skip_rate": self._prefilter.skip_rate,
                     "prefilter_skipped": self._prefilter.total_skipped,
                     "prefilter_checked": self._prefilter.total_checks,
+                    "calibration_records": self._calibrator.total_records,
                 },
                 "all_time": {
                     "wins": all_time_wins,
