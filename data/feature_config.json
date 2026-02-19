@@ -11,7 +11,7 @@
       "name": "token_volatility",
       "enabled": true,
       "params": {
-        "window": 20
+        "window": 15
       }
     },
     {
@@ -41,7 +41,7 @@
     },
     {
       "name": "token_price_divergence",
-      "enabled": false,
+      "enabled": true,
       "params": {}
     },
     {
@@ -55,7 +55,7 @@
       "name": "btc_volatility",
       "enabled": true,
       "params": {
-        "window": 20
+        "window": 15
       }
     },
     {
