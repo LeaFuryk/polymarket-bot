@@ -24,7 +24,7 @@
     },
     {
       "name": "token_mean_reversion",
-      "enabled": false,
+      "enabled": true,
       "params": {
         "window": 20
       }
@@ -72,12 +72,12 @@
     },
     {
       "name": "session_streak",
-      "enabled": false,
+      "enabled": true,
       "params": {}
     },
     {
       "name": "confidence_calibration",
-      "enabled": false,
+      "enabled": true,
       "params": {}
     }
   ]

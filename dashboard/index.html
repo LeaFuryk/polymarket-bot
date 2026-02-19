@@ -5,609 +5,873 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>PolyBot Dashboard</title>
 <style>
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-  --bg-primary: #0a0b0f;
-  --bg-secondary: #12141c;
-  --bg-card: #161822;
-  --bg-card-hover: #1a1d2a;
-  --border: #1e2233;
-  --border-bright: #2a2f44;
-  --text-primary: #e4e6f0;
-  --text-secondary: #8b8fa4;
-  --text-dim: #555872;
-  --green: #00e676;
-  --green-dim: #00e67622;
-  --green-glow: #00e67640;
-  --red: #ff3d57;
-  --red-dim: #ff3d5722;
-  --red-glow: #ff3d5740;
-  --amber: #ffab00;
-  --amber-dim: #ffab0022;
-  --blue: #448aff;
-  --blue-dim: #448aff22;
-  --cyan: #00e5ff;
-  --purple: #b388ff;
-  --font-mono: 'JetBrains Mono', 'SF Mono', 'Cascadia Code', monospace;
-  --font-display: 'Space Grotesk', system-ui, sans-serif;
+  --bg-base: #080a0e;
+  --bg-raised: #0d1017;
+  --bg-surface: #131720;
+  --bg-surface-hover: #171c28;
+  --bg-inset: #0a0d13;
+  --border-subtle: #1a1f2e;
+  --border-default: #232a3b;
+  --border-bright: #2e3750;
+  --text-primary: #e8ecf4;
+  --text-secondary: #8891a6;
+  --text-tertiary: #5a6378;
+  --text-muted: #3d4556;
+  --green: #22c55e;
+  --green-soft: #22c55e18;
+  --green-mid: #22c55e40;
+  --red: #ef4444;
+  --red-soft: #ef444418;
+  --red-mid: #ef444440;
+  --amber: #f59e0b;
+  --amber-soft: #f59e0b18;
+  --cyan: #06b6d4;
+  --cyan-soft: #06b6d418;
+  --cyan-mid: #06b6d430;
+  --blue: #3b82f6;
+  --blue-soft: #3b82f618;
+  --purple: #a78bfa;
+  --mono: 'JetBrains Mono', 'IBM Plex Mono', monospace;
+  --display: 'Space Grotesk', system-ui, sans-serif;
+  --sidebar-w: 232px;
+  --radius: 8px;
+  --radius-sm: 5px;
 }
 
-html { font-size: 14px; }
+html { font-size: 15px; -webkit-font-smoothing: antialiased; }
+
+/* Tooltip on hover */
+[data-tip] { position: relative; }
+[data-tip]:hover::after {
+  content: attr(data-tip);
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0.45rem 0.65rem;
+  background: #1c2233;
+  color: var(--text-secondary);
+  font: 400 0.72rem/1.4 var(--mono);
+  white-space: normal;
+  max-width: 260px;
+  min-width: 140px;
+  border-radius: 6px;
+  border: 1px solid var(--border-bright);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+  z-index: 500;
+  pointer-events: none;
+  animation: tipIn 0.12s ease-out;
+}
+[data-tip]:hover::before {
+  content: '';
+  position: absolute;
+  bottom: calc(100% + 3px);
+  left: 50%;
+  transform: translateX(-50%);
+  border: 5px solid transparent;
+  border-top-color: #1c2233;
+  z-index: 501;
+  pointer-events: none;
+  animation: tipIn 0.12s ease-out;
+}
+@keyframes tipIn { from { opacity: 0; transform: translateX(-50%) translateY(3px); } to { opacity: 1; transform: translateX(-50%); } }
 
 body {
-  background: var(--bg-primary);
+  background: var(--bg-base);
   color: var(--text-primary);
-  font-family: var(--font-mono);
+  font-family: var(--mono);
   line-height: 1.5;
   min-height: 100vh;
-  overflow-x: hidden;
 }
 
-body::before {
-  content: '';
-  position: fixed;
-  top: 0; left: 0; right: 0; bottom: 0;
-  background:
-    radial-gradient(ellipse at 20% 0%, #00e67608 0%, transparent 50%),
-    radial-gradient(ellipse at 80% 100%, #448aff06 0%, transparent 50%);
-  pointer-events: none;
-  z-index: 0;
-}
-
+/* Subtle noise texture overlay */
 body::after {
   content: '';
   position: fixed;
-  top: 0; left: 0; right: 0; bottom: 0;
-  background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.03) 2px, rgba(0,0,0,0.03) 4px);
+  inset: 0;
+  background: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
   pointer-events: none;
   z-index: 9999;
+  opacity: 0.4;
 }
 
-.container {
-  max-width: 1440px;
-  margin: 0 auto;
-  padding: 1rem;
-  position: relative;
-  z-index: 1;
-}
-
-/* ── HEADER ── */
-header {
+/* ═══ LAYOUT ═══ */
+.app {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 1rem 0;
-  border-bottom: 1px solid var(--border);
-  margin-bottom: 1.5rem;
+  min-height: 100vh;
 }
 
-.logo { display: flex; align-items: center; gap: 0.75rem; }
-
-.logo-icon {
-  width: 36px; height: 36px;
-  background: linear-gradient(135deg, var(--green), var(--cyan));
-  border-radius: 8px;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 18px; font-weight: 700;
-  color: var(--bg-primary);
-  font-family: var(--font-display);
-  box-shadow: 0 0 20px var(--green-glow);
-}
-
-.logo-text {
-  font-family: var(--font-display);
-  font-size: 1.4rem; font-weight: 700; letter-spacing: -0.02em;
-  background: linear-gradient(135deg, var(--text-primary), var(--text-secondary));
-  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-}
-
-.logo-tag { font-size: 0.65rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.1em; }
-
-.header-status { display: flex; align-items: center; gap: 1.5rem; }
-
-.status-dot {
-  width: 8px; height: 8px; border-radius: 50%;
-  background: var(--text-dim); display: inline-block; margin-right: 0.4rem;
-  transition: background 0.3s;
-}
-
-.status-dot.live { background: var(--green); box-shadow: 0 0 8px var(--green-glow); animation: pulse 2s ease-in-out infinite; }
-.status-dot.stale { background: var(--red); box-shadow: 0 0 8px var(--red-glow); }
-
-@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
-
-.refresh-info { font-size: 0.75rem; color: var(--text-dim); }
-
-/* ── GRID ── */
-.grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 1rem; }
-
-/* ── CARDS ── */
-.card {
-  background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px;
-  padding: 1rem; transition: border-color 0.2s, background 0.2s;
-  position: relative; overflow: hidden;
-}
-
-.card:hover { border-color: var(--border-bright); background: var(--bg-card-hover); }
-
-.card-label { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.12em; color: var(--text-dim); margin-bottom: 0.5rem; }
-.card-value { font-family: var(--font-display); font-size: 1.6rem; font-weight: 700; letter-spacing: -0.02em; }
-.card-sub { font-size: 0.7rem; color: var(--text-secondary); margin-top: 0.25rem; }
-
-.card-value.green { color: var(--green); }
-.card-value.red { color: var(--red); }
-.card-value.amber { color: var(--amber); }
-.card-value.blue { color: var(--blue); }
-.card-value.cyan { color: var(--cyan); }
-
-.stat-card { grid-column: span 1; }
-.span-3 { grid-column: span 3; }
-.span-4 { grid-column: span 4; }
-.span-2 { grid-column: span 2; }
-.span-6 { grid-column: span 6; }
-
-/* ── SECTION HEADERS ── */
-.section-header {
-  font-family: var(--font-display); font-size: 0.8rem; font-weight: 600;
-  text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-secondary);
-  margin-bottom: 0.75rem; display: flex; align-items: center; gap: 0.5rem;
-}
-.section-header::before { content: ''; width: 3px; height: 14px; background: var(--cyan); border-radius: 2px; display: inline-block; }
-
-/* ── CURRENT MARKET ── */
-.market-info { display: grid; grid-template-columns: 1fr auto; gap: 0.75rem; }
-.market-title { font-family: var(--font-display); font-size: 1.1rem; font-weight: 600; color: var(--text-primary); margin-bottom: 0.25rem; }
-.market-link { color: var(--blue); text-decoration: none; font-size: 0.75rem; }
-.market-link:hover { text-decoration: underline; }
-.market-countdown { font-family: var(--font-display); font-size: 2rem; font-weight: 700; color: var(--amber); text-align: right; letter-spacing: -0.02em; }
-.market-countdown.urgent { color: var(--red); }
-.market-countdown-label { font-size: 0.65rem; color: var(--text-dim); text-align: right; text-transform: uppercase; letter-spacing: 0.08em; }
-.token-row { display: flex; justify-content: space-between; padding: 0.5rem 0; border-top: 1px solid var(--border); }
-.token-label { font-size: 0.75rem; font-weight: 600; }
-.token-label.up { color: var(--green); }
-.token-label.down { color: var(--red); }
-.token-mid { font-weight: 600; font-size: 0.85rem; }
-
-/* ── BTC ── */
-.btc-price { font-family: var(--font-display); font-size: 1.4rem; font-weight: 700; }
-.btc-change { font-size: 0.8rem; font-weight: 500; padding: 0.15rem 0.5rem; border-radius: 4px; display: inline-block; margin-top: 0.25rem; }
-.btc-change.up { background: var(--green-dim); color: var(--green); }
-.btc-change.down { background: var(--red-dim); color: var(--red); }
-.btc-candle-dir { font-size: 0.7rem; color: var(--text-dim); margin-top: 0.25rem; }
-
-/* ── POSITIONS ── */
-.pos-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
-.pos-item { padding: 0.6rem; border-radius: 6px; background: var(--bg-secondary); border: 1px solid var(--border); }
-.pos-token { font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 0.3rem; }
-.pos-shares { font-family: var(--font-display); font-size: 1.1rem; font-weight: 700; }
-.pos-detail { font-size: 0.65rem; color: var(--text-dim); }
-
-/* ═══════════════════════════════════════════════
-   HORIZONTAL CANDLE TIMELINE
-   ═══════════════════════════════════════════════ */
-
-.candle-timelines {
-  max-height: 600px;
+/* ═══ SIDEBAR ═══ */
+.sidebar {
+  width: var(--sidebar-w);
+  background: var(--bg-raised);
+  border-right: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  position: fixed;
+  top: 0; left: 0; bottom: 0;
+  z-index: 100;
   overflow-y: auto;
   scrollbar-width: thin;
-  scrollbar-color: var(--border-bright) transparent;
+  scrollbar-color: var(--border-default) transparent;
 }
-.candle-timelines::-webkit-scrollbar { width: 4px; }
-.candle-timelines::-webkit-scrollbar-track { background: transparent; }
-.candle-timelines::-webkit-scrollbar-thumb { background: var(--border-bright); border-radius: 4px; }
+.sidebar::-webkit-scrollbar { width: 3px; }
+.sidebar::-webkit-scrollbar-thumb { background: var(--border-default); border-radius: 3px; }
 
-.candle-row {
-  padding: 1rem 0;
-  border-bottom: 1px solid var(--border);
-}
-.candle-row:last-child { border-bottom: none; }
-
-/* Top bar: slug left, resolution badge right */
-.candle-header {
+.sb-brand {
+  padding: 1.25rem 1.1rem 1.1rem;
+  border-bottom: 1px solid var(--border-subtle);
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  margin-bottom: 0.6rem;
+  gap: 0.65rem;
 }
-
-.candle-slug {
-  font-size: 0.7rem;
-  color: var(--text-secondary);
-  font-weight: 500;
+.sb-logo {
+  width: 28px; height: 28px;
+  background: linear-gradient(135deg, var(--green), var(--cyan));
+  border-radius: 6px;
+  display: grid; place-items: center;
+  font: 700 14px/1 var(--display);
+  color: var(--bg-base);
+  flex-shrink: 0;
 }
-
-.candle-slug a { color: var(--blue); text-decoration: none; }
-.candle-slug a:hover { text-decoration: underline; }
-
-.candle-res-badge {
-  font-size: 0.6rem;
-  font-weight: 700;
-  padding: 0.15rem 0.5rem;
-  border-radius: 3px;
+.sb-brand-text { display: flex; flex-direction: column; }
+.sb-brand-name {
+  font: 600 1rem/1.1 var(--display);
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+}
+.sb-brand-tag {
+  font-size: 0.65rem;
+  color: var(--text-tertiary);
   text-transform: uppercase;
   letter-spacing: 0.06em;
 }
-.candle-res-badge.win { background: var(--green-dim); color: var(--green); border: 1px solid #00e67633; }
-.candle-res-badge.loss { background: var(--red-dim); color: var(--red); border: 1px solid #ff3d5733; }
-.candle-res-badge.flat { background: #ffffff0a; color: var(--text-dim); border: 1px solid var(--border); }
-.candle-res-badge.active { background: var(--amber-dim); color: var(--amber); border: 1px solid #ffab0033; animation: pulse 2s ease-in-out infinite; }
 
-/* The horizontal timeline track */
-.tl-track-wrap {
-  position: relative;
-  height: 80px;
-  margin: 0 10px;
+.sb-section-label {
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+  padding: 1rem 1.1rem 0.4rem;
 }
 
-/* Horizontal line */
+.sb-nav { flex: 1; padding-bottom: 0.5rem; }
+
+.sb-item {
+  display: block;
+  padding: 0.55rem 1.1rem;
+  cursor: pointer;
+  border-left: 2px solid transparent;
+  transition: all 0.12s ease;
+  user-select: none;
+}
+.sb-item:hover { background: rgba(255,255,255,0.02); }
+.sb-item.active {
+  background: var(--cyan-soft);
+  border-left-color: var(--cyan);
+}
+.sb-item-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+.sb-item-label {
+  font: 500 0.85rem/1.2 var(--display);
+  color: var(--text-secondary);
+}
+.sb-item.active .sb-item-label { color: var(--text-primary); }
+.sb-item-count {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  background: rgba(255,255,255,0.04);
+  padding: 0.1rem 0.35rem;
+  border-radius: 3px;
+}
+
+/* Day header (non-clickable grouping label) */
+.sb-day-header {
+  padding: 0.7rem 1.1rem 0.2rem;
+  font: 600 0.75rem/1.2 var(--display);
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.sb-day-header .sb-day-pnl {
+  font: 600 0.7rem/1 var(--mono);
+}
+.sb-day-header .sb-day-pnl.pos { color: var(--green); }
+.sb-day-header .sb-day-pnl.neg { color: var(--red); }
+.sb-day-header .sb-day-pnl.zero { color: var(--text-muted); }
+
+/* Session items (indented under day) */
+.sb-item.sb-session {
+  padding-left: 1.6rem;
+}
+.sb-session-time {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  font-family: var(--mono);
+}
+
+.sb-item-metrics {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.2rem;
+}
+.sb-wl {
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 0.05rem 0.3rem;
+  border-radius: 3px;
+}
+.sb-wl.w { background: var(--green-soft); color: var(--green); }
+.sb-wl.l { background: var(--red-soft); color: var(--red); }
+.sb-pnl {
+  font: 600 0.73rem/1 var(--mono);
+}
+.sb-pnl.pos { color: var(--green); }
+.sb-pnl.neg { color: var(--red); }
+.sb-pnl.zero { color: var(--text-muted); }
+
+.sb-divider {
+  height: 1px;
+  background: var(--border-subtle);
+  margin: 0.3rem 1.1rem;
+}
+
+.sb-footer {
+  padding: 0.75rem 1.1rem;
+  border-top: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.73rem;
+  color: var(--text-tertiary);
+}
+.sb-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--text-muted);
+}
+.sb-dot.live { background: var(--green); box-shadow: 0 0 6px var(--green-mid); animation: blink 2s ease-in-out infinite; }
+.sb-dot.stale { background: var(--red); box-shadow: 0 0 6px var(--red-mid); }
+@keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
+
+/* ═══ MAIN ═══ */
+.main {
+  flex: 1;
+  margin-left: var(--sidebar-w);
+  padding: 1.25rem 1.5rem 2rem;
+  min-width: 0;
+}
+
+/* Header bar */
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.25rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.topbar-left {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+}
+.topbar-title {
+  font: 600 1.3rem/1 var(--display);
+  color: var(--text-primary);
+  letter-spacing: -0.01em;
+}
+.topbar-sub {
+  font-size: 0.8rem;
+  color: var(--text-tertiary);
+}
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  font-size: 0.8rem;
+  color: var(--text-tertiary);
+}
+.topbar-status {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+.status-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--text-muted);
+}
+.status-dot.live { background: var(--green); box-shadow: 0 0 6px var(--green-mid); animation: blink 2s ease-in-out infinite; }
+.status-dot.stale { background: var(--red); }
+
+/* ═══ METRICS ROW ═══ */
+.metrics-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
+  gap: 0.65rem;
+  margin-bottom: 1.25rem;
+}
+
+.metric {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  padding: 0.85rem 0.9rem 0.75rem;
+  transition: border-color 0.15s;
+  position: relative;
+  overflow: visible;
+}
+.metric:hover { border-color: var(--border-default); }
+
+/* Subtle top accent line */
+.metric::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  background: var(--border-default);
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.metric:hover::before { opacity: 1; }
+
+.metric-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+  margin-bottom: 0.35rem;
+}
+.metric-value {
+  font: 700 1.55rem/1 var(--display);
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.metric-sub {
+  font-size: 0.73rem;
+  color: var(--text-tertiary);
+  margin-top: 0.2rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.v-green { color: var(--green); }
+.v-red { color: var(--red); }
+.v-amber { color: var(--amber); }
+.v-cyan { color: var(--cyan); }
+.v-blue { color: var(--blue); }
+
+/* ═══ CONTENT GRID ═══ */
+.content-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
+.panel {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  padding: 1rem;
+  min-width: 0;
+  overflow: visible;
+}
+.panel:hover { border-color: var(--border-default); }
+
+.panel-full { grid-column: 1 / -1; }
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.85rem;
+  font: 600 0.8rem/1 var(--display);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-secondary);
+}
+.panel-header::before {
+  content: '';
+  width: 3px; height: 12px;
+  background: var(--cyan);
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+/* ═══ LIVE ROW: Market + BTC + Positions ═══ */
+.live-row {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1.5fr;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.market-title {
+  font: 600 1.05rem/1.3 var(--display);
+  color: var(--text-primary);
+  margin-bottom: 0.2rem;
+}
+.market-link {
+  color: var(--blue);
+  text-decoration: none;
+  font-size: 0.8rem;
+}
+.market-link:hover { text-decoration: underline; }
+
+.countdown-wrap {
+  text-align: right;
+}
+.countdown-val {
+  font: 700 1.6rem/1 var(--display);
+  color: var(--amber);
+  letter-spacing: -0.02em;
+}
+.countdown-val.urgent { color: var(--red); }
+.countdown-label {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+.token-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.35rem 0;
+  border-top: 1px solid var(--border-subtle);
+  font-size: 0.85rem;
+}
+.tok-up { color: var(--green); font-weight: 600; }
+.tok-down { color: var(--red); font-weight: 600; }
+.tok-val { font-weight: 600; }
+
+.btc-price {
+  font: 700 1.35rem/1 var(--display);
+  margin-bottom: 0.3rem;
+}
+.btc-badge {
+  font-size: 0.8rem;
+  font-weight: 500;
+  padding: 0.1rem 0.4rem;
+  border-radius: 3px;
+  display: inline-block;
+}
+.btc-badge.up { background: var(--green-soft); color: var(--green); }
+.btc-badge.down { background: var(--red-soft); color: var(--red); }
+.btc-candle-dir {
+  font-size: 0.73rem;
+  color: var(--text-muted);
+  margin-top: 0.2rem;
+}
+
+.pos-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
+.pos-cell {
+  padding: 0.5rem;
+  background: var(--bg-inset);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+}
+.pos-label {
+  font-size: 0.73rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 0.2rem;
+}
+.pos-val { font: 700 1.15rem/1 var(--display); }
+.pos-sub { font-size: 0.73rem; color: var(--text-muted); }
+.pos-worth { font-size: 0.73rem; color: var(--text-secondary); margin-top: 0.15rem; }
+
+/* ═══ CANDLE TIMELINES ═══ */
+.candle-list {
+  max-height: 600px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-default) transparent;
+}
+.candle-list::-webkit-scrollbar { width: 3px; }
+.candle-list::-webkit-scrollbar-thumb { background: var(--border-default); border-radius: 3px; }
+
+.candle-row {
+  border-bottom: 1px solid var(--border-subtle);
+}
+.candle-row:last-child { border-bottom: none; }
+
+.candle-hdr {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 0;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.1s;
+}
+.candle-hdr:hover { background: rgba(255,255,255,0.015); margin: 0 -1rem; padding-left: 1rem; padding-right: 1rem; }
+
+.candle-chevron {
+  font-size: 0.6rem;
+  color: var(--text-muted);
+  transition: transform 0.2s ease;
+  flex-shrink: 0;
+  width: 12px;
+  text-align: center;
+}
+.candle-row.collapsed .candle-chevron { transform: rotate(-90deg); }
+
+.candle-slug {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+}
+.candle-slug a { color: var(--blue); text-decoration: none; }
+.candle-slug a:hover { text-decoration: underline; }
+
+.candle-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  flex-shrink: 0;
+}
+.ca-pill {
+  font-size: 0.6rem;
+  font-weight: 700;
+  padding: 0.1rem 0.3rem;
+  border-radius: 3px;
+  letter-spacing: 0.02em;
+}
+.ca-pill.b { background: var(--green-soft); color: var(--green); }
+.ca-pill.s { background: var(--red-soft); color: var(--red); }
+.ca-pill.h { background: rgba(255,255,255,0.04); color: var(--text-muted); }
+
+.candle-pnl {
+  font: 600 0.78rem/1 var(--mono);
+  flex-shrink: 0;
+  min-width: 55px;
+  text-align: right;
+}
+.candle-pnl.pos { color: var(--green); }
+.candle-pnl.neg { color: var(--red); }
+.candle-pnl.zero { color: var(--text-muted); }
+
+.candle-badge {
+  font-size: 0.6rem;
+  font-weight: 700;
+  padding: 0.12rem 0.4rem;
+  border-radius: 3px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  flex-shrink: 0;
+}
+.candle-badge.win { background: var(--green-soft); color: var(--green); border: 1px solid #22c55e25; }
+.candle-badge.loss { background: var(--red-soft); color: var(--red); border: 1px solid #ef444425; }
+.candle-badge.flat { background: rgba(255,255,255,0.04); color: var(--text-muted); border: 1px solid var(--border-subtle); }
+.candle-badge.live { background: var(--amber-soft); color: var(--amber); border: 1px solid #f59e0b30; animation: blink 2s ease-in-out infinite; }
+
+/* Collapsible body */
+.candle-body {
+  overflow: hidden;
+  max-height: 400px;
+  transition: max-height 0.3s ease, opacity 0.15s ease;
+  opacity: 1;
+}
+.candle-row.collapsed .candle-body {
+  max-height: 0;
+  opacity: 0;
+}
+
+/* Timeline track */
+.tl-wrap {
+  position: relative;
+  height: 72px;
+  margin: 0.25rem 8px 0.5rem;
+}
 .tl-line {
   position: absolute;
-  top: 40px;
-  left: 0; right: 0;
+  top: 36px; left: 0; right: 0;
   height: 2px;
-  background: var(--border-bright);
+  background: var(--border-default);
 }
-
-/* Start / End labels */
-.tl-label-start, .tl-label-end {
+.tl-end {
   position: absolute;
-  top: 50px;
-  font-size: 0.6rem;
-  color: var(--text-dim);
-  letter-spacing: 0.04em;
-}
-.tl-label-start { left: 0; }
-.tl-label-end { right: 0; }
-
-/* Start dot (candle open) */
-.tl-endpoint {
-  position: absolute;
-  top: 36px;
+  top: 32px;
   width: 10px; height: 10px;
   border-radius: 50%;
-  background: var(--border-bright);
-  border: 2px solid var(--text-dim);
+  background: var(--border-default);
+  border: 2px solid var(--text-muted);
 }
-.tl-endpoint.start { left: -5px; }
-.tl-endpoint.end { right: -5px; }
-.tl-endpoint.end.up { background: var(--green); border-color: var(--green); box-shadow: 0 0 8px var(--green-glow); }
-.tl-endpoint.end.down { background: var(--red); border-color: var(--red); box-shadow: 0 0 8px var(--red-glow); }
-.tl-endpoint.end.pending { background: var(--amber); border-color: var(--amber); box-shadow: 0 0 8px #ffab0040; }
+.tl-end.start { left: -5px; }
+.tl-end.finish { right: -5px; }
+.tl-end.finish.up { background: var(--green); border-color: var(--green); box-shadow: 0 0 6px var(--green-mid); }
+.tl-end.finish.down { background: var(--red); border-color: var(--red); box-shadow: 0 0 6px var(--red-mid); }
+.tl-end.finish.pending { background: var(--amber); border-color: var(--amber); }
 
-/* Trade dot on the line */
+.tl-labels {
+  position: absolute;
+  top: 48px;
+  left: 0; right: 0;
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.65rem;
+  color: var(--text-muted);
+}
+
+/* Trade dots */
 .tl-dot {
   position: absolute;
-  top: 26px;
-  width: 28px; height: 28px;
+  top: 22px;
+  width: 26px; height: 26px;
   border-radius: 50%;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 0.55rem;
+  display: grid; place-items: center;
+  font-size: 0.6rem;
   font-weight: 700;
-  letter-spacing: 0.03em;
   cursor: pointer;
-  transition: transform 0.15s, box-shadow 0.15s;
+  transition: transform 0.12s;
   z-index: 2;
   transform: translateX(-50%);
 }
-.tl-dot:hover { transform: translateX(-50%) scale(1.25); }
-.tl-dot.selected { transform: translateX(-50%) scale(1.3); }
-
-.tl-dot.buy {
-  background: var(--green);
-  color: var(--bg-primary);
-  box-shadow: 0 0 12px var(--green-glow);
-}
-.tl-dot.sell {
-  background: var(--red);
-  color: #fff;
-  box-shadow: 0 0 12px var(--red-glow);
-}
-.tl-dot.hold {
-  background: var(--bg-secondary);
-  color: var(--text-dim);
-  border: 2px solid var(--border-bright);
-  box-shadow: none;
-}
-.tl-dot.blocked {
-  background: var(--bg-secondary);
-  color: var(--amber);
-  border: 2px dashed var(--amber);
-  box-shadow: none;
-  opacity: 0.7;
-}
-
-/* Connector stem from dot to line */
+.tl-dot:hover { transform: translateX(-50%) scale(1.2); }
+.tl-dot.sel { transform: translateX(-50%) scale(1.25); }
 .tl-dot::after {
   content: '';
   position: absolute;
-  bottom: -7px;
-  left: 50%;
+  bottom: -6px; left: 50%;
   transform: translateX(-50%);
-  width: 2px;
-  height: 7px;
-  background: var(--border-bright);
+  width: 2px; height: 6px;
+  background: var(--border-default);
 }
+.tl-dot.buy { background: var(--green); color: var(--bg-base); box-shadow: 0 0 8px var(--green-mid); }
+.tl-dot.sell { background: var(--red); color: #fff; box-shadow: 0 0 8px var(--red-mid); }
+.tl-dot.hold { background: var(--bg-inset); color: var(--text-muted); border: 2px solid var(--border-bright); }
+.tl-dot.blocked { background: var(--bg-inset); color: var(--amber); border: 2px dashed var(--amber); opacity: 0.7; }
 
-/* Trade detail card (shown below timeline on click) */
+/* Detail panel */
 .tl-detail {
-  margin-top: 0.5rem;
-  padding: 0.6rem 0.75rem;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  font-size: 0.7rem;
+  margin: 0.35rem 0;
+  padding: 0.55rem 0.7rem;
+  background: var(--bg-inset);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  font-size: 0.78rem;
   display: none;
-  animation: fadeIn 0.2s ease-out;
+  animation: fadeUp 0.15s ease-out;
 }
-.tl-detail.visible { display: block; }
+.tl-detail.vis { display: block; }
+@keyframes fadeUp { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 
-.tl-detail-row {
+.td-row {
   display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  margin-bottom: 0.25rem;
+  gap: 0.6rem;
+  margin-bottom: 0.15rem;
 }
-
-.tl-detail-label { color: var(--text-dim); min-width: 70px; }
-.tl-detail-val { color: var(--text-primary); }
-
-.tl-detail-reasoning {
-  margin-top: 0.4rem;
-  padding-top: 0.4rem;
-  border-top: 1px dashed var(--border);
-  color: var(--text-secondary);
+.td-lbl { color: var(--text-muted); min-width: 60px; flex-shrink: 0; }
+.td-val { color: var(--text-primary); }
+.td-reasoning {
+  margin-top: 0.3rem;
+  padding-top: 0.3rem;
+  border-top: 1px dashed var(--border-subtle);
+  color: var(--text-tertiary);
   line-height: 1.4;
 }
-
-/* Confidence mini-bar in detail */
-.tl-conf-bar {
+.conf-bar {
   display: inline-block;
-  width: 60px; height: 4px;
-  background: var(--bg-primary);
+  width: 48px; height: 3px;
+  background: var(--bg-base);
   border-radius: 2px;
   overflow: hidden;
   vertical-align: middle;
-  margin-left: 0.4rem;
+  margin-left: 0.3rem;
 }
-.tl-conf-fill { height: 100%; border-radius: 2px; }
+.conf-fill { height: 100%; border-radius: 2px; }
 
-/* ── RESOLUTIONS TABLE ── */
-.res-table { width: 100%; border-collapse: collapse; font-size: 0.75rem; }
-.res-table thead { position: sticky; top: 0; background: var(--bg-card); z-index: 1; }
-.res-table th { text-align: left; font-size: 0.65rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-dim); padding: 0.5rem; border-bottom: 1px solid var(--border-bright); }
-.res-table td { padding: 0.5rem; border-bottom: 1px solid var(--border); white-space: nowrap; }
-.res-badge { font-size: 0.6rem; font-weight: 700; padding: 0.1rem 0.4rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.04em; }
-.res-badge.win { background: var(--green-dim); color: var(--green); }
-.res-badge.loss { background: var(--red-dim); color: var(--red); }
-.res-badge.flat { background: #ffffff0a; color: var(--text-dim); }
-.res-wrap { max-height: 300px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--border-bright) transparent; }
+/* ═══ RESOLUTIONS TABLE ═══ */
+.res-scroll {
+  max-height: 280px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-default) transparent;
+}
+.res-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+.res-table thead { position: sticky; top: 0; background: var(--bg-surface); z-index: 1; }
+.res-table th {
+  text-align: left;
+  font-size: 0.65rem; font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  padding: 0.4rem 0.5rem;
+  border-bottom: 1px solid var(--border-default);
+}
+.res-table td {
+  padding: 0.4rem 0.5rem;
+  border-bottom: 1px solid var(--border-subtle);
+  white-space: nowrap;
+}
+.res-b {
+  font-size: 0.65rem; font-weight: 700;
+  padding: 0.08rem 0.35rem;
+  border-radius: 3px;
+  text-transform: uppercase;
+}
+.res-b.win { background: var(--green-soft); color: var(--green); }
+.res-b.loss { background: var(--red-soft); color: var(--red); }
+.res-b.flat { background: rgba(255,255,255,0.04); color: var(--text-muted); }
 
-/* ── PNL CHART ── */
-.chart-container { width: 100%; height: 180px; position: relative; }
-.chart-container svg { width: 100%; height: 100%; }
+/* ═══ PNL CHART ═══ */
+.chart-wrap { width: 100%; height: 170px; position: relative; }
+.chart-wrap svg { width: 100%; height: 100%; }
 .chart-line { fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-.chart-area { opacity: 0.15; }
-.chart-zero-line { stroke: var(--text-dim); stroke-width: 0.5; stroke-dasharray: 2 2; }
-.chart-label { font-size: 10px; fill: var(--text-dim); font-family: var(--font-mono); }
+.chart-area { opacity: 0.12; }
+.chart-zero { stroke: var(--text-muted); stroke-width: 0.5; stroke-dasharray: 2 2; }
+.chart-lbl { font-size: 11px; fill: var(--text-muted); font-family: var(--mono); }
 
-/* ── RISK ── */
+/* ═══ RISK ═══ */
 .risk-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
-.risk-item { padding: 0.5rem; background: var(--bg-secondary); border-radius: 6px; border: 1px solid var(--border); }
-.risk-label { font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-dim); }
-.risk-value { font-family: var(--font-display); font-size: 1rem; font-weight: 600; }
-.risk-halt { grid-column: span 2; text-align: center; padding: 0.6rem; border-radius: 6px; font-weight: 700; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.1em; }
-.risk-halt.ok { background: var(--green-dim); color: var(--green); border: 1px solid #00e67622; }
-.risk-halt.halted { background: var(--red-dim); color: var(--red); border: 1px solid #ff3d5722; animation: pulse 1s ease-in-out infinite; }
+.risk-cell {
+  padding: 0.45rem 0.55rem;
+  background: var(--bg-inset);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+}
+.risk-lbl { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); }
+.risk-val { font: 600 1rem/1.2 var(--display); }
+.risk-status {
+  grid-column: span 2;
+  text-align: center;
+  padding: 0.45rem;
+  border-radius: var(--radius-sm);
+  font: 700 0.8rem/1 var(--display);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.risk-status.ok { background: var(--green-soft); color: var(--green); border: 1px solid #22c55e18; }
+.risk-status.halted { background: var(--red-soft); color: var(--red); border: 1px solid #ef444418; animation: blink 1s ease-in-out infinite; }
 
-/* ── EMPTY STATE ── */
-.empty-state { text-align: center; padding: 2rem; color: var(--text-dim); font-size: 0.8rem; }
-.empty-icon { font-size: 2rem; margin-bottom: 0.5rem; opacity: 0.3; }
+/* ═══ EMPTY ═══ */
+.empty { text-align: center; padding: 2rem; color: var(--text-muted); font-size: 0.85rem; }
+.empty-icon { font-size: 1.5rem; margin-bottom: 0.3rem; opacity: 0.3; }
 
-/* ── ANIMATIONS ── */
-@keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
-.card { animation: fadeIn 0.4s ease-out backwards; }
-.card:nth-child(1) { animation-delay: 0.02s; }
-.card:nth-child(2) { animation-delay: 0.04s; }
-.card:nth-child(3) { animation-delay: 0.06s; }
-.card:nth-child(4) { animation-delay: 0.08s; }
-.card:nth-child(5) { animation-delay: 0.10s; }
-.card:nth-child(6) { animation-delay: 0.12s; }
-.card:nth-child(7) { animation-delay: 0.14s; }
-.card:nth-child(8) { animation-delay: 0.16s; }
-.card:nth-child(9) { animation-delay: 0.18s; }
-.card:nth-child(10) { animation-delay: 0.20s; }
-.card:nth-child(11) { animation-delay: 0.22s; }
-.card:nth-child(12) { animation-delay: 0.24s; }
-.card:nth-child(13) { animation-delay: 0.26s; }
+/* ═══ RESPONSIVE ═══ */
+@media (max-width: 960px) {
+  .sidebar {
+    position: relative;
+    width: 100%;
+    flex-direction: row;
+    overflow-x: auto;
+    overflow-y: hidden;
+    border-right: none;
+    border-bottom: 1px solid var(--border-subtle);
+    top: auto; left: auto; bottom: auto;
+  }
+  .sb-brand { display: none; }
+  .sb-section-label { display: none; }
+  .sb-nav {
+    display: flex;
+    padding: 0;
+    white-space: nowrap;
+  }
+  .sb-item {
+    border-left: none;
+    border-bottom: 2px solid transparent;
+    flex-shrink: 0;
+    padding: 0.55rem 0.85rem;
+  }
+  .sb-item.active { border-left-color: transparent; border-bottom-color: var(--cyan); }
+  .sb-divider { display: none; }
+  .sb-footer { display: none; }
+  .main { margin-left: 0; padding: 1rem; }
+  .app { flex-direction: column; }
+}
 
-/* ── RESPONSIVE ── */
-@media (max-width: 1100px) {
-  .grid { grid-template-columns: repeat(3, 1fr); }
-  .stat-card { grid-column: span 1; }
-  .span-4, .span-3, .span-2 { grid-column: span 3; }
-  .span-6 { grid-column: span 3; }
+@media (max-width: 1200px) {
+  .live-row { grid-template-columns: 1fr 1fr; }
+  .content-grid { grid-template-columns: 1fr; }
 }
 @media (max-width: 700px) {
-  .grid { grid-template-columns: 1fr; }
-  .stat-card, .span-4, .span-3, .span-2, .span-6 { grid-column: span 1; }
-  header { flex-direction: column; gap: 0.75rem; align-items: flex-start; }
+  .live-row { grid-template-columns: 1fr; }
+  .metrics-row { grid-template-columns: repeat(2, 1fr); }
 }
 </style>
 </head>
 <body>
 
-<div class="container">
-  <header>
-    <div class="logo">
-      <div class="logo-icon">P</div>
-      <div>
-        <div class="logo-text">PolyBot</div>
-        <div class="logo-tag">BTC 5-Min Candle Trader</div>
+<div class="app">
+  <aside class="sidebar">
+    <div class="sb-brand">
+      <div class="sb-logo">P</div>
+      <div class="sb-brand-text">
+        <span class="sb-brand-name">PolyBot</span>
+        <span class="sb-brand-tag">BTC 5m Candle</span>
       </div>
     </div>
-    <div class="header-status">
-      <span><span class="status-dot" id="statusDot"></span> <span id="statusText">Connecting...</span></span>
-      <span class="refresh-info" id="refreshInfo">--</span>
+    <nav class="sb-nav" id="sidebarNav"></nav>
+    <div class="sb-footer">
+      <span class="sb-dot" id="sbDot"></span>
+      <span id="sbStatus">Connecting...</span>
     </div>
-  </header>
+  </aside>
 
-  <div class="grid" id="dashboard">
-
-    <!-- ROW 1: STAT CARDS -->
-    <div class="card stat-card">
-      <div class="card-label">Win Rate</div>
-      <div class="card-value" id="winRate">--</div>
-      <div class="card-sub" id="winLoss">0W / 0L</div>
-    </div>
-    <div class="card stat-card">
-      <div class="card-label">Total PnL</div>
-      <div class="card-value" id="totalPnl">--</div>
-      <div class="card-sub" id="pnlSub">&nbsp;</div>
-    </div>
-    <div class="card stat-card">
-      <div class="card-label">Cash</div>
-      <div class="card-value cyan" id="cash">--</div>
-      <div class="card-sub" id="cashSub">&nbsp;</div>
-    </div>
-    <div class="card stat-card">
-      <div class="card-label">Portfolio Value</div>
-      <div class="card-value blue" id="portfolioValue">--</div>
-      <div class="card-sub" id="portfolioSub">&nbsp;</div>
-    </div>
-    <div class="card stat-card">
-      <div class="card-label">AI Costs</div>
-      <div class="card-value amber" id="aiCosts">--</div>
-      <div class="card-sub" id="aiCostsSub">&nbsp;</div>
-    </div>
-    <div class="card stat-card">
-      <div class="card-label">Cycles</div>
-      <div class="card-value" id="cycles">--</div>
-      <div class="card-sub" id="cyclesSub">&nbsp;</div>
-    </div>
-
-    <!-- ROW 1B: ALL-TIME STATS (from log history) -->
-    <div class="card span-6" id="allTimeCard" style="display:none">
-      <div class="section-header">All-Time (from logs)</div>
-      <div style="display:flex;gap:2rem;flex-wrap:wrap;font-size:0.8rem">
-        <div><span class="card-label">Win Rate</span><br><span id="atWinRate" style="font-family:var(--font-display);font-size:1.1rem;font-weight:700">--</span> <span id="atWinLoss" style="color:var(--text-dim);font-size:0.7rem"></span></div>
-        <div><span class="card-label">Total PnL</span><br><span id="atPnl" style="font-family:var(--font-display);font-size:1.1rem;font-weight:700">--</span></div>
-        <div><span class="card-label">Resolutions</span><br><span id="atResolutions" style="font-family:var(--font-display);font-size:1.1rem;font-weight:700">--</span></div>
-        <div><span class="card-label">Total Trades</span><br><span id="atTrades" style="font-family:var(--font-display);font-size:1.1rem;font-weight:700">--</span></div>
+  <div class="main">
+    <div class="topbar">
+      <div class="topbar-left">
+        <div class="topbar-title" id="viewTitle">Overview</div>
+        <div class="topbar-sub" id="viewSub"></div>
       </div>
-    </div>
-
-    <!-- ROW 2: CURRENT MARKET + BTC + POSITIONS -->
-    <div class="card span-3" id="marketCard">
-      <div class="section-header">Current Market</div>
-      <div class="market-info">
-        <div>
-          <div class="market-title" id="marketTitle">Waiting for data...</div>
-          <a class="market-link" id="marketLink" href="#" target="_blank">View on Polymarket</a>
+      <div class="topbar-right">
+        <div class="topbar-status">
+          <span class="status-dot" id="statusDot"></span>
+          <span id="statusText">Connecting...</span>
         </div>
-        <div>
-          <div class="market-countdown" id="countdown">--:--</div>
-          <div class="market-countdown-label">Time Remaining</div>
-        </div>
-      </div>
-      <div class="token-row">
-        <span class="token-label up">UP</span>
-        <span class="token-mid" id="upMid">--</span>
-      </div>
-      <div class="token-row">
-        <span class="token-label down">DOWN</span>
-        <span class="token-mid" id="downMid">--</span>
+        <span id="refreshInfo">--</span>
       </div>
     </div>
 
-    <div class="card span-1" id="btcCard">
-      <div class="section-header">BTC</div>
-      <div class="btc-price" id="btcPrice">--</div>
-      <div class="btc-change" id="btcChange">--</div>
-      <div class="btc-candle-dir" id="btcCandle">&nbsp;</div>
-    </div>
+    <!-- Metrics Row -->
+    <div class="metrics-row" id="metricsRow"></div>
 
-    <div class="card span-2" id="posCard">
-      <div class="section-header">Positions</div>
-      <div class="pos-grid">
-        <div class="pos-item">
-          <div class="pos-token" style="color:var(--green)">UP</div>
-          <div class="pos-shares" id="upShares">0</div>
-          <div class="pos-detail" id="upEntry">avg: --</div>
-        </div>
-        <div class="pos-item">
-          <div class="pos-token" style="color:var(--red)">DOWN</div>
-          <div class="pos-shares" id="downShares">0</div>
-          <div class="pos-detail" id="downEntry">avg: --</div>
-        </div>
-      </div>
-    </div>
+    <!-- Live Row (market, btc, positions) -->
+    <div class="live-row" id="liveRow"></div>
 
-    <!-- ROW 3: CANDLE TIMELINE (full width) -->
-    <div class="card span-6" id="tradesCard">
-      <div class="section-header">Candle Timeline</div>
-      <div class="candle-timelines" id="candleTimelines">
-        <div class="empty-state"><div class="empty-icon">~</div>No trades yet</div>
-      </div>
-    </div>
-
-    <!-- ROW 4: RESOLUTIONS + PNL CHART + RISK -->
-    <div class="card span-2" id="resCard">
-      <div class="section-header">Resolutions</div>
-      <div class="res-wrap" id="resWrap">
-        <table class="res-table">
-          <thead><tr><th>Slug</th><th>Win</th><th>BTC Move</th><th>PnL</th></tr></thead>
-          <tbody id="resBody"></tbody>
-        </table>
-      </div>
-    </div>
-
-    <div class="card span-2" id="chartCard">
-      <div class="section-header">Cumulative PnL</div>
-      <div class="chart-container" id="chartContainer"></div>
-    </div>
-
-    <div class="card span-2" id="riskCard">
-      <div class="section-header">Risk</div>
-      <div class="risk-grid">
-        <div class="risk-item">
-          <div class="risk-label">Daily PnL</div>
-          <div class="risk-value" id="riskDailyPnl">--</div>
-        </div>
-        <div class="risk-item">
-          <div class="risk-label">Daily Trades</div>
-          <div class="risk-value" id="riskDailyTrades">--</div>
-        </div>
-        <div class="risk-item">
-          <div class="risk-label">Daily Fees</div>
-          <div class="risk-value" id="riskDailyFees">--</div>
-        </div>
-        <div class="risk-item">
-          <div class="risk-label">Max Drawdown</div>
-          <div class="risk-value" id="riskDrawdown">--</div>
-        </div>
-        <div class="risk-halt ok" id="riskHalt">ACTIVE</div>
-      </div>
-    </div>
-
+    <!-- Content Grid -->
+    <div class="content-grid" id="contentGrid"></div>
   </div>
 </div>
 
 <script>
 const DATA_URL = '../logs/dashboard_data.json';
-const REFRESH_INTERVAL = 60;
-const CANDLE_DURATION = 300; // 5 minutes in seconds
+const REFRESH_SEC = 60;
+const CANDLE_DUR = 300;
 let countdownTarget = 0;
-let refreshCountdown = REFRESH_INTERVAL;
+let refreshCountdown = REFRESH_SEC;
 let lastData = null;
+let selectedView = 'overview';
 
-function $(id) { return document.getElementById(id); }
-function fmt$(v, dec=2) { return v != null ? '$' + Number(v).toFixed(dec) : '--'; }
-function fmtPct(v, dec=1) { return v != null ? Number(v).toFixed(dec) + '%' : '--'; }
-function fmtNum(v, dec=2) { return v != null ? Number(v).toFixed(dec) : '--'; }
-function signClass(v) { return v > 0.001 ? 'green' : v < -0.001 ? 'red' : ''; }
+const $ = id => document.getElementById(id);
+const fmt$ = (v, d=2) => v != null ? '$' + Number(v).toFixed(d) : '--';
+const fmtPct = (v, d=1) => v != null ? Number(v).toFixed(d) + '%' : '--';
+const fmtNum = (v, d=2) => v != null ? Number(v).toFixed(d) : '--';
+const signCls = v => v > 0.001 ? 'v-green' : v < -0.001 ? 'v-red' : '';
+const pnlCls = v => v > 0.001 ? 'pos' : v < -0.001 ? 'neg' : 'zero';
+const pnlSign = v => v >= 0 ? '+' : '';
 
 function confColor(c) {
   if (c >= 0.75) return 'var(--green)';
@@ -616,395 +880,664 @@ function confColor(c) {
   return 'var(--red)';
 }
 
-function timeAgo(isoStr) {
-  const d = new Date(isoStr);
-  const diff = (Date.now() - d.getTime()) / 1000;
-  if (diff < 60) return Math.floor(diff) + 's ago';
-  if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
-  if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
-  return Math.floor(diff / 86400) + 'd ago';
+function shortTime(iso) {
+  return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 }
 
-function shortTime(isoStr) {
-  return new Date(isoStr).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+function timeAgo(iso) {
+  const s = (Date.now() - new Date(iso).getTime()) / 1000;
+  if (s < 60) return Math.floor(s) + 's ago';
+  if (s < 3600) return Math.floor(s / 60) + 'm ago';
+  if (s < 86400) return Math.floor(s / 3600) + 'h ago';
+  return Math.floor(s / 86400) + 'd ago';
 }
 
-function truncSlug(slug, maxLen=24) {
-  return slug.length > maxLen ? '...' + slug.slice(-maxLen) : slug;
+function truncSlug(s, n=28) { return s.length > n ? '...' + s.slice(-n) : s; }
+function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+const today = () => new Date().toISOString().slice(0, 10);
+function dateLabel(d) {
+  if (d === today()) return 'Today';
+  const dt = new Date(d + 'T12:00:00');
+  return dt.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
-function escHtml(s) {
-  const div = document.createElement('div');
-  div.textContent = s;
-  return div.innerHTML;
+// ── Session detection ──
+// A session = a continuous period the bot ran. Session breaks are detected
+// by time gaps > 10 minutes between consecutive trades or cycle resets.
+const SESSION_GAP_MS = 10 * 60 * 1000; // 10 minutes
+
+function calcStats(resolutions) {
+  let w = 0, l = 0, pnl = 0;
+  for (const r of resolutions) {
+    if (r.pnl > 0.001) w++;
+    else if (r.pnl < -0.001) l++;
+    pnl += r.pnl || 0;
+  }
+  const tot = w + l;
+  return { w, l, pnl, winRate: tot > 0 ? (w / tot) * 100 : 0, count: resolutions.length };
 }
 
-// ── Fetch & Render ──
+function calcTradeStats(trades) {
+  let invested = 0, returned = 0, buys = 0, sells = 0, holds = 0, confSum = 0, confN = 0;
+  for (const t of trades) {
+    if (t.risk_blocked) continue;
+    const cost = (t.size || 0) * (t.fill_price || 0);
+    if (t.action === 'BUY') { invested += cost; buys++; }
+    else if (t.action === 'SELL') { returned += cost; sells++; }
+    else { holds++; }
+    if (t.confidence && t.action !== 'HOLD') { confSum += t.confidence; confN++; }
+  }
+  return { invested, returned, buys, sells, holds, avgConf: confN > 0 ? confSum / confN : 0 };
+}
+
+// Returns { days: Map<dateStr, { sessions: [{id, trades, resolutions, startTs, endTs}], ... }> }
+let _cachedSessions = null;
+let _cachedTradeCount = -1;
+
+function detectSessions(trades, resolutions) {
+  // Invalidate cache if trade count changed (new data fetched)
+  if (_cachedSessions && trades.length === _cachedTradeCount) return _cachedSessions;
+  _cachedTradeCount = trades.length;
+  _cachedSessions = null;
+
+  // Group trades into sessions by time gaps
+  const allSessions = []; // flat list of {id, trades, startTs, endTs}
+  let currentBatch = [];
+  let prevTime = null;
+  let prevCycle = null;
+
+  const sortedTrades = [...trades].sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+
+  for (const t of sortedTrades) {
+    const ts = new Date(t.timestamp).getTime();
+    const cycle = t.cycle || 0;
+    let isBreak = false;
+    if (prevTime !== null) {
+      const gap = ts - prevTime;
+      if (gap > SESSION_GAP_MS) isBreak = true;
+      if (prevCycle !== null && cycle <= 2 && prevCycle > 5) isBreak = true;
+    }
+    if (isBreak && currentBatch.length > 0) {
+      allSessions.push(currentBatch);
+      currentBatch = [];
+    }
+    currentBatch.push(t);
+    prevTime = ts;
+    prevCycle = cycle;
+  }
+  if (currentBatch.length > 0) allSessions.push(currentBatch);
+
+  // Build session objects with IDs
+  const sessions = allSessions.map((batch, i) => {
+    const startTs = batch[0].timestamp;
+    const endTs = batch[batch.length - 1].timestamp;
+    return {
+      id: 'sess-' + i,
+      trades: batch,
+      resolutions: [], // filled below
+      startTs,
+      endTs,
+      date: startTs.slice(0, 10),
+    };
+  });
+
+  // Assign resolutions to sessions by timestamp overlap
+  for (const r of resolutions) {
+    const rTs = new Date(r.timestamp).getTime();
+    let bestSess = null;
+    let bestDist = Infinity;
+    for (const s of sessions) {
+      const sStart = new Date(s.startTs).getTime() - 60000; // 1min buffer before
+      const sEnd = new Date(s.endTs).getTime() + 5 * 60000; // 5min buffer after (resolution comes after last trade)
+      if (rTs >= sStart && rTs <= sEnd) {
+        const dist = Math.abs(rTs - (sStart + sEnd) / 2);
+        if (dist < bestDist) { bestDist = dist; bestSess = s; }
+      }
+    }
+    if (bestSess) bestSess.resolutions.push(r);
+    // else: orphaned resolution (no matching trades), skip for session view
+  }
+
+  // Group sessions by date
+  const days = new Map(); // dateStr -> { sessions: [...], allTrades, allResolutions }
+  for (const s of sessions) {
+    if (!days.has(s.date)) days.set(s.date, { sessions: [], allTrades: [], allResolutions: [] });
+    const day = days.get(s.date);
+    day.sessions.push(s);
+    day.allTrades.push(...s.trades);
+    day.allResolutions.push(...s.resolutions);
+  }
+
+  // Also add orphaned resolutions to their day
+  for (const r of resolutions) {
+    const rDate = (r.timestamp || '').slice(0, 10);
+    if (!rDate) continue;
+    if (!days.has(rDate)) days.set(rDate, { sessions: [], allTrades: [], allResolutions: [] });
+    const day = days.get(rDate);
+    if (!day.allResolutions.includes(r)) day.allResolutions.push(r);
+  }
+
+  _cachedSessions = { days, sessions };
+  return _cachedSessions;
+}
+
+function filteredData(data, view) {
+  const t = data.trades || [], r = data.resolutions || [];
+  if (view === 'overview') return { trades: t, resolutions: r };
+
+  const info = detectSessions(t, r);
+
+  // Check if it's a session ID
+  if (view.startsWith('sess-')) {
+    const sess = info.sessions.find(s => s.id === view);
+    if (sess) return { trades: sess.trades, resolutions: sess.resolutions };
+  }
+
+  // It's a date
+  const day = info.days.get(view);
+  if (day) return { trades: day.allTrades, resolutions: day.allResolutions };
+
+  return { trades: [], resolutions: [] };
+}
+
+// ── Sidebar ──
+function renderSidebar(data) {
+  const allTrades = data.trades || [];
+  const allRes = data.resolutions || [];
+  const info = detectSessions(allTrades, allRes);
+  const allStats = calcStats(allRes);
+  const dates = [...info.days.keys()].sort((a, b) => b.localeCompare(a));
+
+  let h = '';
+  h += '<div class="sb-section-label">Navigation</div>';
+
+  // Overview
+  const oa = selectedView === 'overview' ? ' active' : '';
+  h += `<div class="sb-item${oa}" onclick="selectView('overview')">
+    <div class="sb-item-top"><span class="sb-item-label">Overview</span>
+    <span class="sb-item-count">${allRes.length} res</span></div>
+    <div class="sb-item-metrics">
+      <span class="sb-wl w">${allStats.w}W</span>
+      <span class="sb-wl l">${allStats.l}L</span>
+      <span class="sb-pnl ${pnlCls(allStats.pnl)}">${pnlSign(allStats.pnl)}${allStats.pnl.toFixed(2)}</span>
+    </div>
+  </div>`;
+
+  h += '<div class="sb-divider"></div>';
+
+  for (const dateStr of dates) {
+    const day = info.days.get(dateStr);
+    const daySt = calcStats(day.allResolutions);
+    const dayActive = selectedView === dateStr ? ' active' : '';
+
+    // Day header with aggregate PnL
+    h += `<div class="sb-day-header">
+      <span>${esc(dateLabel(dateStr))}</span>
+      <span class="sb-day-pnl ${pnlCls(daySt.pnl)}">${pnlSign(daySt.pnl)}${daySt.pnl.toFixed(2)}</span>
+    </div>`;
+
+    // Day-level item (all sessions combined)
+    h += `<div class="sb-item${dayActive}" onclick="selectView('${dateStr}')">
+      <div class="sb-item-top"><span class="sb-item-label">All ${dateLabel(dateStr)}</span>
+      <span class="sb-item-count">${day.allTrades.length} trades</span></div>
+      <div class="sb-item-metrics">
+        <span class="sb-wl w">${daySt.w}W</span>
+        <span class="sb-wl l">${daySt.l}L</span>
+        <span class="sb-pnl ${pnlCls(daySt.pnl)}">${pnlSign(daySt.pnl)}${daySt.pnl.toFixed(2)}</span>
+      </div>
+    </div>`;
+
+    // Individual sessions under this day
+    if (day.sessions.length > 1) {
+      for (let si = 0; si < day.sessions.length; si++) {
+        const sess = day.sessions[si];
+        const sst = calcStats(sess.resolutions);
+        const sessActive = selectedView === sess.id ? ' active' : '';
+        const startTime = new Date(sess.startTs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const endTime = new Date(sess.endTs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+        h += `<div class="sb-item sb-session${sessActive}" onclick="selectView('${sess.id}')">
+          <div class="sb-item-top">
+            <span class="sb-item-label">Run ${si + 1} <span class="sb-session-time">${startTime}–${endTime}</span></span>
+            <span class="sb-item-count">${sess.trades.length}t</span>
+          </div>
+          <div class="sb-item-metrics">
+            <span class="sb-wl w">${sst.w}W</span>
+            <span class="sb-wl l">${sst.l}L</span>
+            <span class="sb-pnl ${pnlCls(sst.pnl)}">${pnlSign(sst.pnl)}${sst.pnl.toFixed(2)}</span>
+          </div>
+        </div>`;
+      }
+    }
+
+    h += '<div class="sb-divider"></div>';
+  }
+
+  $('sidebarNav').innerHTML = h;
+}
+
+function selectView(v) {
+  selectedView = v;
+  if (lastData) { renderSidebar(lastData); render(lastData); }
+}
+
+// ── Fetch ──
 async function fetchData() {
   try {
-    const resp = await fetch(DATA_URL + '?t=' + Date.now());
-    if (!resp.ok) throw new Error('HTTP ' + resp.status);
-    const data = await resp.json();
+    const r = await fetch(DATA_URL + '?t=' + Date.now());
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const data = await r.json();
     lastData = data;
+    renderSidebar(data);
     render(data);
     updateStatus(true, data.updated_at);
   } catch (e) {
     console.warn('Fetch failed:', e);
     updateStatus(false);
   }
-  refreshCountdown = REFRESH_INTERVAL;
+  refreshCountdown = REFRESH_SEC;
 }
 
-function updateStatus(ok, updatedAt) {
-  const dot = $('statusDot');
-  const txt = $('statusText');
+function updateStatus(ok, at) {
+  const setCls = (el, cls) => el.className = cls;
   if (ok) {
-    const age = (Date.now() - new Date(updatedAt).getTime()) / 1000;
-    dot.className = age < 120 ? 'status-dot live' : 'status-dot stale';
-    txt.textContent = age < 120 ? 'Live' : 'Stale (' + timeAgo(updatedAt) + ')';
+    const age = (Date.now() - new Date(at).getTime()) / 1000;
+    const c = age < 120 ? 'live' : 'stale';
+    const t = age < 120 ? 'Live' : 'Stale (' + timeAgo(at) + ')';
+    setCls($('statusDot'), 'status-dot ' + c);
+    $('statusText').textContent = t;
+    setCls($('sbDot'), 'sb-dot ' + c);
+    $('sbStatus').textContent = t;
   } else {
-    dot.className = 'status-dot stale';
-    txt.textContent = 'Disconnected';
+    setCls($('statusDot'), 'status-dot stale');
+    $('statusText').textContent = 'Disconnected';
+    setCls($('sbDot'), 'sb-dot stale');
+    $('sbStatus').textContent = 'Offline';
   }
 }
 
+// ── Main render ──
 function render(d) {
+  const isOv = selectedView === 'overview';
+  const isToday = selectedView === today();
+  const isSess = selectedView.startsWith('sess-');
+  // Show live panels if overview, today, or a session that is currently active
+  let showLive = isOv || isToday;
+  if (isSess && d.current_market) {
+    const info = detectSessions(d.trades || [], d.resolutions || []);
+    const sess = info.sessions.find(s => s.id === selectedView);
+    if (sess) {
+      // Session is "live" if its latest trade is within the last 15 minutes
+      const latestTs = new Date(sess.endTs).getTime();
+      showLive = (Date.now() - latestTs) < 15 * 60 * 1000;
+    }
+  }
+  const fd = filteredData(d, selectedView);
+  const stats = calcStats(fd.resolutions);
   const s = d.session;
-  $('winRate').textContent = fmtPct(s.win_rate, 0);
-  $('winRate').className = 'card-value ' + (s.win_rate >= 50 ? 'green' : s.win_rate > 0 ? 'red' : '');
-  $('winLoss').textContent = s.wins + 'W / ' + s.losses + 'L';
-  $('totalPnl').textContent = fmt$(s.total_pnl, 4);
-  $('totalPnl').className = 'card-value ' + signClass(s.total_pnl);
-  $('pnlSub').textContent = 'fees: ' + fmt$(s.total_fees, 4);
-  $('cash').textContent = fmt$(s.cash, 2);
-  $('cashSub').textContent = 'initial: ' + fmt$(s.initial_cash, 0);
-  $('portfolioValue').textContent = fmt$(s.portfolio_value, 2);
-  const pnlFromInitial = s.portfolio_value - s.initial_cash;
-  $('portfolioSub').textContent = (pnlFromInitial >= 0 ? '+' : '') + fmtNum(pnlFromInitial, 2) + ' from start';
-  $('aiCosts').textContent = fmt$(s.total_ai_cost, 4);
-  $('aiCostsSub').textContent = 'per cycle: ~' + fmt$(s.total_ai_cost / Math.max(s.cycles_run, 1), 4);
-  $('cycles').textContent = s.cycles_run;
 
-  // All-time stats
-  const at = d.all_time;
-  if (at && at.total_resolutions > 0) {
-    $('allTimeCard').style.display = '';
-    $('atWinRate').textContent = fmtPct(at.win_rate, 0);
-    $('atWinRate').style.color = at.win_rate >= 50 ? 'var(--green)' : 'var(--red)';
-    $('atWinLoss').textContent = at.wins + 'W / ' + at.losses + 'L';
-    $('atPnl').textContent = fmt$(at.total_pnl, 4);
-    $('atPnl').style.color = at.total_pnl >= 0 ? 'var(--green)' : 'var(--red)';
-    $('atResolutions').textContent = at.total_resolutions;
-    $('atTrades').textContent = at.total_trades;
+  // Topbar title
+  if (isOv) {
+    $('viewTitle').textContent = 'Overview';
+    $('viewSub').textContent = 'All-time aggregate';
+  } else if (isSess) {
+    const info = detectSessions(d.trades || [], d.resolutions || []);
+    const sess = info.sessions.find(s => s.id === selectedView);
+    if (sess) {
+      const dayIdx = info.days.get(sess.date)?.sessions.indexOf(sess) ?? 0;
+      const start = new Date(sess.startTs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const end = new Date(sess.endTs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      $('viewTitle').textContent = `Run ${dayIdx + 1} — ${start}–${end}`;
+      $('viewSub').textContent = dateLabel(sess.date);
+    } else {
+      $('viewTitle').textContent = 'Session';
+      $('viewSub').textContent = selectedView;
+    }
+  } else {
+    $('viewTitle').textContent = dateLabel(selectedView);
+    $('viewSub').textContent = selectedView;
   }
 
-  // Current market
-  const m = d.current_market;
-  if (m && m.title) {
-    $('marketTitle').textContent = m.title;
-    $('marketLink').href = m.polymarket_url || '#';
-    $('marketLink').style.display = 'inline';
-    $('upMid').textContent = m.up_mid != null ? fmtNum(m.up_mid, 4) : '--';
-    $('downMid').textContent = m.down_mid != null ? fmtNum(m.down_mid, 4) : '--';
-    countdownTarget = Date.now() + (m.time_remaining || 0) * 1000;
+  // Metrics
+  const ts = calcTradeStats(fd.trades);
+  let mh = '';
+  mh += `<div class="metric" data-tip="Percentage of resolved candles where the bot made a profit. Wins / (Wins + Losses)."><div class="metric-label">Win Rate</div>
+    <div class="metric-value ${stats.winRate >= 50 ? 'v-green' : stats.count > 0 ? 'v-red' : ''}">${fmtPct(stats.winRate, 0)}</div>
+    <div class="metric-sub">${stats.w}W / ${stats.l}L</div></div>`;
+  mh += `<div class="metric" data-tip="Total profit or loss from all resolved candle markets. Sum of gains from winning bets minus losses from losing bets."><div class="metric-label">PnL</div>
+    <div class="metric-value ${signCls(stats.pnl)}">${fmt$(stats.pnl, 4)}</div>
+    <div class="metric-sub">${stats.count} resolutions</div></div>`;
+
+  if (showLive) {
+    mh += `<div class="metric" data-tip="Current available cash in the bot's wallet. This is undeployed capital that can be used for new trades."><div class="metric-label">Cash</div>
+      <div class="metric-value v-cyan">${fmt$(s.cash, 2)}</div>
+      <div class="metric-sub">initial: ${fmt$(s.initial_cash, 0)}</div></div>`;
+    mh += `<div class="metric" data-tip="Total value: cash + current market value of all open token positions. Tracks overall account performance."><div class="metric-label">Portfolio</div>
+      <div class="metric-value v-blue">${fmt$(s.portfolio_value, 2)}</div>
+      <div class="metric-sub">${pnlSign(s.portfolio_value - s.initial_cash)}${fmtNum(s.portfolio_value - s.initial_cash, 2)} from start</div></div>`;
   } else {
-    $('marketTitle').textContent = 'Waiting for market...';
-    $('marketLink').style.display = 'none';
+    mh += `<div class="metric" data-tip="Total dollars spent buying UP and DOWN tokens during this period. Sum of (shares x price) for all BUY orders."><div class="metric-label">Invested</div>
+      <div class="metric-value v-cyan">${fmt$(ts.invested, 2)}</div>
+      <div class="metric-sub">${ts.buys} buy orders</div></div>`;
+    mh += `<div class="metric" data-tip="Total dollars received from selling tokens before market resolution. Sum of (shares x price) for all SELL orders."><div class="metric-label">Returned</div>
+      <div class="metric-value v-blue">${fmt$(ts.returned, 2)}</div>
+      <div class="metric-sub">${ts.sells} sell orders</div></div>`;
+  }
+
+  mh += `<div class="metric" data-tip="Average confidence level the AI assigned to its BUY/SELL decisions. Higher means the bot was more certain about its trades."><div class="metric-label">Avg Conf</div>
+    <div class="metric-value ${ts.avgConf >= 0.6 ? 'v-green' : ts.avgConf > 0 ? 'v-amber' : ''}">${ts.avgConf > 0 ? fmtPct(ts.avgConf * 100, 0) : '--'}</div>
+    <div class="metric-sub">${ts.buys + ts.sells} decisions</div></div>`;
+  mh += `<div class="metric" data-tip="Total number of trade cycles the bot executed (BUY, SELL, and HOLD decisions combined)."><div class="metric-label">Trades</div>
+    <div class="metric-value">${fd.trades.length}</div>
+    <div class="metric-sub">${isOv ? 'all time' : isSess ? 'this session' : dateLabel(selectedView)}</div></div>`;
+  $('metricsRow').innerHTML = mh;
+
+  // Live row
+  if (showLive) {
+    const m = d.current_market || {};
+    const b = d.btc || {};
+    const p = d.positions || {};
+    let lh = '';
+
+    // Market panel
+    lh += `<div class="panel" data-tip="The active 5-minute BTC candle market the bot is currently trading. Shows token midpoint prices and time until resolution.">
+      <div class="panel-header">Current Market</div>
+      <div style="display:grid;grid-template-columns:1fr auto;gap:0.5rem">
+        <div>
+          <div class="market-title" id="mktTitle">${esc(m.title || 'Waiting...')}</div>
+          ${m.polymarket_url ? `<a class="market-link" href="${esc(m.polymarket_url)}" target="_blank">View on Polymarket</a>` : ''}
+        </div>
+        <div class="countdown-wrap">
+          <div class="countdown-val" id="countdown">--:--</div>
+          <div class="countdown-label">Remaining</div>
+        </div>
+      </div>
+      <div class="token-row" data-tip="UP token: pays $1 if BTC closes higher than or equal to its opening price."><span class="tok-up">UP</span><span class="tok-val">${m.up_mid != null ? fmtNum(m.up_mid, 4) : '--'}</span></div>
+      <div class="token-row" data-tip="DOWN token: pays $1 if BTC closes lower than its opening price."><span class="tok-down">DOWN</span><span class="tok-val">${m.down_mid != null ? fmtNum(m.down_mid, 4) : '--'}</span></div>
+    </div>`;
+
+    if (m.time_remaining) countdownTarget = Date.now() + m.time_remaining * 1000;
+    else countdownTarget = 0;
+
+    // BTC panel
+    const chCls = (b.change_24h_pct || 0) >= 0 ? 'up' : 'down';
+    const chSign = (b.change_24h_pct || 0) >= 0 ? '+' : '';
+    lh += `<div class="panel" data-tip="Current BTC/USD spot price from Binance. The bot uses BTC price movement to predict UP/DOWN candle outcomes.">
+      <div class="panel-header">BTC Price</div>
+      <div class="btc-price">${b.price_usd ? '$' + Number(b.price_usd).toLocaleString(undefined, {maximumFractionDigits:0}) : '--'}</div>
+      <span class="btc-badge ${chCls}">${chSign}${fmtNum(b.change_24h_pct, 2)}% 24h</span>
+      <div class="btc-candle-dir">Last candle: ${(b.last_candle_direction || '--').toUpperCase()}</div>
+    </div>`;
+
+    // Open Positions panel — rewritten for clarity
+    const upShares = p.up_shares || 0;
+    const downShares = p.down_shares || 0;
+    const upAvg = p.up_avg_entry || 0;
+    const downAvg = p.down_avg_entry || 0;
+    const upMid = m.up_mid || 0.5;
+    const downMid = m.down_mid || 0.5;
+    const upPL = upShares > 0 ? (upMid - upAvg) * upShares : 0;
+    const downPL = downShares > 0 ? (downMid - downAvg) * downShares : 0;
+
+    lh += `<div class="panel" data-tip="Tokens the bot currently holds for the active candle. Each token pays $1 if correct, $0 if wrong. Unrealized P&L is based on current midpoint vs entry price.">
+      <div class="panel-header">Open Positions</div>
+      <div class="pos-grid">
+        <div class="pos-cell" data-tip="UP tokens held. Each pays $1 at resolution if BTC closes >= open price. Avg entry is what the bot paid per token.">
+          <div class="pos-label" style="color:var(--green)">UP Tokens</div>
+          <div class="pos-val">${fmtNum(upShares, 1)} <span style="font-size:0.7rem;color:var(--text-muted)">shares</span></div>
+          <div class="pos-sub">entry: ${upAvg > 0 ? '$' + fmtNum(upAvg, 4) : 'none'}</div>
+          ${upShares > 0 ? `<div class="pos-worth ${upPL >= 0 ? 'v-green' : 'v-red'}">${pnlSign(upPL)}$${fmtNum(Math.abs(upPL), 2)} unrealized</div>` : ''}
+        </div>
+        <div class="pos-cell" data-tip="DOWN tokens held. Each pays $1 at resolution if BTC closes < open price. Avg entry is what the bot paid per token.">
+          <div class="pos-label" style="color:var(--red)">DOWN Tokens</div>
+          <div class="pos-val">${fmtNum(downShares, 1)} <span style="font-size:0.7rem;color:var(--text-muted)">shares</span></div>
+          <div class="pos-sub">entry: ${downAvg > 0 ? '$' + fmtNum(downAvg, 4) : 'none'}</div>
+          ${downShares > 0 ? `<div class="pos-worth ${downPL >= 0 ? 'v-green' : 'v-red'}">${pnlSign(downPL)}$${fmtNum(Math.abs(downPL), 2)} unrealized</div>` : ''}
+        </div>
+      </div>
+    </div>`;
+
+    $('liveRow').innerHTML = lh;
+    $('liveRow').style.display = '';
+  } else {
+    $('liveRow').innerHTML = '';
+    $('liveRow').style.display = 'none';
     countdownTarget = 0;
   }
 
-  // BTC
-  const b = d.btc;
-  if (b && b.price_usd) {
-    $('btcPrice').textContent = '$' + Number(b.price_usd).toLocaleString(undefined, { maximumFractionDigits: 0 });
-    const chEl = $('btcChange');
-    chEl.textContent = (b.change_24h_pct >= 0 ? '+' : '') + fmtNum(b.change_24h_pct, 2) + '% 24h';
-    chEl.className = 'btc-change ' + (b.change_24h_pct >= 0 ? 'up' : 'down');
-    $('btcCandle').textContent = 'Last candle: ' + (b.last_candle_direction || '--').toUpperCase();
-  }
+  // Content grid
+  let cg = '';
 
-  // Positions
-  const p = d.positions;
-  if (p) {
-    $('upShares').textContent = fmtNum(p.up_shares, 2);
-    $('upEntry').textContent = 'avg: ' + (p.up_avg_entry > 0 ? fmtNum(p.up_avg_entry, 4) : '--');
-    $('downShares').textContent = fmtNum(p.down_shares, 2);
-    $('downEntry').textContent = 'avg: ' + (p.down_avg_entry > 0 ? fmtNum(p.down_avg_entry, 4) : '--');
-  }
-
-  // Candle Timelines
-  renderCandleTimelines(d.trades || [], d.resolutions || [], d.current_market);
+  // Candle timelines (full width)
+  cg += `<div class="panel panel-full" data-tip="Each row is a 5-minute BTC candle market. Click a row to expand and see the bot's trades plotted on a timeline. Green dots = BUY, red = SELL, gray = HOLD.">
+    <div class="panel-header">Candle Timelines</div>
+    <div class="candle-list" id="candleList">${buildCandleTimelines(fd.trades, fd.resolutions, d.current_market)}</div>
+  </div>`;
 
   // Resolutions
-  renderResolutions(d.resolutions || []);
+  cg += `<div class="panel" data-tip="Final outcomes of each candle market. Shows whether BTC went UP or DOWN and the bot's profit/loss for each resolved candle.">
+    <div class="panel-header">Resolutions</div>
+    <div class="res-scroll">${buildResTable(fd.resolutions)}</div>
+  </div>`;
 
   // PnL Chart
-  renderChart(d.resolutions || []);
+  cg += `<div class="panel" data-tip="Running total of profit and loss over time. Each point is a resolved candle. Green area = profitable, red area = in drawdown.">
+    <div class="panel-header">Cumulative PnL</div>
+    <div class="chart-wrap" id="chartWrap">${buildChart(fd.resolutions)}</div>
+  </div>`;
 
   // Risk
-  const r = d.risk;
-  if (r) {
-    $('riskDailyPnl').textContent = fmt$(r.daily_pnl, 4);
-    $('riskDailyPnl').style.color = r.daily_pnl >= 0 ? 'var(--green)' : 'var(--red)';
-    $('riskDailyTrades').textContent = r.daily_trades;
-    $('riskDailyFees').textContent = fmt$(r.daily_fees, 4);
-    $('riskDrawdown').textContent = fmt$(r.max_drawdown, 4);
-    const halt = $('riskHalt');
-    halt.className = r.is_halted ? 'risk-halt halted' : 'risk-halt ok';
-    halt.textContent = r.is_halted ? 'HALTED' : 'ACTIVE';
+  if (d.risk) {
+    const rk = d.risk;
+    cg += `<div class="panel" data-tip="Risk management limits tracked by the bot. If daily loss or trade limits are exceeded, the bot halts trading to protect capital.">
+      <div class="panel-header">Risk</div>
+      <div class="risk-grid">
+        <div class="risk-cell" data-tip="Total profit/loss for today. Tracked for daily loss limits."><div class="risk-lbl">Daily PnL</div><div class="risk-val" style="color:${rk.daily_pnl>=0?'var(--green)':'var(--red)'}">${fmt$(rk.daily_pnl, 4)}</div></div>
+        <div class="risk-cell" data-tip="Number of trades executed today. Tracked against daily trade limit."><div class="risk-lbl">Daily Trades</div><div class="risk-val">${rk.daily_trades}</div></div>
+        <div class="risk-cell" data-tip="Total Polymarket trading fees paid today."><div class="risk-lbl">Daily Fees</div><div class="risk-val">${fmt$(rk.daily_fees, 4)}</div></div>
+        <div class="risk-cell" data-tip="Largest peak-to-trough decline in portfolio value. If this exceeds the limit, trading is halted."><div class="risk-lbl">Max Drawdown</div><div class="risk-val">${fmt$(rk.max_drawdown, 4)}</div></div>
+        <div class="risk-status ${rk.is_halted?'halted':'ok'}">${rk.is_halted?'HALTED':'ACTIVE'}</div>
+      </div>
+    </div>`;
   }
+
+  $('contentGrid').innerHTML = cg;
 }
 
-// ═══════════════════════════════════════════════
-// CANDLE TIMELINE RENDERER
-// ═══════════════════════════════════════════════
+// ═══ CANDLE TIMELINES ═══
+function buildCandleTimelines(trades, resolutions, currentMarket) {
+  if (!trades.length) return '<div class="empty"><div class="empty-icon">~</div>No trades yet</div>';
 
-function renderCandleTimelines(trades, resolutions, currentMarket) {
-  const el = $('candleTimelines');
-  if (!trades.length) {
-    el.innerHTML = '<div class="empty-state"><div class="empty-icon">~</div>No trades yet</div>';
-    return;
-  }
-
-  // Group trades by candle_slug
-  const candleMap = new Map(); // slug -> { trades: [], resolution: null }
+  const candleMap = new Map();
   for (const t of trades) {
     const slug = t.candle_slug || 'unknown';
-    if (!candleMap.has(slug)) candleMap.set(slug, { trades: [], resolution: null });
+    if (!candleMap.has(slug)) candleMap.set(slug, { trades: [], res: null });
     candleMap.get(slug).trades.push(t);
   }
-
-  // Attach resolutions
   for (const r of resolutions) {
-    if (candleMap.has(r.slug)) {
-      candleMap.get(r.slug).resolution = r;
-    }
+    if (candleMap.has(r.slug)) candleMap.get(r.slug).res = r;
   }
 
-  // Sort candles: newest first. Use first trade timestamp as proxy for candle order.
   const candles = [...candleMap.entries()].sort((a, b) => {
     const tA = a[1].trades[0]?.timestamp || '';
     const tB = b[1].trades[0]?.timestamp || '';
     return tB.localeCompare(tA);
   });
 
-  const currentSlug = currentMarket?.slug || null;
+  const liveSlug = currentMarket?.slug || null;
 
-  el.innerHTML = candles.map(([slug, data], candleIdx) => {
-    const res = data.resolution;
-    const isActive = slug === currentSlug;
+  return candles.map(([slug, data], ci) => {
+    const res = data.res;
+    const isLive = slug === liveSlug;
+    const collapsed = !isLive;
     const polyUrl = 'https://polymarket.com/event/' + slug;
 
-    // Resolution badge
-    let resBadge = '';
-    if (isActive) {
-      resBadge = '<span class="candle-res-badge active">LIVE</span>';
-    } else if (res) {
-      const pnlVal = res.pnl || 0;
-      const cls = pnlVal > 0.001 ? 'win' : pnlVal < -0.001 ? 'loss' : 'flat';
-      const label = pnlVal > 0.001 ? 'WIN' : pnlVal < -0.001 ? 'LOSS' : 'FLAT';
-      const pnlStr = (pnlVal >= 0 ? '+' : '') + pnlVal.toFixed(4);
-      resBadge = '<span class="candle-res-badge ' + cls + '">' + label + ' ' + res.winner.toUpperCase() + ' ' + pnlStr + '</span>';
-    } else {
-      resBadge = '<span class="candle-res-badge flat">PENDING</span>';
+    // Badge
+    let badge;
+    if (isLive) badge = '<span class="candle-badge live">LIVE</span>';
+    else if (res) {
+      const c = res.pnl > 0.001 ? 'win' : res.pnl < -0.001 ? 'loss' : 'flat';
+      const lb = res.pnl > 0.001 ? 'WIN' : res.pnl < -0.001 ? 'LOSS' : 'FLAT';
+      badge = `<span class="candle-badge ${c}">${lb}</span>`;
+    } else badge = '<span class="candle-badge flat">PENDING</span>';
+
+    // PnL
+    let pnlH = '';
+    if (res) {
+      const v = res.pnl || 0;
+      pnlH = `<span class="candle-pnl ${pnlCls(v)}">${pnlSign(v)}${v.toFixed(4)}</span>`;
     }
+
+    // Action counts
+    let buys=0, sells=0, holds=0;
+    for (const t of data.trades) {
+      if (t.risk_blocked) continue;
+      if (t.action === 'BUY') buys++;
+      else if (t.action === 'SELL') sells++;
+      else holds++;
+    }
+    let pills = '';
+    if (buys) pills += `<span class="ca-pill b">B${buys}</span>`;
+    if (sells) pills += `<span class="ca-pill s">S${sells}</span>`;
+    if (holds) pills += `<span class="ca-pill h">H${holds}</span>`;
 
     // End dot class
     let endCls = 'pending';
     if (res) endCls = res.winner;
-    else if (isActive) endCls = 'pending';
 
-    // Build trade dots
+    // Dots
     const dots = data.trades.map((t, i) => {
-      const timeRem = t.time_remaining_at_trade || 0;
-      // Position: time_remaining=300 means start (0%), time_remaining=0 means end (100%)
-      const pct = Math.min(100, Math.max(0, ((CANDLE_DURATION - timeRem) / CANDLE_DURATION) * 100));
-      const isBlocked = t.risk_blocked;
-      let actionCls, dotLabel;
-      if (isBlocked) {
-        actionCls = 'blocked';
-        dotLabel = 'X';
-      } else if (t.action === 'BUY') {
-        actionCls = 'buy';
-        dotLabel = 'B';
-      } else if (t.action === 'SELL') {
-        actionCls = 'sell';
-        dotLabel = 'S';
-      } else {
-        actionCls = 'hold';
-        dotLabel = 'H';
-      }
-      const dotId = 'dot-' + candleIdx + '-' + i;
-      const titlePrefix = isBlocked ? 'BLOCKED ' : '';
-
-      return '<div class="tl-dot ' + actionCls + '" style="left:' + pct.toFixed(1) + '%" '
-        + 'data-dot-id="' + dotId + '" '
-        + 'onclick="toggleTradeDetail(this, event)" '
-        + 'title="' + titlePrefix + t.action + ' ' + t.token_side.toUpperCase() + ' @ ' + Math.round(timeRem) + 's remaining">'
-        + dotLabel + '</div>';
+      const tr = t.time_remaining_at_trade || 0;
+      const pct = Math.min(100, Math.max(0, ((CANDLE_DUR - tr) / CANDLE_DUR) * 100));
+      let cls, lbl;
+      if (t.risk_blocked) { cls = 'blocked'; lbl = 'X'; }
+      else if (t.action === 'BUY') { cls = 'buy'; lbl = 'B'; }
+      else if (t.action === 'SELL') { cls = 'sell'; lbl = 'S'; }
+      else { cls = 'hold'; lbl = 'H'; }
+      const did = `dot-${ci}-${i}`;
+      return `<div class="tl-dot ${cls}" style="left:${pct.toFixed(1)}%" data-did="${did}" onclick="toggleDetail(this,event)">${lbl}</div>`;
     }).join('');
 
-    // Time labels
-    const firstTrade = data.trades[0];
-    const startLabel = firstTrade?.timestamp ? shortTime(firstTrade.timestamp) : '';
-
-    // Build detail sections (hidden by default)
+    // Details
     const details = data.trades.map((t, i) => {
-      const dotId = 'dot-' + candleIdx + '-' + i;
+      const did = `dot-${ci}-${i}`;
       const conf = t.confidence || 0;
-      const confW = Math.round(conf * 100);
-      const timeRem = t.time_remaining_at_trade || 0;
-      const elapsed = CANDLE_DURATION - timeRem;
-      const sideColor = t.token_side === 'up' ? 'var(--green)' : 'var(--red)';
-      const sizeStr = t.action === 'HOLD' ? '--' : t.size.toFixed(1);
-      const fillStr = t.fill_price != null ? '$' + t.fill_price.toFixed(4) : '--';
-      const isBlocked = t.risk_blocked;
-
-      let blockedRow = '';
-      if (isBlocked) {
-        blockedRow = '<div class="tl-detail-row">'
-          + '  <span class="tl-detail-label">Blocked</span>'
-          + '  <span class="tl-detail-val" style="color:var(--amber)">' + escHtml(t.risk_block_reason || 'Risk check failed') + '</span>'
-          + '</div>';
-      }
-
-      const actionLabel = isBlocked ? 'BLOCKED ' + t.action : t.action;
-      const actionColor = isBlocked ? 'var(--amber)' : (t.action === 'BUY' ? 'var(--green)' : t.action === 'SELL' ? 'var(--red)' : 'var(--text-dim)');
-
-      return '<div class="tl-detail" id="detail-' + dotId + '">'
-        + '<div class="tl-detail-row">'
-        + '  <span class="tl-detail-label">Time</span>'
-        + '  <span class="tl-detail-val">' + (t.timestamp ? shortTime(t.timestamp) : '--')
-        + '    &mdash; ' + Math.round(elapsed) + 's / ' + CANDLE_DURATION + 's into candle (' + Math.round(timeRem) + 's remaining)</span>'
-        + '</div>'
-        + '<div class="tl-detail-row">'
-        + '  <span class="tl-detail-label">Action</span>'
-        + '  <span class="tl-detail-val"><strong style="color:' + actionColor + '">'
-        + actionLabel + '</strong> <span style="color:' + sideColor + '">' + t.token_side.toUpperCase() + '</span></span>'
-        + '</div>'
-        + blockedRow
-        + '<div class="tl-detail-row">'
-        + '  <span class="tl-detail-label">Size</span>'
-        + '  <span class="tl-detail-val">' + sizeStr + ' shares @ ' + fillStr + '</span>'
-        + '</div>'
-        + '<div class="tl-detail-row">'
-        + '  <span class="tl-detail-label">Confidence</span>'
-        + '  <span class="tl-detail-val">' + confW + '%'
-        + '    <span class="tl-conf-bar"><span class="tl-conf-fill" style="width:' + confW + '%;background:' + confColor(conf) + '"></span></span>'
-        + '  </span>'
-        + '</div>'
-        + '<div class="tl-detail-reasoning">' + escHtml(t.reasoning || 'No reasoning') + '</div>'
-        + '</div>';
+      const cw = Math.round(conf * 100);
+      const tr = t.time_remaining_at_trade || 0;
+      const el = CANDLE_DUR - tr;
+      const sc = t.token_side === 'up' ? 'var(--green)' : 'var(--red)';
+      const sz = t.action === 'HOLD' ? '--' : t.size.toFixed(1);
+      const fp = t.fill_price != null ? '$' + t.fill_price.toFixed(4) : '--';
+      const bl = t.risk_blocked;
+      let brRow = '';
+      if (bl) brRow = `<div class="td-row"><span class="td-lbl">Blocked</span><span class="td-val" style="color:var(--amber)">${esc(t.risk_block_reason || 'Risk check')}</span></div>`;
+      const al = bl ? 'BLOCKED ' + t.action : t.action;
+      const ac = bl ? 'var(--amber)' : (t.action === 'BUY' ? 'var(--green)' : t.action === 'SELL' ? 'var(--red)' : 'var(--text-muted)');
+      return `<div class="tl-detail" id="det-${did}">
+        <div class="td-row"><span class="td-lbl">Time</span><span class="td-val">${t.timestamp ? shortTime(t.timestamp) : '--'} — ${Math.round(el)}s/${CANDLE_DUR}s (${Math.round(tr)}s left)</span></div>
+        <div class="td-row"><span class="td-lbl">Action</span><span class="td-val"><strong style="color:${ac}">${al}</strong> <span style="color:${sc}">${t.token_side.toUpperCase()}</span></span></div>
+        ${brRow}
+        <div class="td-row"><span class="td-lbl">Size</span><span class="td-val">${sz} shares @ ${fp}</span></div>
+        <div class="td-row"><span class="td-lbl">Conf</span><span class="td-val">${cw}%<span class="conf-bar"><span class="conf-fill" style="width:${cw}%;background:${confColor(conf)}"></span></span></span></div>
+        <div class="td-reasoning">${esc(t.reasoning || 'No reasoning')}</div>
+      </div>`;
     }).join('');
 
-    return '<div class="candle-row">'
-      + '<div class="candle-header">'
-      + '  <span class="candle-slug"><a href="' + escHtml(polyUrl) + '" target="_blank">' + escHtml(truncSlug(slug, 40)) + '</a>'
-      + '    <span style="margin-left:0.5rem;color:var(--text-dim);font-size:0.6rem">' + data.trades.length + ' action' + (data.trades.length !== 1 ? 's' : '') + '</span>'
-      + '  </span>'
-      + '  ' + resBadge
-      + '</div>'
-      + '<div class="tl-track-wrap">'
-      + '  <div class="tl-line"></div>'
-      + '  <div class="tl-endpoint start"></div>'
-      + '  <div class="tl-endpoint end ' + endCls + '"></div>'
-      + '  <div class="tl-label-start">0:00</div>'
-      + '  <div class="tl-label-end">5:00</div>'
-      + '  ' + dots
-      + '</div>'
-      + details
-      + '</div>';
+    return `<div class="candle-row${collapsed ? ' collapsed' : ''}">
+      <div class="candle-hdr" onclick="toggleCandle(this.parentElement,event)">
+        <span class="candle-chevron">&#9660;</span>
+        <span class="candle-slug"><a href="${esc(polyUrl)}" target="_blank" onclick="event.stopPropagation()">${esc(truncSlug(slug, 32))}</a></span>
+        <span class="candle-actions">${pills}</span>
+        ${pnlH}
+        ${badge}
+      </div>
+      <div class="candle-body">
+        <div class="tl-wrap">
+          <div class="tl-line"></div>
+          <div class="tl-end start"></div>
+          <div class="tl-end finish ${endCls}"></div>
+          <div class="tl-labels"><span>0:00</span><span>5:00</span></div>
+          ${dots}
+        </div>
+        ${details}
+      </div>
+    </div>`;
   }).join('');
 }
 
-// Toggle trade detail panel when clicking a dot
-function toggleTradeDetail(dotEl, evt) {
-  evt.stopPropagation();
-  const dotId = dotEl.getAttribute('data-dot-id');
-  const detailEl = document.getElementById('detail-' + dotId);
-  if (!detailEl) return;
-
-  const wasVisible = detailEl.classList.contains('visible');
-
-  // Close all details in this candle row
-  const row = dotEl.closest('.candle-row');
-  row.querySelectorAll('.tl-detail').forEach(d => d.classList.remove('visible'));
-  row.querySelectorAll('.tl-dot').forEach(d => d.classList.remove('selected'));
-
-  if (!wasVisible) {
-    detailEl.classList.add('visible');
-    dotEl.classList.add('selected');
-  }
+function toggleCandle(row, e) {
+  if (e.target.tagName === 'A') return;
+  row.classList.toggle('collapsed');
 }
 
-// ── Resolutions ──
-function renderResolutions(resolutions) {
-  const tbody = $('resBody');
-  if (!resolutions.length) {
-    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--text-dim);padding:1.5rem">No resolutions yet</td></tr>';
-    return;
-  }
-  tbody.innerHTML = [...resolutions].reverse().map(r => {
-    const pnlCls = r.pnl > 0.001 ? 'win' : r.pnl < -0.001 ? 'loss' : 'flat';
-    const pnlLabel = r.pnl > 0.001 ? 'WIN' : r.pnl < -0.001 ? 'LOSS' : 'FLAT';
-    const moveSign = r.btc_move >= 0 ? '+' : '';
-    return '<tr>'
-      + '<td title="' + escHtml(r.slug) + '">' + truncSlug(r.slug) + '</td>'
-      + '<td><span class="res-badge ' + pnlCls + '">' + pnlLabel + '</span> <span style="color:var(--text-dim);font-size:0.65rem">' + r.winner.toUpperCase() + '</span></td>'
-      + '<td>' + moveSign + '$' + Math.abs(r.btc_move).toFixed(0) + '</td>'
-      + '<td style="color:' + (r.pnl >= 0 ? 'var(--green)' : 'var(--red)') + '">' + (r.pnl >= 0 ? '+' : '') + r.pnl.toFixed(4) + '</td>'
-      + '</tr>';
+function toggleDetail(dot, e) {
+  e.stopPropagation();
+  const did = dot.getAttribute('data-did');
+  const det = document.getElementById('det-' + did);
+  if (!det) return;
+  const wasVis = det.classList.contains('vis');
+  const row = dot.closest('.candle-row');
+  row.querySelectorAll('.tl-detail').forEach(d => d.classList.remove('vis'));
+  row.querySelectorAll('.tl-dot').forEach(d => d.classList.remove('sel'));
+  if (!wasVis) { det.classList.add('vis'); dot.classList.add('sel'); }
+}
+
+// ═══ RESOLUTIONS TABLE ═══
+function buildResTable(resolutions) {
+  if (!resolutions.length) return '<div class="empty"><div class="empty-icon">~</div>No resolutions</div>';
+  const rows = [...resolutions].reverse().map(r => {
+    const c = r.pnl > 0.001 ? 'win' : r.pnl < -0.001 ? 'loss' : 'flat';
+    const lb = r.pnl > 0.001 ? 'WIN' : r.pnl < -0.001 ? 'LOSS' : 'FLAT';
+    const ms = r.btc_move >= 0 ? '+' : '';
+    return `<tr>
+      <td title="${esc(r.slug)}">${truncSlug(r.slug, 22)}</td>
+      <td><span class="res-b ${c}">${lb}</span> <span style="color:var(--text-muted);font-size:0.7rem">${r.winner.toUpperCase()}</span></td>
+      <td>${ms}$${Math.abs(r.btc_move).toFixed(0)}</td>
+      <td style="color:${r.pnl >= 0 ? 'var(--green)' : 'var(--red)'}">${pnlSign(r.pnl)}${r.pnl.toFixed(4)}</td>
+    </tr>`;
   }).join('');
+  return `<table class="res-table"><thead><tr><th data-tip="Polymarket candle market identifier">Slug</th><th data-tip="WIN if bot profited, LOSS if not. UP/DOWN shows which side won.">Result</th><th data-tip="BTC price change during the 5-minute candle (close - open)">BTC Move</th><th data-tip="Bot's profit or loss on this candle from token positions">PnL</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
-// ── PnL Chart ──
-function renderChart(resolutions) {
-  const container = $('chartContainer');
-  if (resolutions.length < 2) {
-    container.innerHTML = '<div class="empty-state"><div class="empty-icon">~</div>Need 2+ resolutions for chart</div>';
-    return;
-  }
-  const series = [0];
-  let cum = 0;
-  for (const r of resolutions) { cum += r.pnl; series.push(cum); }
-
-  const W = 360, H = 160;
-  const pad = { t: 10, r: 45, b: 20, l: 10 };
-  const plotW = W - pad.l - pad.r, plotH = H - pad.t - pad.b;
-  const minV = Math.min(0, ...series), maxV = Math.max(0, ...series);
-  const range = maxV - minV || 1;
-
-  function x(i) { return pad.l + (i / (series.length - 1)) * plotW; }
-  function y(v) { return pad.t + plotH - ((v - minV) / range) * plotH; }
-
-  const points = series.map((v, i) => x(i).toFixed(1) + ',' + y(v).toFixed(1)).join(' ');
-  const areaPoints = points + ' ' + x(series.length - 1).toFixed(1) + ',' + y(0).toFixed(1) + ' ' + x(0).toFixed(1) + ',' + y(0).toFixed(1);
-  const lineColor = cum >= 0 ? 'var(--green)' : 'var(--red)';
-  const zeroY = y(0);
-
-  let labels = '<text class="chart-label" x="' + (W - pad.r + 6) + '" y="' + (pad.t + 4) + '" text-anchor="start">' + maxV.toFixed(2) + '</text>';
-  labels += '<text class="chart-label" x="' + (W - pad.r + 6) + '" y="' + (H - pad.b) + '" text-anchor="start">' + minV.toFixed(2) + '</text>';
-  if (minV < 0 && maxV > 0) labels += '<text class="chart-label" x="' + (W - pad.r + 6) + '" y="' + (zeroY + 3) + '" text-anchor="start">0</text>';
-
-  container.innerHTML = '<svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none">'
-    + '<line class="chart-zero-line" x1="' + pad.l + '" y1="' + zeroY + '" x2="' + (W - pad.r) + '" y2="' + zeroY + '" />'
-    + '<polygon class="chart-area" points="' + areaPoints + '" fill="' + lineColor + '" />'
-    + '<polyline class="chart-line" points="' + points + '" stroke="' + lineColor + '" />'
-    + series.map((v, i) => '<circle cx="' + x(i).toFixed(1) + '" cy="' + y(v).toFixed(1) + '" r="3" fill="' + lineColor + '" stroke="var(--bg-card)" stroke-width="1.5" />').join('')
-    + labels + '</svg>';
+// ═══ PNL CHART ═══
+function buildChart(resolutions) {
+  if (resolutions.length < 2) return '<div class="empty"><div class="empty-icon">~</div>Need 2+ resolutions</div>';
+  const ser = [0]; let cum = 0;
+  for (const r of resolutions) { cum += r.pnl; ser.push(cum); }
+  const W = 340, H = 150;
+  const pad = { t: 8, r: 40, b: 18, l: 8 };
+  const pW = W - pad.l - pad.r, pH = H - pad.t - pad.b;
+  const mn = Math.min(0, ...ser), mx = Math.max(0, ...ser);
+  const rng = mx - mn || 1;
+  const x = i => pad.l + (i / (ser.length - 1)) * pW;
+  const y = v => pad.t + pH - ((v - mn) / rng) * pH;
+  const pts = ser.map((v, i) => x(i).toFixed(1) + ',' + y(v).toFixed(1)).join(' ');
+  const aPts = pts + ' ' + x(ser.length-1).toFixed(1)+','+y(0).toFixed(1)+' '+x(0).toFixed(1)+','+y(0).toFixed(1);
+  const col = cum >= 0 ? 'var(--green)' : 'var(--red)';
+  const zy = y(0);
+  let lbls = `<text class="chart-lbl" x="${W-pad.r+5}" y="${pad.t+3}" text-anchor="start">${mx.toFixed(2)}</text>`;
+  lbls += `<text class="chart-lbl" x="${W-pad.r+5}" y="${H-pad.b}" text-anchor="start">${mn.toFixed(2)}</text>`;
+  if (mn < 0 && mx > 0) lbls += `<text class="chart-lbl" x="${W-pad.r+5}" y="${zy+3}" text-anchor="start">0</text>`;
+  const circles = ser.map((v,i) => `<circle cx="${x(i).toFixed(1)}" cy="${y(v).toFixed(1)}" r="2.5" fill="${col}" stroke="var(--bg-surface)" stroke-width="1.5"/>`).join('');
+  return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+    <line class="chart-zero" x1="${pad.l}" y1="${zy}" x2="${W-pad.r}" y2="${zy}"/>
+    <polygon class="chart-area" points="${aPts}" fill="${col}"/>
+    <polyline class="chart-line" points="${pts}" stroke="${col}"/>
+    ${circles}${lbls}</svg>`;
 }
 
-// ── Countdown ──
+// ═══ COUNTDOWN ═══
 function tickCountdown() {
-  const el = $('countdown');
-  if (countdownTarget <= 0) { el.textContent = '--:--'; el.className = 'market-countdown'; return; }
+  const el = document.getElementById('countdown');
+  if (!el || countdownTarget <= 0) { if (el) { el.textContent = '--:--'; el.className = 'countdown-val'; } return; }
   const rem = Math.max(0, (countdownTarget - Date.now()) / 1000);
   el.textContent = Math.floor(rem / 60) + ':' + String(Math.floor(rem % 60)).padStart(2, '0');
-  el.className = 'market-countdown' + (rem < 30 ? ' urgent' : '');
+  el.className = 'countdown-val' + (rem < 30 ? ' urgent' : '');
 }
 
 function tickRefresh() {
-  $('refreshInfo').textContent = 'Refresh in ' + refreshCountdown + 's';
+  $('refreshInfo').textContent = 'Refresh ' + refreshCountdown + 's';
   refreshCountdown--;
   if (refreshCountdown < 0) fetchData();
 }
