@@ -79,6 +79,31 @@
       "name": "confidence_calibration",
       "enabled": true,
       "params": {}
+    },
+    {
+      "name": "consecutive_streak",
+      "enabled": true,
+      "params": {}
+    },
+    {
+      "name": "streak_magnitude",
+      "enabled": true,
+      "params": {}
+    },
+    {
+      "name": "btc_vs_candle_open",
+      "enabled": true,
+      "params": {}
+    },
+    {
+      "name": "volatility_30m",
+      "enabled": true,
+      "params": {}
+    },
+    {
+      "name": "volume_trend",
+      "enabled": true,
+      "params": {}
     }
   ]
 }

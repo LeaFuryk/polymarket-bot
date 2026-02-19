@@ -130,7 +130,7 @@ Claude produces:
 
 The bot computes technical indicators controlled by `data/feature_config.json`. Reflection can enable, disable, or tune these indicators based on observed correlation with wins/losses.
 
-**Available indicators (13 total):**
+**Available indicators (18 total):**
 
 | Indicator | Category | What it measures |
 |-----------|----------|------------------|
@@ -145,10 +145,15 @@ The bot computes technical indicators controlled by `data/feature_config.json`. 
 | `btc_volatility` | BTC | BTC spot price standard deviation |
 | `btc_candle_momentum` | BTC Candle | Up/down ratio of last N 5-min candles |
 | `btc_candle_ma_cross` | BTC Candle | MA5 vs MA12 crossover on 5-min candle closes |
+| `consecutive_streak` | BTC Candle | Count of consecutive same-direction candles with mean reversion signal |
+| `streak_magnitude` | BTC Candle | Total $ move during candle streak with exhaustion detection |
+| `btc_vs_candle_open` | BTC Candle | Where BTC is NOW vs current candle open (the key binary outcome signal) |
+| `volatility_30m` | BTC Candle | Avg candle range + stdev for regime detection (trending vs choppy) |
+| `volume_trend` | BTC Candle | Recent vs prior volume ratio for momentum confirmation |
 | `session_streak` | Session | Current W/L record |
 | `confidence_calibration` | Session | Avg confidence on wins vs losses |
 
-**Default config** enables 6 indicators: `token_momentum`, `token_volatility`, `orderbook_imbalance`, `btc_momentum`, `btc_candle_momentum`, `btc_candle_ma_cross`. The reflection system enables/disables others as it identifies useful patterns.
+**Default config** enables most indicators. The reflection system can enable, disable, or tune any indicator as it identifies useful patterns.
 
 ---
 

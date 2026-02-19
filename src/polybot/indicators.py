@@ -433,3 +433,164 @@ def _confidence_calibration(
         value=diff,
         label=f"win_avg={session.avg_win_confidence:.2f} loss_avg={session.avg_loss_confidence:.2f} ({assessment})",
     )
+
+
+# ---------------------------------------------------------------------------
+# BTC candle streak & magnitude indicators
+# ---------------------------------------------------------------------------
+
+@register("consecutive_streak")
+def _consecutive_streak(
+    snap: MarketSnapshot, params: dict, _session: SessionContext | None,
+) -> IndicatorResult | None:
+    """Count of consecutive same-direction 5-min BTC candles (from most recent)."""
+    candles = snap.btc_candles
+    if not candles:
+        return None
+    streak = 1
+    direction = candles[-1].direction
+    for c in reversed(candles[:-1]):
+        if c.direction == direction:
+            streak += 1
+        else:
+            break
+    if streak >= 4:
+        signal = f"strong {direction} streak — mean reversion likely"
+    elif streak >= 3:
+        signal = f"moderate {direction} streak — watch for reversal"
+    elif streak >= 2:
+        signal = f"mild {direction} continuation"
+    else:
+        signal = "no streak"
+    return IndicatorResult(
+        name="Consecutive Streak",
+        value=float(streak),
+        label=f"{streak} {direction.upper()} candles ({signal})",
+    )
+
+
+@register("streak_magnitude")
+def _streak_magnitude(
+    snap: MarketSnapshot, params: dict, _session: SessionContext | None,
+) -> IndicatorResult | None:
+    """Total BTC $ move during the current consecutive candle streak."""
+    candles = snap.btc_candles
+    if len(candles) < 2:
+        return None
+    # Count streak
+    direction = candles[-1].direction
+    streak_start = len(candles) - 1
+    for i in range(len(candles) - 2, -1, -1):
+        if candles[i].direction == direction:
+            streak_start = i
+        else:
+            break
+    magnitude = candles[-1].close - candles[streak_start].open
+    abs_mag = abs(magnitude)
+    if abs_mag > 200:
+        signal = "exhaustion zone — reversal risk high"
+    elif abs_mag > 100:
+        signal = "strong move — consider fade"
+    elif abs_mag > 50:
+        signal = "moderate move"
+    else:
+        signal = "small move"
+    return IndicatorResult(
+        name="Streak Magnitude",
+        value=magnitude,
+        label=f"${magnitude:+,.0f} ({signal})",
+    )
+
+
+@register("btc_vs_candle_open")
+def _btc_vs_candle_open(
+    snap: MarketSnapshot, params: dict, _session: SessionContext | None,
+) -> IndicatorResult | None:
+    """Where is BTC NOW relative to the current 5-min candle open?
+
+    This is the key metric for binary candle markets: if BTC is already
+    above the candle open, UP is currently winning (and vice versa).
+    """
+    if not snap.btc_price or not snap.btc_candles:
+        return None
+    # The current (in-progress) candle open is approximated by the last
+    # completed candle's close — since candles are contiguous.
+    candle_open = snap.btc_candles[-1].close
+    current_price = snap.btc_price.price_usd
+    diff = current_price - candle_open
+    pct = diff / candle_open * 100 if candle_open else 0
+
+    if diff > 0:
+        signal = "UP currently winning"
+    elif diff < 0:
+        signal = "DOWN currently winning"
+    else:
+        signal = "flat — UP wins ties"
+
+    return IndicatorResult(
+        name="BTC vs Candle Open",
+        value=diff,
+        label=f"${diff:+,.0f} ({pct:+.3f}%) — {signal}",
+    )
+
+
+@register("volatility_30m")
+def _volatility_30m(
+    snap: MarketSnapshot, params: dict, _session: SessionContext | None,
+) -> IndicatorResult | None:
+    """Standard deviation of 5-min candle ranges over last 30 minutes."""
+    candles = snap.btc_candles
+    if len(candles) < 6:
+        return None
+    recent = candles[-6:]
+    ranges = [c.high - c.low for c in recent]
+    vol = statistics.stdev(ranges) if len(ranges) >= 2 else 0
+    avg_range = statistics.mean(ranges)
+
+    if avg_range > 150:
+        regime = "high volatility — trending market"
+    elif avg_range > 80:
+        regime = "moderate volatility"
+    elif avg_range > 30:
+        regime = "low volatility — range-bound"
+    else:
+        regime = "very low volatility — choppy"
+
+    return IndicatorResult(
+        name="30min Volatility",
+        value=avg_range,
+        label=f"avg_range=${avg_range:.0f} stdev=${vol:.0f} ({regime})",
+    )
+
+
+@register("volume_trend")
+def _volume_trend(
+    snap: MarketSnapshot, params: dict, _session: SessionContext | None,
+) -> IndicatorResult | None:
+    """Compare recent volume to earlier volume — increasing/decreasing/flat."""
+    candles = snap.btc_candles
+    if len(candles) < 6:
+        return None
+    recent_3 = candles[-3:]
+    prior_3 = candles[-6:-3]
+    recent_vol = statistics.mean([c.volume for c in recent_3])
+    prior_vol = statistics.mean([c.volume for c in prior_3])
+    if prior_vol < 1e-9:
+        return None
+    ratio = recent_vol / prior_vol
+    if ratio > 1.3:
+        signal = "increasing — confirms direction"
+    elif ratio > 1.1:
+        signal = "slightly increasing"
+    elif ratio < 0.7:
+        signal = "decreasing — weakening momentum"
+    elif ratio < 0.9:
+        signal = "slightly decreasing"
+    else:
+        signal = "flat"
+
+    return IndicatorResult(
+        name="Volume Trend",
+        value=ratio,
+        label=f"{ratio:.2f}x ({signal})",
+    )
