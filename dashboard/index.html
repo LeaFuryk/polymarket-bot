@@ -1290,8 +1290,10 @@ function render(d) {
 
   // AI Cost: use bot's live total for any live view, per-trade sums for historical
   const aiCostVal = showLive ? s.total_ai_cost : ts.totalAiCost;
-  const aiCostSub = showLive ? 'current session' : ts.totalAiCost > 0 ? `${fd.trades.length} cycles` : 'no data';
-  mh += `<div class="metric" data-tip="Total cost of Claude API calls for AI decisions and reflections. This is deducted from the bot's cash — the bot pays for its own brain."><div class="metric-label">AI Cost</div>
+  const pfSkipped = s.prefilter_skipped || 0, pfChecked = s.prefilter_checked || 0;
+  const pfRate = pfChecked > 0 ? (pfSkipped / pfChecked * 100).toFixed(0) + '%' : '--';
+  const aiCostSub = showLive ? `pre-filter: ${pfSkipped}/${pfChecked} skipped (${pfRate})` : ts.totalAiCost > 0 ? `${fd.trades.length} cycles` : 'no data';
+  mh += `<div class="metric" data-tip="Total cost of Claude API calls for AI decisions and reflections. Pre-filter shows how many cycles were skipped without calling AI (saving cost)."><div class="metric-label">AI Cost</div>
     <div class="metric-value v-amber">${fmt$(aiCostVal, 4)}</div>
     <div class="metric-sub">${aiCostSub}</div></div>`;
 
