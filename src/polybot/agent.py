@@ -15,6 +15,7 @@ from rich.text import Text
 
 from polybot.calibration import ConfidenceCalibrator
 from polybot.config import AppConfig
+from polybot.exit_tracker import ExitTracker
 from polybot.decision_engine.engine import DecisionEngine
 from polybot.indicators import (
     FeatureConfig,
@@ -140,6 +141,11 @@ class TradingAgent:
 
         # Confidence calibration (tracks stated vs actual win rates)
         self._calibrator = ConfidenceCalibrator(
+            data_dir=Path(config.logging.log_dir),
+        )
+
+        # Exit strategy tracker (what-if analysis for SELL decisions)
+        self._exit_tracker = ExitTracker(
             data_dir=Path(config.logging.log_dir),
         )
 
@@ -284,8 +290,9 @@ class TradingAgent:
             self._trade_log.write_resolution(resolution)
             self._last_resolution = resolution
 
-            # Record outcome for confidence calibration
+            # Record outcome for confidence calibration and exit analysis
             self._calibrator.record_outcome(resolution.slug, resolution.winner)
+            self._exit_tracker.record_outcome(resolution.slug, resolution.winner)
 
             # Update session stats (skip flat resolutions with no position)
             had_position = resolution_pnl != 0.0
@@ -413,12 +420,17 @@ class TradingAgent:
             time_remaining=time_remaining,
         )
 
+        exit_summary = self._exit_tracker.get_summary()
+        calibration_summary = self._calibrator.get_calibration_summary()
+        if exit_summary:
+            calibration_summary = calibration_summary + "\n" + exit_summary
+
         feedback_context = self._knowledge_manager.build_feedback_context(
             self._recent_resolutions,
             self._session_wins,
             self._session_losses,
             self._session_resolution_pnl,
-            calibration_summary=self._calibrator.get_calibration_summary(),
+            calibration_summary=calibration_summary,
         )
         logger.debug("Feedback context: %s", feedback_context[:200])
 
@@ -555,6 +567,17 @@ class TradingAgent:
                     confidence=decision.confidence,
                     token_side=decision.token_side.value,
                     entry_price=fill.fill_price,
+                )
+
+            # Register exits for what-if analysis (SELL only)
+            if decision.action == Action.SELL and self._current_market:
+                self._exit_tracker.register_exit(
+                    slug=self._current_market.slug,
+                    token_side=decision.token_side.value,
+                    entry_price=token_pos.avg_entry_price,
+                    exit_price=fill.fill_price,
+                    exit_size=fill.size,
+                    time_remaining=time_remaining,
                 )
 
         # 9. Post-fill mark-to-market
