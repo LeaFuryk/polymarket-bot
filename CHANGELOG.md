@@ -19,6 +19,9 @@ All notable changes to this project will be documented in this file.
 - `MarketDiscovery.fetch_market_by_slug()` — Public method to fetch a specific candle market by its exact slug, used by the pending bet resolver to look up past markets on the Gamma API.
 - `_compute_pnl_from_trades()` helper — Reconstructs position PnL from logged BUY/SELL fills for settlement (winning token = $1, losing = $0).
 
+- **Dashboard: Intelligence panel** — New panel showing ML model training status (sample count, trained/training state), confidence calibration curve as a visual bar chart (stated confidence bins vs actual win rates, color-coded above/below break-even, dimmed bars for insufficient data), and exit analysis stats (good-exit rate, money saved by early exits, missed upside from exits). All three intelligence subsystems are now surfaced for live monitoring.
+- **Dashboard: Chainlink price in BTC panel** — The BTC panel now shows the Chainlink on-chain price alongside the Binance price, with the dollar divergence between them. Divergences above $50 display an amber warning icon since Polymarket resolves via Chainlink, not Binance.
+
 ### Fixed
 - **Dashboard Cash/Portfolio metrics now scoped per session** — When viewing a specific session or day, the Cash and Portfolio cards now show that session's start→current values instead of always referencing the global `initial_cash`. Overview still shows the all-time view.
 - **Added AI Cost and Fees metric cards to dashboard** — Two new cards show the total Claude API cost and trading fees for the selected view, making it clear why a session with positive PnL can still lose portfolio value. AI cost is now logged per-trade in `TradeRecord.ai_cost` so historical sessions can compute it too.

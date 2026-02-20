@@ -212,7 +212,7 @@ python -m http.server 8080
 # Then open http://localhost:8080/dashboard/
 ```
 
-The dashboard auto-refreshes every 60 seconds and shows: stats cards (win rate, PnL, open trade PnL, cash, portfolio value, AI cost, trading fees, avg confidence), current market with live countdown, BTC price, positions, scrollable trade timeline with expandable reasoning, resolutions table, cumulative PnL chart, and risk panel. Cash and Portfolio metrics are scoped to the selected view — overview shows all-time values, while individual sessions show start-to-current deltas for that session. The full accounting formula is: `cash = initial_cash + resolution_pnl + open_trade_pnl - fees - ai_cost`.
+The dashboard auto-refreshes every 60 seconds and shows: stats cards (win rate, PnL, open trade PnL, cash, portfolio value, AI cost, trading fees, avg confidence), current market with live countdown, BTC price with Chainlink on-chain price and divergence warning, positions, scrollable trade timeline with expandable reasoning, resolutions table, cumulative PnL chart, risk panel, and an intelligence panel with ML model status, confidence calibration curve (bar chart of stated confidence vs actual win rate), and exit analysis stats (good-exit rate, money saved vs missed). Cash and Portfolio metrics are scoped to the selected view — overview shows all-time values, while individual sessions show start-to-current deltas for that session. The full accounting formula is: `cash = initial_cash + resolution_pnl + open_trade_pnl - fees - ai_cost`.
 
 ### Optional: Plain mode (no terminal dashboard)
 
