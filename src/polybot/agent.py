@@ -219,6 +219,29 @@ class TradingAgent:
         logger.info("Shutdown signal received")
         self._shutdown = True
 
+    def _next_sleep_interval(self) -> float:
+        """Calculate sleep duration, syncing to candle boundaries.
+
+        Uses fast polling (10s) until first AI call, then slow (60s).
+        If the current candle ends before the next scheduled check,
+        syncs to the new candle start + 10s buffer for data to populate.
+        """
+        base = (
+            self._config.agent.decision_interval
+            if self._ai_called_this_candle
+            else self._config.agent.fast_poll_interval
+        )
+        if self._current_market:
+            remaining = self._current_market.time_remaining()
+            candle_sync = remaining + 10  # wake 10s into next candle
+            if 0 < candle_sync < base:
+                logger.debug(
+                    "Syncing to candle boundary: %.0fs remaining + 10s = %.0fs (vs %ds base)",
+                    remaining, candle_sync, base,
+                )
+                return candle_sync
+        return float(base)
+
     async def _run_plain(self) -> None:
         cycle = 0
         max_cycles = self._config.agent.max_cycles
@@ -227,14 +250,9 @@ class TradingAgent:
             if max_cycles and cycle > max_cycles:
                 logger.info("Reached max_cycles=%d, stopping", max_cycles)
                 break
-            _snapshot, _pf_passed = await self._run_cycle(cycle)
+            await self._run_cycle(cycle)
             if not self._shutdown and (not max_cycles or cycle < max_cycles):
-                interval = (
-                    self._config.agent.decision_interval
-                    if self._ai_called_this_candle
-                    else self._config.agent.fast_poll_interval
-                )
-                await self._interruptible_sleep(interval)
+                await self._interruptible_sleep(self._next_sleep_interval())
 
     async def _run_with_dashboard(self) -> None:
         cycle = 0
@@ -249,12 +267,7 @@ class TradingAgent:
                 snapshot, _pf_passed = await self._run_cycle(cycle)
                 live.update(self._build_dashboard(cycle, snapshot))
                 if not self._shutdown and (not max_cycles or cycle < max_cycles):
-                    interval = (
-                        self._config.agent.decision_interval
-                        if self._ai_called_this_candle
-                        else self._config.agent.fast_poll_interval
-                    )
-                    await self._interruptible_sleep(interval)
+                    await self._interruptible_sleep(self._next_sleep_interval())
 
     async def _discover_market(self) -> CandleMarket | None:
         """Discover the current candle market, handling rotation."""
