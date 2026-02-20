@@ -85,7 +85,7 @@ Each cycle (~60 seconds) the agent executes:
 10. **Claude decides** — Structured JSON: `action`, `token_side`, `order_type`, `size`, `confidence`, `reasoning`.
 11. **Confidence gate** — Hard override: if confidence < 0.6, the trade is forced to HOLD regardless of Claude's recommendation.
 12. **Calibration gate** — Checks stated confidence against historical calibration data. If the actual win rate at that confidence level is below break-even (55%), the trade is overridden to HOLD.
-13. **Post-trade risk checks** — Validate spread, position sizing, concentration, cash sufficiency.
+13. **Post-trade risk checks** — Validate spread, position sizing, concentration, cash sufficiency, and risk/reward ratio (entries with R/R < 1.3 are blocked).
 14. **Execute + log** — Simulate fill, update portfolio, write TradeRecord to JSONL, write dashboard JSON.
 
 ### Market Rotation & Resolution
@@ -341,6 +341,7 @@ The most direct levers are in `config/default.yaml`:
 - **`temperature`** — Currently 0.0 (deterministic); slight increase (0.1-0.3) may help exploration
 - **`risk.max_position_pct`** — Increase for more aggressive sizing, decrease for safety
 - **`risk.daily_loss_limit_pct`** — Tighter stop-loss or wider runway
+- **`risk.min_reward_risk_ratio`** — Minimum risk/reward ratio for entries (default 1.3 blocks entries above ~$0.435). Position size is also scaled down for marginal R/R: 50% at the gate, ramping to 100% at R/R 2.0
 
 ### Add new indicators
 
@@ -408,7 +409,7 @@ TradingAgent (agent.py) — main orchestration loop
  │
  ├── RiskManager
  │   Pre-trade: daily halt, min liquidity
- │   Post-trade: spread, position size, concentration, cash, short-sell
+ │   Post-trade: spread, position size, concentration, cash, short-sell, R/R ratio gate
  │
  ├── FeatureConfig + Indicators
  │   Reads data/feature_config.json → runs enabled indicators → prompt text

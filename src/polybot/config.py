@@ -59,6 +59,7 @@ class RiskConfig(BaseModel):
     min_liquidity: float = 100.0
     daily_loss_limit_pct: float = 0.10
     max_concentration_pct: float = 0.50
+    min_reward_risk_ratio: float = 1.3  # (1 - entry_price) / entry_price must exceed this
 
 
 class LoggingConfig(BaseModel):

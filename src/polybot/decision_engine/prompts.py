@@ -79,6 +79,18 @@ The 24h change tells you the daily trend but is NOT predictive for the next 5-mi
   A trade must have enough expected edge to cover trading fees + AI costs.
   Minimum expected profit per trade should exceed $0.01.
 
+## Risk/Reward Discipline
+- Every BUY is a binary bet: win pays $1, lose pays $0.
+- Risk/reward ratio = (1 - entry_price) / entry_price
+- Entries with R/R < 1.3 are **blocked by risk management** (entry > ~$0.435).
+- Even entries that pass the gate get **position size scaled down** for marginal R/R:
+  - R/R >= 2.0 (entry <= $0.33): full size (100%)
+  - R/R 1.5 (entry $0.40): ~75% size
+  - R/R 1.3 (entry $0.43): ~50% size
+- Prefer entries with R/R >= 1.5 ($0.40 or below). Higher R/R means losses are smaller than wins.
+- Late-candle momentum plays at high prices (>$0.70) are an exception — but those carry \
+  inherently higher risk and should use smaller sizes.
+
 ## Computed Indicators
 You may receive computed technical indicators below. These are dynamically selected \
 based on past performance. Use them as supporting signals, not sole decision drivers.
