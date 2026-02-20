@@ -15,9 +15,10 @@ api:
   chainlink_btcusd_address: "0xF4030086522a5bEEa4988F8cA5B36dbC97BeE88c"
 
 agent:
-  decision_interval: 60       # seconds between decision cycles
-  initial_cash: 1000.0       # starting paper balance in USDC
-  max_cycles: 0               # 0 = unlimited
+  decision_interval: 30        # seconds between cycles when pre-filter passes (AI evaluation)
+  fast_poll_interval: 10       # seconds between cycles when pre-filter skips (cheap polling)
+  initial_cash: 1000.0         # starting paper balance in USDC
+  max_cycles: 0                # 0 = unlimited
 
 ai:
   model: "claude-sonnet-4-5-20250929"
