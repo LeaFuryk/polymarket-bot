@@ -111,6 +111,21 @@
       "params": {
         "flat_threshold": 5.0
       }
+    },
+    {
+      "name": "down_orderbook_imbalance",
+      "enabled": true,
+      "params": {}
+    },
+    {
+      "name": "cross_book_flow",
+      "enabled": true,
+      "params": {}
+    },
+    {
+      "name": "best_entry_analysis",
+      "enabled": true,
+      "params": {}
     }
   ]
 }

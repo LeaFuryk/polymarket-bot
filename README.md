@@ -131,7 +131,7 @@ Claude produces:
 
 The bot computes technical indicators controlled by `data/feature_config.json`. Reflection can enable, disable, or tune these indicators based on observed correlation with wins/losses.
 
-**Available indicators (19 total):**
+**Available indicators (22 total):**
 
 | Indicator | Category | What it measures |
 |-----------|----------|------------------|
@@ -141,6 +141,9 @@ The bot computes technical indicators controlled by `data/feature_config.json`. 
 | `token_mean_reversion` | Token | Z-score from mean (overextension) |
 | `orderbook_imbalance` | Orderbook | Bid/ask depth ratio |
 | `spread_trend` | Orderbook | Spread level classification |
+| `down_orderbook_imbalance` | Orderbook | Bid/ask depth ratio for DOWN token |
+| `cross_book_flow` | Orderbook | UP vs DOWN depth comparison for informed flow detection |
+| `best_entry_analysis` | Orderbook | Compares UP/DOWN ask prices and risk/reward ratios |
 | `token_price_divergence` | Orderbook | Up + Down midpoint deviation from $1 |
 | `btc_momentum` | BTC | BTC spot price rate of change |
 | `btc_volatility` | BTC | BTC spot price standard deviation |

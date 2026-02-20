@@ -5,6 +5,7 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- **Enhanced order book indicators** — Three new indicators: `down_orderbook_imbalance` (bid/ask depth ratio for DOWN token), `cross_book_flow` (UP vs DOWN depth comparison for informed flow detection), `best_entry_analysis` (compares UP/DOWN ask prices and risk/reward ratios). Previously only UP token orderbook was analyzed.
 - **Flat=UP edge detection** — New `flat_market_edge` indicator detects when BTC is in a flat/near-flat pattern (candle body < $5). Since Polymarket rule is "close >= open → UP wins", flat markets give UP a structural edge. Flags when UP token is underpriced (<0.50) in flat conditions. Enabled by default with configurable flat threshold.
 - **Quantitative exit strategy tracker** (`exit_tracker.py`) — For every SELL decision, records entry/exit price and time remaining. After resolution, computes what-if: what would the position be worth if held to expiry ($1 or $0). Tracks good-exit rate (exits that were better than holding), total saved, and total missed upside. Feeds summary into AI prompt. Data persisted to `exit_analysis.jsonl`.
 - **Intra-candle BTC price context** — The AI now sees BTC price NOW vs the candle open price, with the current move and who's winning (UP/DOWN). Uses the actual recorded candle open from the resolution tracker (not an approximation). The `btc_vs_candle_open` indicator also uses the recorded open. Exposed via `ResolutionTracker.get_candle_open()`.

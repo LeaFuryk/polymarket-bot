@@ -280,6 +280,106 @@ def _spread_trend(
     )
 
 
+@register("down_orderbook_imbalance")
+def _down_orderbook_imbalance(
+    snap: MarketSnapshot, params: dict, _session: SessionContext | None,
+) -> IndicatorResult | None:
+    """Bid/ask depth ratio for the DOWN token orderbook."""
+    bid_d = snap.down_orderbook.bid_depth
+    ask_d = snap.down_orderbook.ask_depth
+    if ask_d < 1e-9:
+        return None
+    ratio = bid_d / ask_d
+    if ratio > 1.5:
+        signal = "strong buy pressure on DOWN"
+    elif ratio > 1.1:
+        signal = "slight buy pressure on DOWN"
+    elif ratio < 0.67:
+        signal = "strong sell pressure on DOWN"
+    elif ratio < 0.9:
+        signal = "slight sell pressure on DOWN"
+    else:
+        signal = "balanced"
+    return IndicatorResult(
+        name="Down Book Imbalance",
+        value=ratio,
+        label=f"{ratio:.2f} ({signal})",
+    )
+
+
+@register("cross_book_flow")
+def _cross_book_flow(
+    snap: MarketSnapshot, params: dict, _session: SessionContext | None,
+) -> IndicatorResult | None:
+    """Compare UP vs DOWN orderbook depth to detect informed flow.
+
+    If one side has significantly more depth, it may indicate informed
+    traders are positioning. Depth asymmetry between UP and DOWN
+    can signal directional conviction.
+    """
+    up_depth = snap.orderbook.bid_depth + snap.orderbook.ask_depth
+    down_depth = snap.down_orderbook.bid_depth + snap.down_orderbook.ask_depth
+    total = up_depth + down_depth
+    if total < 1e-9:
+        return None
+    up_share = up_depth / total
+    down_share = down_depth / total
+
+    if up_share > 0.65:
+        signal = "heavy UP liquidity — possible informed bullish flow"
+    elif down_share > 0.65:
+        signal = "heavy DOWN liquidity — possible informed bearish flow"
+    elif abs(up_share - 0.5) < 0.05:
+        signal = "balanced liquidity"
+    else:
+        signal = f"UP={up_share:.0%} DOWN={down_share:.0%}"
+
+    return IndicatorResult(
+        name="Cross-Book Flow",
+        value=up_share - down_share,
+        label=f"UP={up_share:.0%} DOWN={down_share:.0%} ({signal})",
+    )
+
+
+@register("best_entry_analysis")
+def _best_entry_analysis(
+    snap: MarketSnapshot, params: dict, _session: SessionContext | None,
+) -> IndicatorResult | None:
+    """Analyze which token offers the better entry price.
+
+    For binary options, lower entry = better risk/reward. Compare UP ask
+    vs DOWN ask to identify the cheaper bet.
+    """
+    up_ask = snap.orderbook.best_ask
+    down_ask = snap.down_orderbook.best_ask
+    if up_ask is None or down_ask is None:
+        return None
+
+    # Risk/reward: entry at P → max profit = 1-P, max loss = P
+    up_rr = (1 - up_ask) / up_ask if up_ask > 0 else 0
+    down_rr = (1 - down_ask) / down_ask if down_ask > 0 else 0
+
+    cheaper = "UP" if up_ask < down_ask else "DOWN"
+    diff = abs(up_ask - down_ask)
+
+    parts = [
+        f"UP ask={up_ask:.3f} (R/R={up_rr:.1f}x)",
+        f"DOWN ask={down_ask:.3f} (R/R={down_rr:.1f}x)",
+    ]
+    if diff > 0.05:
+        parts.append(f"{cheaper} significantly cheaper")
+    elif diff > 0.02:
+        parts.append(f"{cheaper} slightly cheaper")
+    else:
+        parts.append("similar pricing")
+
+    return IndicatorResult(
+        name="Best Entry Analysis",
+        value=min(up_ask, down_ask),
+        label=" | ".join(parts),
+    )
+
+
 @register("token_price_divergence")
 def _token_price_divergence(
     snap: MarketSnapshot, params: dict, _session: SessionContext | None,
