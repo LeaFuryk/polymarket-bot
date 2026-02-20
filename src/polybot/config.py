@@ -31,6 +31,7 @@ class AgentConfig(BaseModel):
     initial_cash: float = 10000.0
     max_cycles: int = 0
     resolution_buffer_seconds: int = 10
+    min_confidence: float = 0.55
 
 
 class AiConfig(BaseModel):
@@ -91,6 +92,7 @@ def _apply_env_overrides(config: AppConfig) -> None:
         "POLYBOT_AGENT_DECISION_INTERVAL": (config.agent, "decision_interval", int),
         "POLYBOT_AGENT_INITIAL_CASH": (config.agent, "initial_cash", float),
         "POLYBOT_AGENT_MAX_CYCLES": (config.agent, "max_cycles", int),
+        "POLYBOT_AGENT_MIN_CONFIDENCE": (config.agent, "min_confidence", float),
         "POLYBOT_RISK_DAILY_LOSS_LIMIT_PCT": (config.risk, "daily_loss_limit_pct", float),
         "POLYBOT_KNOWLEDGE_DIR": (config.logging, "knowledge_dir", str),
         "POLYBOT_ETHEREUM_RPC_URL": (config.api, "ethereum_rpc_url", str),

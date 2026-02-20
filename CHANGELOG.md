@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+- **Confidence gate lowered from 0.6 to 0.55** — AI confidence clusters at 0.55/0.58, just below the old 0.6 gate. Shadow predictions show 64% directional accuracy at these levels, proving the AI has skill. The 84 trades blocked by the old gate would have been 57% winners. Now configurable via `agent.min_confidence` in config.
+- **Calibration gate `MIN_SAMPLES` raised from 5 to 15** — The calibration gate was blocking 36 trades based on a 40% win rate from only 5 samples — pure statistical noise. Now requires 15+ samples per confidence bin before activating, ensuring decisions are based on meaningful data.
+- **System prompt: added UP structural edge** — 62% of 5-min candles resolve UP (BTC >= open = UP wins, including flat). DOWN tokens have wider spreads and worse liquidity. The AI now knows to prefer UP when direction is unclear and require higher conviction for DOWN trades.
+- **System prompt: boosted decisiveness** — Removed the self-defeating "If confidence below 0.6, HOLD" instruction from the prompt (the hard gate in code already enforces this). Added instructions to report actual conviction rather than risk-adjusted discounts, and reminded the AI of its 64% shadow accuracy to encourage action.
+- **Confidence gate now configurable** — New `agent.min_confidence` config field (default 0.55) allows tuning the confidence threshold without code changes. Added to `AgentConfig`, `default.yaml`, and the agent's gate logic.
+
 ### Added
 - **R/R pre-filter gate (Check 6)** — The pre-filter now checks if the best entry price has R/R < 1.3 *before* calling the AI, saving ~$0.005 per skipped cycle. Previously, the AI was called and then the post-trade risk manager blocked the trade — wasting the API call. Entry prices are known pre-AI, so this is a free optimization.
 - **Shadow predictions on HOLD** — AI now returns a `hypothetical_direction` ("up" or "down") on every decision, including HOLDs. Shadow predictions are tracked by the calibration system and scored against actual candle outcomes, building calibration data without risking capital. Shadow accuracy is shown in the calibration summary and dashboard.
@@ -12,6 +19,8 @@ All notable changes to this project will be documented in this file.
 ### Fixed
 - **SELL orders no longer blocked by wide spread** — The post-trade spread check now only applies to BUY orders. Previously, SELL/exit orders on DOWN tokens were blocked by the DOWN token's wide spread (e.g., 18% > 10% limit), trapping the bot in losing positions it couldn't exit. Exits should never be blocked by spread — you need to get out of losers.
 - **Confidence and calibration gates no longer block exits** — Both the hard confidence gate (<0.6 override) and the calibration gate (win rate < break-even override) now only apply to BUY orders. Previously, a SELL/exit on a losing position could be overridden to HOLD if the AI's stated confidence fell in a poorly-calibrated bin, trapping the bot in an increasing loss.
+- **Dashboard: resolutions now assigned to correct session** — Resolution-to-session assignment now uses candle slug matching (trade's `candle_slug` → resolution's `slug`) as primary method, with a generous timestamp fallback. Previously used a 5-minute post-session buffer which orphaned resolutions from candles that resolved after a run was stopped — showing 0W/0L for sessions that actually had wins/losses.
+- **Dashboard: all session trades now included** — The dashboard data writer now uses an uncapped `_session_trades` list instead of `_recent_trades` (capped at 50). Previously, when a session ran more than 50 cycles, early trades (including BUY/SELLs with fills) were evicted from the dashboard view. This caused sessions to show 0W/0L and missing candle timeline data despite having real trades in the JSONL log.
 
 ### Changed
 - **Structured reflection system** — Complete rewrite of the reflection/knowledge architecture to prevent the death spiral where reflection wrote escalating rules into persistent files:

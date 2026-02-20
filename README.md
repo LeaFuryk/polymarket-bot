@@ -83,8 +83,8 @@ Each cycle (~60 seconds) the agent executes:
 8. **Two-pass screening** — If enabled, Haiku (fast/cheap) screens "is there a trade?" before calling Sonnet. Costs ~$0.0003 vs ~$0.005 for full decision. Skipped when positions are open.
 9. **Build context** — Assemble FeatureVector + BTC candle history + feedback context + computed indicators.
 10. **Claude decides** — Structured JSON: `action`, `token_side`, `order_type`, `size`, `confidence`, `reasoning`, `hypothetical_direction` (shadow prediction), `confidence_drivers` (what would increase confidence).
-11. **Confidence gate** — Hard override: if confidence < 0.6, the trade is forced to HOLD regardless of Claude's recommendation.
-12. **Calibration gate** — Checks stated confidence against historical calibration data. If the actual win rate at that confidence level is below break-even (55%), the trade is overridden to HOLD.
+11. **Confidence gate** — Hard override: if confidence < `min_confidence` (default 0.55, configurable via `agent.min_confidence`), the trade is forced to HOLD regardless of Claude's recommendation.
+12. **Calibration gate** — Checks stated confidence against historical calibration data. If the actual win rate at that confidence level is below break-even (55%), the trade is overridden to HOLD. Requires 15+ samples per confidence bin before activating (prevents noise from small samples).
 13. **Post-trade risk checks** — Validate position sizing, concentration, cash sufficiency, and risk/reward ratio (entries with R/R < 1.3 are blocked). Spread checks apply to BUY only — SELL/exit orders are never blocked by wide spreads.
 14. **Execute + log** — Simulate fill, update portfolio, write TradeRecord to JSONL, write dashboard JSON.
 
@@ -233,6 +233,7 @@ Set `dashboard_enabled: false` in `config/default.yaml` for structured log outpu
 | `POLYBOT_AGENT_FAST_POLL_INTERVAL` | Seconds between cycles before first AI call | `10` |
 | `POLYBOT_AGENT_INITIAL_CASH` | Starting paper balance | `10000.0` |
 | `POLYBOT_AGENT_MAX_CYCLES` | Stop after N cycles (0=unlimited) | `0` |
+| `POLYBOT_AGENT_MIN_CONFIDENCE` | Minimum AI confidence to allow BUY | `0.55` |
 | `POLYBOT_MARKET_CONDITION_ID` | Pin a specific market | auto-discovered |
 | `POLYBOT_RISK_DAILY_LOSS_LIMIT_PCT` | Daily loss halt threshold | `0.10` |
 | `POLYBOT_KNOWLEDGE_DIR` | Knowledge files directory | `data/knowledge` |
