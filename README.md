@@ -224,8 +224,8 @@ Set `dashboard_enabled: false` in `config/default.yaml` for structured log outpu
 |----------|---------|---------|
 | `POLYBOT_AI_API_KEY` | Anthropic API key | (required) |
 | `POLYBOT_AI_MODEL` | Claude model ID | `claude-sonnet-4-5-20250929` |
-| `POLYBOT_AGENT_DECISION_INTERVAL` | Seconds between cycles (when AI evaluates) | `30` |
-| `POLYBOT_AGENT_FAST_POLL_INTERVAL` | Seconds between cycles (when pre-filter skips) | `10` |
+| `POLYBOT_AGENT_DECISION_INTERVAL` | Seconds between cycles after first AI call | `60` |
+| `POLYBOT_AGENT_FAST_POLL_INTERVAL` | Seconds between cycles before first AI call | `10` |
 | `POLYBOT_AGENT_INITIAL_CASH` | Starting paper balance | `10000.0` |
 | `POLYBOT_AGENT_MAX_CYCLES` | Stop after N cycles (0=unlimited) | `0` |
 | `POLYBOT_MARKET_CONDITION_ID` | Pin a specific market | auto-discovered |
@@ -336,7 +336,7 @@ This means the *input data* to decisions evolves over time, not just the decisio
 
 The most direct levers are in `config/default.yaml`:
 
-- **`decision_interval`** / **`fast_poll_interval`** — The bot uses adaptive polling: 10s fast checks while the pre-filter is skipping (free), then 30s intervals once conditions look interesting and the AI is called. This gives fast reaction time without wasting API calls
+- **`decision_interval`** / **`fast_poll_interval`** — The bot uses adaptive polling: 10s fast checks until the pre-filter first passes and the AI is called, then 60s intervals for the rest of the candle. This gives fast opportunity detection without multiplying AI costs
 - **`initial_cash`** — Affects position sizing through risk percentages
 - **`temperature`** — Currently 0.0 (deterministic); slight increase (0.1-0.3) may help exploration
 - **`risk.max_position_pct`** — Increase for more aggressive sizing, decrease for safety

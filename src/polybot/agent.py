@@ -189,6 +189,9 @@ class TradingAgent:
         self._last_ml_features: tuple[str, dict[str, float]] | None = None
         self._pending_ml_features: dict[str, dict[str, float]] = {}
 
+        # Adaptive polling: fast until first AI call per candle, then slow
+        self._ai_called_this_candle: bool = False
+
     async def run(self) -> None:
         """Main entry point — run the trading loop until shutdown."""
         _setup_logging(self._config)
@@ -224,11 +227,11 @@ class TradingAgent:
             if max_cycles and cycle > max_cycles:
                 logger.info("Reached max_cycles=%d, stopping", max_cycles)
                 break
-            _snapshot, pf_passed = await self._run_cycle(cycle)
+            _snapshot, _pf_passed = await self._run_cycle(cycle)
             if not self._shutdown and (not max_cycles or cycle < max_cycles):
                 interval = (
                     self._config.agent.decision_interval
-                    if pf_passed
+                    if self._ai_called_this_candle
                     else self._config.agent.fast_poll_interval
                 )
                 await self._interruptible_sleep(interval)
@@ -243,12 +246,12 @@ class TradingAgent:
                 if max_cycles and cycle > max_cycles:
                     logger.info("Reached max_cycles=%d, stopping", max_cycles)
                     break
-                snapshot, pf_passed = await self._run_cycle(cycle)
+                snapshot, _pf_passed = await self._run_cycle(cycle)
                 live.update(self._build_dashboard(cycle, snapshot))
                 if not self._shutdown and (not max_cycles or cycle < max_cycles):
                     interval = (
                         self._config.agent.decision_interval
-                        if pf_passed
+                        if self._ai_called_this_candle
                         else self._config.agent.fast_poll_interval
                     )
                     await self._interruptible_sleep(interval)
@@ -275,6 +278,7 @@ class TradingAgent:
         if self._current_market is None or new_market.condition_id != self._current_market.condition_id:
             self._current_market = new_market
             self._market_data.set_market(new_market)
+            self._ai_called_this_candle = False  # Reset for new candle
             logger.info("Active market: %s (ends in %.0fs)", new_market.title, new_market.time_remaining())
 
             # Record BTC price at candle open for resolution tracking
@@ -431,6 +435,9 @@ class TradingAgent:
             self._log_cycle(cycle, snapshot, risk_blocked=False, risk_reason="")
             self._write_dashboard_json(cycle, snapshot)
             return snapshot, False
+
+        # Mark that AI was called this candle (switches to slow polling)
+        self._ai_called_this_candle = True
 
         # 5. Build feature vector and get AI decision
         features = FeatureVector(
