@@ -66,6 +66,15 @@ TRADING_DECISION_SCHEMA = {
             "type": "string",
             "description": "Market thesis: bullish/bearish/neutral with brief explanation",
         },
+        "hypothetical_direction": {
+            "type": "string",
+            "enum": ["up", "down"],
+            "description": "Your prediction for which side wins this candle, even on HOLD. Builds calibration data.",
+        },
+        "confidence_drivers": {
+            "type": "string",
+            "description": "What specific data, signals, or conditions would increase your confidence?",
+        },
     },
     "required": [
         "action",
@@ -77,6 +86,8 @@ TRADING_DECISION_SCHEMA = {
         "confidence",
         "reasoning",
         "market_view",
+        "hypothetical_direction",
+        "confidence_drivers",
     ],
     "additionalProperties": False,
 }

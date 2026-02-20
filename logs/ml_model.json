@@ -1,0 +1,26 @@
+{
+  "weights": [
+    0.007954,
+    -0.009118,
+    0.143408,
+    0.10029,
+    0.003024,
+    0.038733,
+    -0.02145,
+    0.036098,
+    0.001369
+  ],
+  "bias": 0.017268,
+  "training_samples": 26,
+  "feature_names": [
+    "streak_signed",
+    "streak_magnitude",
+    "btc_vs_open",
+    "volatility_30m",
+    "volume_ratio",
+    "up_midpoint",
+    "down_midpoint",
+    "book_imbalance",
+    "flat_ratio"
+  ]
+}

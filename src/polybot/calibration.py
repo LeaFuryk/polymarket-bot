@@ -89,6 +89,12 @@ class ConfidenceCalibrator:
         self._pending: dict[str, tuple[float, str, float]] = {}
         # Maps candle_slug → (confidence, token_side, entry_price)
 
+        # Shadow prediction tracking (HOLD cycles — no capital at risk)
+        self._shadow_pending: dict[str, tuple[str, float]] = {}
+        # Maps candle_slug → (direction, confidence)
+        self._shadow_correct: int = 0
+        self._shadow_total: int = 0
+
     def _bin_key(self, confidence: float) -> float:
         """Get the bin lower bound for a confidence value."""
         return round(math.floor(confidence / BIN_WIDTH) * BIN_WIDTH, 2)
@@ -139,36 +145,60 @@ class ConfidenceCalibrator:
         """
         self._pending[slug] = (confidence, token_side, entry_price)
 
+    def register_shadow(self, slug: str, direction: str, confidence: float) -> None:
+        """Register a shadow prediction (HOLD cycle — no capital at risk).
+
+        Called when AI returns HOLD but still predicts a direction.
+        Outcome recorded when the candle resolves.
+        """
+        if direction in ("up", "down"):
+            self._shadow_pending[slug] = (direction, confidence)
+
     def record_outcome(self, slug: str, winner: str) -> None:
         """Record the outcome of a candle resolution for calibration.
 
-        Called when a candle resolves. Matches pending trades to outcomes.
+        Called when a candle resolves. Matches pending trades and shadow
+        predictions to outcomes.
         """
-        if slug not in self._pending:
-            return
+        # Score actual trades
+        if slug in self._pending:
+            confidence, token_side, entry_price = self._pending.pop(slug)
+            won = (token_side == winner)
 
-        confidence, token_side, entry_price = self._pending.pop(slug)
-        won = (token_side == winner)
+            # Update bin
+            key = self._bin_key(confidence)
+            if key in self._bins:
+                if won:
+                    self._bins[key].wins += 1
+                else:
+                    self._bins[key].losses += 1
 
-        # Update bin
-        key = self._bin_key(confidence)
-        if key in self._bins:
-            if won:
-                self._bins[key].wins += 1
-            else:
-                self._bins[key].losses += 1
+            # Persist
+            self._save_record(confidence, won, token_side, entry_price, slug)
 
-        # Persist
-        self._save_record(confidence, won, token_side, entry_price, slug)
+            logger.info(
+                "Calibration: conf=%.2f side=%s winner=%s → %s (bin %s: %d/%d = %.0f%%)",
+                confidence, token_side, winner,
+                "WIN" if won else "LOSS",
+                f"{key:.2f}-{key + BIN_WIDTH:.2f}",
+                self._bins[key].wins, self._bins[key].total,
+                self._bins[key].win_rate * 100,
+            )
 
-        logger.info(
-            "Calibration: conf=%.2f side=%s winner=%s → %s (bin %s: %d/%d = %.0f%%)",
-            confidence, token_side, winner,
-            "WIN" if won else "LOSS",
-            f"{key:.2f}-{key + BIN_WIDTH:.2f}",
-            self._bins[key].wins, self._bins[key].total,
-            self._bins[key].win_rate * 100,
-        )
+        # Score shadow predictions (HOLD cycles)
+        if slug in self._shadow_pending:
+            shadow_dir, shadow_conf = self._shadow_pending.pop(slug)
+            self._shadow_total += 1
+            shadow_correct = (shadow_dir == winner)
+            if shadow_correct:
+                self._shadow_correct += 1
+            logger.info(
+                "Shadow prediction: predicted=%s winner=%s → %s (accuracy: %d/%d = %.0f%%)",
+                shadow_dir, winner,
+                "CORRECT" if shadow_correct else "WRONG",
+                self._shadow_correct, self._shadow_total,
+                (self._shadow_correct / self._shadow_total * 100) if self._shadow_total > 0 else 0,
+            )
 
     def check(self, confidence: float) -> CalibrationResult:
         """Check if a given confidence level should be trusted for trading.
@@ -216,9 +246,18 @@ class ConfidenceCalibrator:
                 f"  {b.bin_lower:.2f}-{b.bin_upper:.2f}: "
                 f"{b.win_rate:.0%} win rate ({b.wins}W/{b.losses}L, {reliability})"
             )
-        if not lines:
+        if not lines and self._shadow_total == 0:
             return "No calibration data yet."
-        return "Confidence Calibration (stated → actual win rate):\n" + "\n".join(lines)
+        parts = []
+        if lines:
+            parts.append("Confidence Calibration (stated → actual win rate):\n" + "\n".join(lines))
+        if self._shadow_total > 0:
+            shadow_acc = self._shadow_correct / self._shadow_total * 100
+            parts.append(
+                f"Shadow Predictions (HOLD cycles): {self._shadow_correct}/{self._shadow_total} "
+                f"correct ({shadow_acc:.0f}% accuracy)"
+            )
+        return "\n".join(parts) if parts else "No calibration data yet."
 
     @property
     def total_records(self) -> int:

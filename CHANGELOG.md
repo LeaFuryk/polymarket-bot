@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- **R/R pre-filter gate (Check 6)** — The pre-filter now checks if the best entry price has R/R < 1.3 *before* calling the AI, saving ~$0.005 per skipped cycle. Previously, the AI was called and then the post-trade risk manager blocked the trade — wasting the API call. Entry prices are known pre-AI, so this is a free optimization.
+- **Shadow predictions on HOLD** — AI now returns a `hypothetical_direction` ("up" or "down") on every decision, including HOLDs. Shadow predictions are tracked by the calibration system and scored against actual candle outcomes, building calibration data without risking capital. Shadow accuracy is shown in the calibration summary and dashboard.
+- **Confidence drivers** — AI now returns a `confidence_drivers` field explaining what specific data, signals, or conditions would increase its confidence. Makes HOLD decisions informative — shows what would need to change for the AI to trade. Stored in `TradeRecord.extra["confidence_drivers"]`.
+
+### Fixed
+- **SELL orders no longer blocked by wide spread** — The post-trade spread check now only applies to BUY orders. Previously, SELL/exit orders on DOWN tokens were blocked by the DOWN token's wide spread (e.g., 18% > 10% limit), trapping the bot in losing positions it couldn't exit. Exits should never be blocked by spread — you need to get out of losers.
+- **Confidence and calibration gates no longer block exits** — Both the hard confidence gate (<0.6 override) and the calibration gate (win rate < break-even override) now only apply to BUY orders. Previously, a SELL/exit on a losing position could be overridden to HOLD if the AI's stated confidence fell in a poorly-calibrated bin, trapping the bot in an increasing loss.
+
 ### Changed
 - **Structured reflection system** — Complete rewrite of the reflection/knowledge architecture to prevent the death spiral where reflection wrote escalating rules into persistent files:
   - **Structured observations** — Reflection now produces descriptive observations ("momentum plays at 0.30-0.40 won 3/4 times"), not imperatives ("NEVER trade above 0.40"). Stored in `observations.jsonl` with category (pattern/bias/edge/regime).

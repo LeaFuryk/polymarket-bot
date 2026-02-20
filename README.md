@@ -79,13 +79,13 @@ Each cycle (~60 seconds) the agent executes:
 4. **Mark-to-market** — Update unrealized PnL on both token positions.
 5. **Check limit fills** — Scan pending limit orders against current orderbook.
 6. **Pre-trade risk checks** — Daily loss halt, minimum liquidity. Run *before* Claude API call to save cost.
-7. **Rules-based pre-filter** — Cheap checks (time remaining, choppy market, entry pricing, candle streaks) skip obvious HOLDs without calling Claude, saving 60-70% of AI costs.
+7. **Rules-based pre-filter** — Cheap checks (time remaining, choppy market, entry pricing, candle streaks, R/R ratio) skip obvious HOLDs without calling Claude, saving 60-70% of AI costs. R/R pre-filter prevents wasting AI calls when both tokens are too expensive (ask > ~$0.435).
 8. **Two-pass screening** — If enabled, Haiku (fast/cheap) screens "is there a trade?" before calling Sonnet. Costs ~$0.0003 vs ~$0.005 for full decision. Skipped when positions are open.
 9. **Build context** — Assemble FeatureVector + BTC candle history + feedback context + computed indicators.
-10. **Claude decides** — Structured JSON: `action`, `token_side`, `order_type`, `size`, `confidence`, `reasoning`.
+10. **Claude decides** — Structured JSON: `action`, `token_side`, `order_type`, `size`, `confidence`, `reasoning`, `hypothetical_direction` (shadow prediction), `confidence_drivers` (what would increase confidence).
 11. **Confidence gate** — Hard override: if confidence < 0.6, the trade is forced to HOLD regardless of Claude's recommendation.
 12. **Calibration gate** — Checks stated confidence against historical calibration data. If the actual win rate at that confidence level is below break-even (55%), the trade is overridden to HOLD.
-13. **Post-trade risk checks** — Validate spread, position sizing, concentration, cash sufficiency, and risk/reward ratio (entries with R/R < 1.3 are blocked).
+13. **Post-trade risk checks** — Validate position sizing, concentration, cash sufficiency, and risk/reward ratio (entries with R/R < 1.3 are blocked). Spread checks apply to BUY only — SELL/exit orders are never blocked by wide spreads.
 14. **Execute + log** — Simulate fill, update portfolio, write TradeRecord to JSONL, write dashboard JSON.
 
 ### Market Rotation & Resolution
