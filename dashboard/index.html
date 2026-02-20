@@ -1342,11 +1342,18 @@ function render(d) {
     // BTC panel
     const chCls = (b.change_24h_pct || 0) >= 0 ? 'up' : 'down';
     const chSign = (b.change_24h_pct || 0) >= 0 ? '+' : '';
+    const clPrice = b.chainlink_price ? '$' + Number(b.chainlink_price).toLocaleString(undefined, {maximumFractionDigits:0}) : null;
+    const divAbs = b.price_divergence != null ? Math.abs(b.price_divergence) : null;
+    const divWarn = divAbs != null && divAbs > 50;
     lh += `<div class="panel" data-tip="Current BTC/USD spot price from Binance. The bot uses BTC price movement to predict UP/DOWN candle outcomes.">
       <div class="panel-header">BTC Price</div>
       <div class="btc-price">${b.price_usd ? '$' + Number(b.price_usd).toLocaleString(undefined, {maximumFractionDigits:0}) : '--'}</div>
       <span class="btc-badge ${chCls}">${chSign}${fmtNum(b.change_24h_pct, 2)}% 24h</span>
       <div class="btc-candle-dir">Last candle: ${(b.last_candle_direction || '--').toUpperCase()}</div>
+      ${clPrice ? `<div style="margin-top:0.4rem;padding-top:0.35rem;border-top:1px solid var(--border-subtle);font-size:0.73rem">
+        <span style="color:var(--text-muted)">Chainlink:</span> <span style="color:var(--text-secondary)">${clPrice}</span>
+        ${divAbs != null ? `<span style="color:${divWarn ? 'var(--amber)' : 'var(--text-muted)'};margin-left:0.4rem" data-tip="Divergence between Binance and Chainlink prices. >$50 = resolution risk since Polymarket resolves via Chainlink.">${divWarn ? '⚠ ' : ''}$${fmtNum(divAbs, 0)} div</span>` : ''}
+      </div>` : ''}
     </div>`;
 
     // Open Positions panel — rewritten for clarity
@@ -1419,6 +1426,79 @@ function render(d) {
         <div class="risk-status ${rk.is_halted?'halted':'ok'}">${rk.is_halted?'HALTED':'ACTIVE'}</div>
       </div>
     </div>`;
+  }
+
+  // Intelligence panel — ML, calibration, exit analysis
+  if (d.ml_model || d.calibration || d.exit_analysis) {
+    cg += `<div class="panel" data-tip="AI intelligence systems: ML model stats, confidence calibration curve, and exit analysis performance.">
+      <div class="panel-header">Intelligence</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0.6rem">`;
+
+    // ML Model
+    const ml = d.ml_model || {};
+    cg += `<div style="padding:0.5rem;background:var(--bg-inset);border:1px solid var(--border-subtle);border-radius:var(--radius-sm)">
+      <div style="font-size:0.65rem;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted);margin-bottom:0.3rem">ML Model</div>
+      <div style="font:600 1rem/1.2 var(--display);color:${ml.model_trained ? 'var(--green)' : 'var(--amber)'}">${ml.model_trained ? 'Trained' : 'Training'}</div>
+      <div style="font-size:0.73rem;color:var(--text-muted)">${ml.training_samples || 0} samples</div>
+    </div>`;
+
+    // Exit Analysis
+    const ex = d.exit_analysis || {};
+    const goodPct = ex.total_exits > 0 ? (ex.good_exit_rate * 100).toFixed(0) : '--';
+    cg += `<div style="padding:0.5rem;background:var(--bg-inset);border:1px solid var(--border-subtle);border-radius:var(--radius-sm)">
+      <div style="font-size:0.65rem;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted);margin-bottom:0.3rem">Exit Quality</div>
+      <div style="font:600 1rem/1.2 var(--display);color:${ex.good_exit_rate >= 0.5 ? 'var(--green)' : ex.total_exits > 0 ? 'var(--red)' : ''}">${goodPct}%</div>
+      <div style="font-size:0.73rem;color:var(--text-muted)">${ex.total_exits || 0} exits analyzed</div>
+    </div>`;
+
+    // Calibration summary
+    const cal = d.calibration || {};
+    cg += `<div style="padding:0.5rem;background:var(--bg-inset);border:1px solid var(--border-subtle);border-radius:var(--radius-sm)">
+      <div style="font-size:0.65rem;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted);margin-bottom:0.3rem">Calibration</div>
+      <div style="font:600 1rem/1.2 var(--display)">${cal.total_records || 0}</div>
+      <div style="font-size:0.73rem;color:var(--text-muted)">records tracked</div>
+    </div>`;
+
+    cg += `</div>`; // close grid
+
+    // Calibration bins chart (bar chart)
+    const bins = (cal.bins || []).filter(b => b.wins + b.losses > 0);
+    if (bins.length > 0) {
+      cg += `<div style="margin-top:0.6rem;padding-top:0.5rem;border-top:1px solid var(--border-subtle)">
+        <div style="font-size:0.65rem;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted);margin-bottom:0.4rem">Calibration Curve</div>
+        <div style="display:flex;align-items:flex-end;gap:3px;height:60px">`;
+      for (const bin of bins) {
+        const total = bin.wins + bin.losses;
+        const wr = bin.win_rate;
+        const h = Math.max(4, wr * 56);
+        const barCol = wr >= 0.55 ? 'var(--green)' : wr >= 0.45 ? 'var(--amber)' : 'var(--red)';
+        const opacity = bin.reliable ? '1' : '0.4';
+        cg += `<div data-tip="${bin.range}: ${(wr*100).toFixed(0)}% win rate (${bin.wins}W/${bin.losses}L)${bin.reliable ? '' : ' — insufficient data'}" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px">
+          <div style="font-size:0.55rem;color:var(--text-muted)">${(wr*100).toFixed(0)}%</div>
+          <div style="width:100%;height:${h}px;background:${barCol};border-radius:2px;opacity:${opacity}"></div>
+          <div style="font-size:0.5rem;color:var(--text-muted);white-space:nowrap">${bin.range}</div>
+        </div>`;
+      }
+      cg += `</div>
+        <div style="margin-top:0.3rem;display:flex;justify-content:center">
+          <div style="font-size:0.6rem;color:var(--text-muted)">
+            <span style="display:inline-block;width:8px;height:8px;background:var(--green);border-radius:2px;vertical-align:middle;margin-right:3px"></span>above break-even
+            <span style="display:inline-block;width:8px;height:8px;background:var(--red);border-radius:2px;vertical-align:middle;margin:0 3px 0 8px"></span>below break-even
+          </div>
+        </div>
+      </div>`;
+    }
+
+    // Exit analysis detail
+    if (ex.total_exits > 0) {
+      cg += `<div style="margin-top:0.5rem;padding-top:0.5rem;border-top:1px solid var(--border-subtle);display:flex;gap:1rem;font-size:0.73rem">
+        <div><span style="color:var(--text-muted)">Good exits:</span> <span style="color:var(--green)">${ex.good_exits}/${ex.total_exits}</span></div>
+        <div><span style="color:var(--text-muted)">Saved:</span> <span style="color:var(--green)">${fmt$(ex.total_saved, 2)}</span></div>
+        <div><span style="color:var(--text-muted)">Missed:</span> <span style="color:var(--red)">${fmt$(ex.total_missed, 2)}</span></div>
+      </div>`;
+    }
+
+    cg += `</div>`; // close panel
   }
 
   $('contentGrid').innerHTML = cg;

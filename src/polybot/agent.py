@@ -747,6 +747,8 @@ class TradingAgent:
                     "last_candle_direction": (
                         snapshot.btc_candles[-1].direction if snapshot.btc_candles else "unknown"
                     ),
+                    "chainlink_price": snapshot.btc_price.chainlink_price,
+                    "price_divergence": snapshot.btc_price.price_divergence,
                 }
 
             # Positions
@@ -849,6 +851,31 @@ class TradingAgent:
                     "daily_fees": self._risk.state.daily_fees,
                     "max_drawdown": self._risk.state.max_drawdown,
                     "is_halted": self._risk.state.is_halted,
+                },
+                "ml_model": {
+                    "training_samples": self._ml_scorer._training_samples,
+                    "model_trained": self._ml_scorer._training_samples >= self._ml_scorer._min_samples,
+                },
+                "calibration": {
+                    "total_records": self._calibrator.total_records,
+                    "bins": [
+                        {
+                            "range": f"{b.bin_lower:.0%}-{b.bin_upper:.0%}",
+                            "wins": b.wins,
+                            "losses": b.losses,
+                            "win_rate": round(b.win_rate, 3),
+                            "reliable": b.is_reliable,
+                        }
+                        for b in self._calibrator._bins.values()
+                        if b.total > 0
+                    ],
+                },
+                "exit_analysis": {
+                    "total_exits": self._exit_tracker._total_exits,
+                    "good_exits": self._exit_tracker._exits_better_than_hold,
+                    "good_exit_rate": round(self._exit_tracker.good_exit_rate, 3),
+                    "total_saved": round(self._exit_tracker._total_saved, 4),
+                    "total_missed": round(self._exit_tracker._total_missed, 4),
                 },
             }
 
