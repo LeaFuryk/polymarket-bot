@@ -35,8 +35,10 @@ class ExecutionSimulator:
             return self._config.base_slippage_bps * 3  # thin book penalty
 
         size_ratio = size / total_liquidity
+        # Use higher proportional factor for more realistic slippage modeling
+        prop_factor = self._config.proportional_factor
         return self._config.base_slippage_bps + (
-            size_ratio * self._config.proportional_factor * 10000
+            size_ratio * prop_factor * 10000
         )
 
     def simulate_market_order(

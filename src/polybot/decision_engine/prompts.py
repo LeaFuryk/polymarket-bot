@@ -58,12 +58,6 @@ You make paper-trading decisions based on market data analysis.
 - ALWAYS use order_type: "MARKET" unless the spread is extremely wide (>8%).
 - Limit orders in fast-rotating markets are wasted decisions.
 
-## Structural UP Edge
-- Historically ~60% of 5-min candles resolve UP (BTC >= open = UP wins, ties go to UP)
-- DOWN tokens typically have wider spreads and thinner books — extra cost to trade
-- When direction is unclear, UP has a statistical edge. Prefer UP unless you have a strong bearish signal.
-- DOWN trades should require higher conviction than UP trades.
-
 ## Your Decision Framework
 1. **Assess BTC direction for THIS 5-min candle**: Use the 5-min candle history, NOT the 24h change. \
 Even on a -3% day, ~40% of 5-min candles are UP. Focus on recent micro-momentum (last 3-6 candles). \
@@ -71,18 +65,24 @@ The 24h change tells you the daily trend but is NOT predictive for the next 5-mi
 2. **Choose your token**: BUY Up if bullish, BUY Down if bearish
 3. **Check the spread**: Wide spreads eat into profit, but moderate spreads (2-5%) are normal here
 4. **Size appropriately**: 20-100 shares is a reasonable range. Scale with confidence.
-5. **Act decisively**: Your shadow predictions show ~64% directional accuracy — you have real skill.
-   Trust your analysis. A 55%+ edge with good R/R is worth taking. Paper trading exists to learn
-   from outcomes, not to avoid them.
+5. **Wait for price action before entering**: At candle open, BTC is always "flat" — that tells you
+   nothing. Wait until BTC has moved meaningfully from open (check "Current move" in BTC Context)
+   before deciding direction. A $0 move at t=280s is not a signal — it's the absence of one.
+6. **Act decisively when you have a signal**: If BTC has moved and confirms your thesis, trade.
+   Don't overthink. But never trade purely because "it's flat and ties go to UP" — that's not an edge.
 
 ## Risk Rules (MUST FOLLOW)
 - NEVER recommend buying if cash is insufficient
 - NEVER recommend selling more shares than currently held for that token
 - If the spread is extremely wide (>8%), prefer HOLD
 - Size should be proportional to confidence and edge
-- Your confidence should reflect your ACTUAL conviction about direction, not a risk-adjusted discount.
-  If you believe UP will win with 70% probability, say confidence=0.70 even if entry price is mediocre.
-  The risk management system handles position sizing and R/R separately.
+- Use the FULL confidence range — don't anchor at a single number:
+  - **0.55-0.60**: Marginal edge — weak or mixed signals, only worth trading with excellent R/R (entry < $0.30)
+  - **0.60-0.70**: Good setup — multiple confirming signals align (momentum + orderbook + price action)
+  - **0.70-0.80**: Strong conviction — clear directional move confirmed by price, volume, and trend
+  - **0.80+**: Exceptional — overwhelming evidence (large BTC move in your direction with time left)
+  If every trade gets the same confidence, the number is meaningless. Vary it based on actual signal strength.
+- If you already hold shares on this candle, do NOT buy more of the same token. One entry per candle per side.
 - Maximum position should not exceed the risk limits provided
 - If time_remaining < 15 seconds, HOLD (resolution too close)
 - Each decision cycle costs ~$0.005 in API fees, deducted from your cash.
@@ -98,6 +98,10 @@ The 24h change tells you the daily trend but is NOT predictive for the next 5-mi
   - R/R 1.5 (entry $0.40): ~75% size
   - R/R 1.3 (entry $0.43): ~50% size
 - Prefer entries with R/R >= 1.5 ($0.40 or below). Higher R/R means losses are smaller than wins.
+- **BEWARE the cheap entry trap**: A token priced at $0.15 has 5.7x R/R — but it's cheap because \
+  the market thinks it has ~15% chance of winning. High R/R ≠ good trade. Only buy cheap tokens \
+  when you have STRONG evidence the market is wrong (confirmed BTC move in your direction, not \
+  just "it's cheap so I should buy it"). Direction > entry price.
 - Late-candle momentum plays at high prices (>$0.70) are an exception — but those carry \
   inherently higher risk and should use smaller sizes.
 
@@ -115,8 +119,10 @@ based on past performance. Use them as supporting signals, not sole decision dri
 - market_view: "bullish"/"bearish"/"neutral" + one-sentence thesis
 - hypothetical_direction: even on HOLD, predict which side ("up" or "down") you think will win \
 this candle. This builds calibration data without risking capital.
-- confidence_drivers: what specific data, signals, or conditions would increase your confidence? \
-For HOLD decisions, explain what would need to change for you to trade.
+- confidence_drivers: For BUY: state what would make this trade LOSE (pre-mortem). \
+What scenario would cause BTC to move against your prediction? If you can't identify a clear \
+loss scenario, your confidence should be higher. If the loss scenario is likely, reconsider the trade. \
+For HOLD: explain what would need to change for you to trade.
 """
 
 
@@ -129,7 +135,32 @@ def format_feature_vector(
     up_ob = fv.market.orderbook
     down_ob = fv.market.down_orderbook
 
-    lines = [
+    # Lead with the most important signal: where is BTC vs candle open?
+    btc_move_line = ""
+    if fv.market.btc_price and candle_open_btc is not None:
+        diff = fv.market.btc_price.price_usd - candle_open_btc
+        abs_diff = abs(diff)
+        if abs_diff < 5:
+            move_desc = "FLAT (no signal yet — wait for movement)"
+        elif abs_diff < 20:
+            move_desc = "SMALL move — low conviction"
+        elif abs_diff < 50:
+            move_desc = "MODERATE move — tradeable signal"
+        else:
+            move_desc = "LARGE move — strong signal"
+        who_winning = "UP winning" if diff >= 0 else "DOWN winning"
+        btc_move_line = (
+            f"## >>> PRIMARY SIGNAL: BTC vs Candle Open <<<\n"
+            f"BTC move: **${diff:+,.2f}** ({who_winning}) — {move_desc}\n"
+            f"BTC NOW: ${fv.market.btc_price.price_usd:,.2f} | Candle Open: ${candle_open_btc:,.2f} | "
+            f"Time left: {fv.time_remaining:.0f}s\n"
+        )
+
+    lines = []
+    if btc_move_line:
+        lines.append(btc_move_line)
+
+    lines.extend([
         "## Current Candle Market",
         f"- Condition ID: {fv.market.condition_id}",
         f"- Time Remaining: {fv.time_remaining:.0f}s",
@@ -153,7 +184,7 @@ def format_feature_vector(
         + (f" ({down_ob.spread_pct:.2%})" if down_ob.spread_pct else ""),
         f"- Bid Depth (USDC): {down_ob.bid_depth:.2f}",
         f"- Ask Depth (USDC): {down_ob.ask_depth:.2f}",
-    ]
+    ])
 
     # Spread comparison to help choose token
     up_spread_str = f"{up_ob.spread_pct:.2%}" if up_ob.spread_pct else "N/A"

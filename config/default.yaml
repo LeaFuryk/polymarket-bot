@@ -30,7 +30,7 @@ ai:
 
 simulator:
   base_slippage_bps: 5        # base slippage in basis points
-  proportional_factor: 0.5    # slippage multiplier for size/liquidity
+  proportional_factor: 1.0    # slippage multiplier for size/liquidity (realistic)
   fee_bps: 20                 # Polymarket taker fee (20bps = 0.2%)
   limit_order_ttl: 300        # default TTL for limit orders (seconds)
 
