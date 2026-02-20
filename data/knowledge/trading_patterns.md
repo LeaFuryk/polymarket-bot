@@ -23,5 +23,5 @@
 
 1. Check BTC candle streak and regime (trending vs choppy vs exhaustion)
 2. Validate entry price against thresholds
-3. Check time remaining (no entries <90s)
+3. Check time remaining (no entries <45s)
 4. Review ML baseline and calibration data

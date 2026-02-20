@@ -23,7 +23,7 @@ Say should_trade=false if ALL of these apply:
 - BTC is choppy/sideways (range < $50 in last 30min)
 - No consecutive candle streak (< 2 same-direction)
 - Entry prices are unattractive (both tokens > 0.45)
-- Time remaining < 90 seconds
+- Time remaining < 45 seconds
 - No clear directional signal
 
 When in doubt, say true (let the full AI decide). Better to pass than to miss.
