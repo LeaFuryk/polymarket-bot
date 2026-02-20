@@ -15,8 +15,8 @@ api:
   chainlink_btcusd_address: "0xF4030086522a5bEEa4988F8cA5B36dbC97BeE88c"
 
 agent:
-  decision_interval: 30        # seconds between cycles when pre-filter passes (AI evaluation)
-  fast_poll_interval: 10       # seconds between cycles when pre-filter skips (cheap polling)
+  decision_interval: 60        # seconds between cycles after first AI call (slow mode)
+  fast_poll_interval: 10       # seconds between cycles before first AI call (fast polling)
   initial_cash: 1000.0         # starting paper balance in USDC
   max_cycles: 0                # 0 = unlimited
 

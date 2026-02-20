@@ -26,7 +26,7 @@ class ApiConfig(BaseModel):
 
 
 class AgentConfig(BaseModel):
-    decision_interval: int = 30
+    decision_interval: int = 60
     fast_poll_interval: int = 10
     initial_cash: float = 10000.0
     max_cycles: int = 0
