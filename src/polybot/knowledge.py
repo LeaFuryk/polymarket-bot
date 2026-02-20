@@ -1,4 +1,4 @@
-"""Feedback learning system — loads knowledge files and runs periodic reflection."""
+"""Feedback learning system — structured observations, scorecard, and periodic reflection."""
 
 from __future__ import annotations
 
@@ -10,14 +10,26 @@ from pathlib import Path
 import anthropic
 
 from polybot.config import AiConfig
-from polybot.models import ResolutionRecord, TradeRecord
+from polybot.models import (
+    Observation,
+    ObservationCategory,
+    ResolutionRecord,
+    Scorecard,
+    ScorecardDelta,
+    TradeRecord,
+)
 
 logger = logging.getLogger(__name__)
 
 REFLECTION_PROMPT = """\
 You are reviewing recent trading outcomes for a Polymarket BTC 5-minute candle bot.
 
-Analyze the resolutions and trades below, then produce updated knowledge files.
+Your job: produce **descriptive observations** about what happened, NOT rules or imperatives.
+Good: "momentum plays at entry 0.30-0.40 won 3/4 times"
+Bad: "NEVER trade above 0.40" or "ALWAYS wait for confirmation"
+
+## Scorecard (current batch vs previous)
+{scorecard_text}
 
 ## Recent Resolutions
 {resolutions_table}
@@ -25,15 +37,8 @@ Analyze the resolutions and trades below, then produce updated knowledge files.
 ## Recent Trades (with fills)
 {trades_table}
 
-## Current Knowledge Files
-### trading_patterns.md
-{trading_patterns}
-
-### self_assessment.md
-{self_assessment}
-
-### session_history.md
-{session_history}
+## Active Observations (with age and expiry)
+{active_observations}
 
 ## Current Feature Config
 ```json
@@ -41,30 +46,115 @@ Analyze the resolutions and trades below, then produce updated knowledge files.
 ```
 
 ## Instructions
-1. Analyze W/L patterns — what market conditions led to wins vs losses?
-2. Identify recurring mistakes or biases (overtrading, side preference, confidence miscalibration).
-3. Note any market behavior patterns (BTC momentum, spread dynamics, token pricing quirks).
-4. Keep each file concise (< 100 lines).
-5. For session_history, append ONE new entry summarizing this batch. Keep only the last ~20 entries.
-6. Review the feature config above:
-   - If an indicator's signal correlates with wins, keep it enabled.
-   - If a disabled indicator could help diagnose a pattern you see, enable it.
-   - If an indicator seems noisy or uncorrelated with outcomes, disable it.
-   - You may adjust param values (e.g. window sizes) if you see a reason.
-   - Change at most 2 indicator settings per reflection cycle.
 
-Return valid JSON with these keys:
-- "trading_patterns": full updated markdown content for trading_patterns.md
-- "self_assessment": full updated markdown content for self_assessment.md
-- "session_history": full updated markdown content for session_history.md
-- "feature_config": (optional) updated feature config object — only include if you want to change indicator settings
+1. Look at the scorecard delta — did things get better or worse? Why?
+2. Look at individual resolutions + trades — what patterns explain wins/losses?
+3. Produce 1-5 NEW descriptive observations. Each must be:
+   - Descriptive, not imperative (what happened, not what to do)
+   - Based on evidence from the data above
+   - Categorized: "pattern", "bias", "edge", or "regime"
+   - Given an expiry (default 30 resolutions, shorter for uncertain observations)
+4. Review active observations — if any are contradicted by new data, expire them by ID.
+5. Write a one-line session entry summarizing this batch.
+6. Optionally adjust at most 2 indicator settings in feature_config.
+
+## FORBIDDEN
+- Do NOT write imperatives ("NEVER", "ALWAYS", "require X threshold")
+- Do NOT reference specific dollar PnL amounts or session state
+- Do NOT add confidence thresholds or volatility filters
+
+Return valid JSON:
+{{
+  "observations": [
+    {{"category": "pattern|bias|edge|regime", "text": "descriptive observation", "expires_after_resolutions": 30}}
+  ],
+  "expire_ids": ["id1", "id2"],
+  "session_entry": "one-line summary of this batch",
+  "feature_config": null
+}}
 
 Return ONLY the JSON object, no other text.
 """
 
 
+def compute_scorecard(
+    resolutions: list[ResolutionRecord],
+    trades: list[TradeRecord],
+) -> Scorecard:
+    """Compute quantitative metrics from a batch of resolutions and trades."""
+    if not resolutions:
+        return Scorecard()
+
+    # Count trades that had actual fills (not HOLDs)
+    traded = [t for t in trades if t.fill_price is not None and t.action.value != "HOLD"]
+    holds = [t for t in trades if t.action.value == "HOLD" or t.fill_price is None]
+
+    # Win/loss from resolutions (only those with positions)
+    wins = [r for r in resolutions if r.total_pnl > 0.001]
+    losses = [r for r in resolutions if r.total_pnl < -0.001]
+    total_with_position = len(wins) + len(losses)
+
+    win_rate = len(wins) / total_with_position if total_with_position > 0 else 0.0
+
+    # PnL stats
+    win_pnls = [r.total_pnl for r in wins]
+    loss_pnls = [r.total_pnl for r in losses]
+    all_pnls = [r.total_pnl for r in resolutions if abs(r.total_pnl) > 0.001]
+
+    avg_pnl = sum(all_pnls) / len(all_pnls) if all_pnls else 0.0
+    avg_win = sum(win_pnls) / len(win_pnls) if win_pnls else 0.0
+    avg_loss = sum(loss_pnls) / len(loss_pnls) if loss_pnls else 0.0
+
+    # Hold rate: fraction of resolutions where we had no position
+    flat_count = len(resolutions) - total_with_position
+    hold_rate = flat_count / len(resolutions) if resolutions else 0.0
+
+    return Scorecard(
+        resolutions=len(resolutions),
+        trades_taken=len(traded),
+        win_rate=win_rate,
+        avg_pnl_per_trade=avg_pnl,
+        avg_win_size=avg_win,
+        avg_loss_size=avg_loss,
+        hold_rate=hold_rate,
+    )
+
+
+def format_scorecard(delta: ScorecardDelta) -> str:
+    """Format scorecard with optional delta comparison."""
+    c = delta.current
+    lines = [
+        "### Current Batch",
+        f"- Resolutions: {c.resolutions}",
+        f"- Trades taken: {c.trades_taken}",
+        f"- Win rate: {c.win_rate:.0%}",
+        f"- Avg PnL per traded resolution: ${c.avg_pnl_per_trade:+.4f}",
+        f"- Avg win size: ${c.avg_win_size:+.4f}",
+        f"- Avg loss size: ${c.avg_loss_size:+.4f}",
+        f"- Hold rate: {c.hold_rate:.0%}",
+    ]
+
+    p = delta.previous
+    if p is not None and p.resolutions > 0:
+        lines.append("")
+        lines.append("### Previous Batch (for comparison)")
+        wr_delta = c.win_rate - p.win_rate
+        pnl_delta = c.avg_pnl_per_trade - p.avg_pnl_per_trade
+        lines.append(f"- Win rate: {p.win_rate:.0%} -> {c.win_rate:.0%} ({wr_delta:+.0%})")
+        lines.append(f"- Avg PnL: ${p.avg_pnl_per_trade:+.4f} -> ${c.avg_pnl_per_trade:+.4f} (delta: ${pnl_delta:+.4f})")
+        lines.append(f"- Trades taken: {p.trades_taken} -> {c.trades_taken}")
+        hr_delta = c.hold_rate - p.hold_rate
+        lines.append(f"- Hold rate: {p.hold_rate:.0%} -> {c.hold_rate:.0%} ({hr_delta:+.0%})")
+    else:
+        lines.append("")
+        lines.append("### Previous Batch")
+        lines.append("(no previous batch — this is the first reflection)")
+
+    return "\n".join(lines)
+
+
 class KnowledgeManager:
-    """Loads knowledge files and runs periodic Claude reflection to update them."""
+    """Loads knowledge files and runs periodic Claude reflection with structured observations."""
 
     def __init__(self, knowledge_dir: str, ai_config: AiConfig) -> None:
         self._dir = Path(knowledge_dir)
@@ -72,34 +162,180 @@ class KnowledgeManager:
         self._ai_config = ai_config
         self._client = anthropic.AsyncAnthropic(api_key=ai_config.api_key)
         self._feature_config_path = self._dir.parent / "feature_config.json"
+        self._observations_path = self._dir / "observations.jsonl"
+        self._session_history_path = self._dir / "session_history.md"
 
-        # Cache
+        # Cache for base knowledge (read-only .md files)
         self._cache: str | None = None
         self._cache_time: float = 0.0
         self._cache_ttl: float = 60.0
+
+        # State persisted across sessions via agent_state.json
+        self._previous_scorecard: Scorecard | None = None
+        self._total_resolutions: int = 0
 
         # API cost tracking
         self.last_reflection_cost: float = 0.0
         self.total_api_cost: float = 0.0
 
-    def load_knowledge(self) -> str:
-        """Read all .md files in knowledge_dir, concatenate, cache for 60s."""
+    # --- State Persistence ---
+
+    def save_state(self) -> dict:
+        """Return state dict for persistence in agent_state.json."""
+        return {
+            "total_resolutions": self._total_resolutions,
+            "previous_scorecard": (
+                self._previous_scorecard.model_dump()
+                if self._previous_scorecard
+                else None
+            ),
+        }
+
+    def load_state(self, data: dict) -> None:
+        """Restore state from agent_state.json."""
+        self._total_resolutions = data.get("total_resolutions", 0)
+        sc_data = data.get("previous_scorecard")
+        if sc_data:
+            self._previous_scorecard = Scorecard(**sc_data)
+        logger.info(
+            "Knowledge state loaded: total_resolutions=%d, has_previous_scorecard=%s",
+            self._total_resolutions,
+            self._previous_scorecard is not None,
+        )
+
+    # --- Base Knowledge (read-only .md files) ---
+
+    def _load_base_knowledge(self) -> str:
+        """Read base knowledge .md files (trading_patterns, self_assessment). Cached."""
         now = time.monotonic()
         if self._cache is not None and (now - self._cache_time) < self._cache_ttl:
             return self._cache
 
+        base_files = ["trading_patterns.md", "self_assessment.md"]
         parts: list[str] = []
-        for md_file in sorted(self._dir.glob("*.md")):
+        for name in base_files:
+            path = self._dir / name
             try:
-                content = md_file.read_text().strip()
+                content = path.read_text().strip()
                 if content:
                     parts.append(content)
             except OSError:
-                logger.warning("Could not read knowledge file: %s", md_file)
+                logger.debug("Could not read base knowledge file: %s", path)
 
         self._cache = "\n\n---\n\n".join(parts) if parts else ""
         self._cache_time = now
         return self._cache
+
+    # --- Observation Management ---
+
+    def load_active_observations(self) -> list[Observation]:
+        """Read observations.jsonl, filter out expired ones by resolution count."""
+        if not self._observations_path.exists():
+            return []
+
+        active: list[Observation] = []
+        try:
+            text = self._observations_path.read_text().strip()
+            if not text:
+                return []
+            for line in text.split("\n"):
+                line = line.strip()
+                if not line:
+                    continue
+                obs = Observation(**json.loads(line))
+                # Check expiry: created_at + expires_after <= current total
+                age = self._total_resolutions - obs.resolution_count_at_creation
+                if age < obs.expires_after_resolutions:
+                    active.append(obs)
+        except Exception:
+            logger.warning("Could not load observations", exc_info=True)
+
+        return active
+
+    def _append_observation(self, obs: Observation) -> None:
+        """Append one observation to observations.jsonl."""
+        try:
+            with self._observations_path.open("a") as f:
+                f.write(obs.model_dump_json() + "\n")
+        except OSError:
+            logger.warning("Could not append observation")
+
+    def _expire_observations(self, ids: list[str]) -> None:
+        """Remove specific observation IDs from the file."""
+        if not ids or not self._observations_path.exists():
+            return
+
+        id_set = set(ids)
+        try:
+            lines = self._observations_path.read_text().strip().split("\n")
+            kept = []
+            for line in lines:
+                line = line.strip()
+                if not line:
+                    continue
+                data = json.loads(line)
+                if data.get("id") not in id_set:
+                    kept.append(line)
+            self._observations_path.write_text("\n".join(kept) + "\n" if kept else "")
+            logger.info("Expired %d observations by ID", len(id_set) - len(kept) + len(lines) - len(kept))
+        except Exception:
+            logger.warning("Could not expire observations", exc_info=True)
+
+    def _compact_observations(self) -> None:
+        """Remove naturally expired observations from the file."""
+        if not self._observations_path.exists():
+            return
+
+        try:
+            lines = self._observations_path.read_text().strip().split("\n")
+            kept = []
+            removed = 0
+            for line in lines:
+                line = line.strip()
+                if not line:
+                    continue
+                data = json.loads(line)
+                age = self._total_resolutions - data.get("resolution_count_at_creation", 0)
+                if age < data.get("expires_after_resolutions", 30):
+                    kept.append(line)
+                else:
+                    removed += 1
+            if removed > 0:
+                self._observations_path.write_text("\n".join(kept) + "\n" if kept else "")
+                logger.info("Compacted %d expired observations", removed)
+        except Exception:
+            logger.warning("Could not compact observations", exc_info=True)
+
+    # --- Session History ---
+
+    def _append_session_history(self, entry: str) -> None:
+        """Append one row to session_history.md, keep last 20."""
+        try:
+            header = "# Session History\n\n| Date | Summary |\n|------|---------|"
+
+            existing_rows: list[str] = []
+            if self._session_history_path.exists():
+                text = self._session_history_path.read_text().strip()
+                for line in text.split("\n"):
+                    line = line.strip()
+                    if line.startswith("|") and not line.startswith("| Date") and not line.startswith("|---"):
+                        existing_rows.append(line)
+
+            # Add new row
+            from datetime import datetime, timezone
+            date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M")
+            new_row = f"| {date_str} | {entry} |"
+            existing_rows.append(new_row)
+
+            # Keep last 20
+            existing_rows = existing_rows[-20:]
+
+            content = header + "\n" + "\n".join(existing_rows) + "\n"
+            self._session_history_path.write_text(content)
+        except Exception:
+            logger.warning("Could not append session history", exc_info=True)
+
+    # --- Feedback Context (injected into decision prompt) ---
 
     def build_feedback_context(
         self,
@@ -109,9 +345,7 @@ class KnowledgeManager:
         session_pnl: float,
         calibration_summary: str = "",
     ) -> str:
-        """Combine knowledge files + recent resolutions into a prompt block."""
-        knowledge = self.load_knowledge()
-
+        """Combine base knowledge + active observations into a prompt block."""
         lines: list[str] = []
 
         # Session stats
@@ -138,23 +372,50 @@ class KnowledgeManager:
             lines.append(calibration_summary)
             lines.append("")
 
-        # Knowledge from .md files
-        if knowledge:
-            lines.append("Learnings from past sessions:")
-            lines.append(knowledge)
+        # Base knowledge (read-only, human-curated)
+        base = self._load_base_knowledge()
+        if base:
+            lines.append("## Strategy & Bias Notes (reference)")
+            lines.append(base)
+            lines.append("")
+
+        # Active observations (contextual hints from reflection)
+        observations = self.load_active_observations()
+        if observations:
+            lines.append("## Recent Observations (contextual hints, not hard rules)")
+            for obs in observations:
+                age = self._total_resolutions - obs.resolution_count_at_creation
+                remaining = obs.expires_after_resolutions - age
+                lines.append(
+                    f"- [{obs.category.value}] {obs.text} "
+                    f"(observed {age} resolutions ago, expires in {remaining})"
+                )
 
         return "\n".join(lines)
+
+    # --- Reflection ---
 
     async def reflect(
         self,
         resolutions: list[ResolutionRecord],
         trades: list[TradeRecord],
     ) -> None:
-        """Call Claude to analyze recent outcomes and update knowledge files."""
+        """Call Claude to analyze recent outcomes and produce structured observations."""
         if not resolutions:
             return
 
         logger.info("Running reflection on %d resolutions, %d trades", len(resolutions), len(trades))
+
+        # Update resolution counter
+        self._total_resolutions += len(resolutions)
+
+        # Compact expired observations before reflection
+        self._compact_observations()
+
+        # Compute scorecard
+        current_scorecard = compute_scorecard(resolutions, trades)
+        delta = ScorecardDelta(current=current_scorecard, previous=self._previous_scorecard)
+        scorecard_text = format_scorecard(delta)
 
         # Build resolution table
         res_lines = ["| Slug | Winner | BTC Open | BTC Close | PnL |"]
@@ -175,10 +436,20 @@ class KnowledgeManager:
             )
         trades_table = "\n".join(trade_lines)
 
-        # Read current knowledge files
-        trading_patterns = self._read_file("trading_patterns.md")
-        self_assessment = self._read_file("self_assessment.md")
-        session_history = self._read_file("session_history.md")
+        # Active observations with IDs for possible expiry
+        active_obs = self.load_active_observations()
+        if active_obs:
+            obs_lines = []
+            for obs in active_obs:
+                age = self._total_resolutions - obs.resolution_count_at_creation
+                remaining = obs.expires_after_resolutions - age
+                obs_lines.append(
+                    f"- ID={obs.id} [{obs.category.value}] {obs.text} "
+                    f"(age: {age} resolutions, expires in {remaining})"
+                )
+            active_observations = "\n".join(obs_lines)
+        else:
+            active_observations = "(none yet — this is the first reflection)"
 
         # Read current feature config
         feature_config_json = "{}"
@@ -189,18 +460,17 @@ class KnowledgeManager:
             pass
 
         prompt = REFLECTION_PROMPT.format(
+            scorecard_text=scorecard_text,
             resolutions_table=resolutions_table,
             trades_table=trades_table,
-            trading_patterns=trading_patterns,
-            self_assessment=self_assessment,
-            session_history=session_history,
+            active_observations=active_observations,
             feature_config_json=feature_config_json,
         )
 
         try:
             response = await self._client.messages.create(
                 model=self._ai_config.model,
-                max_tokens=16384,
+                max_tokens=4096,
                 temperature=0.2,
                 messages=[{"role": "user", "content": prompt}],
             )
@@ -228,18 +498,16 @@ class KnowledgeManager:
             text = response.content[0].text
             logger.debug("Reflection raw response (first 500 chars): %s", text[:500])
 
-            # Strip markdown code fences that Claude sometimes wraps JSON in
+            # Strip markdown code fences
             stripped = text.strip()
             if stripped.startswith("```"):
-                # Remove opening fence (```json or ```)
                 stripped = stripped.split("\n", 1)[1] if "\n" in stripped else stripped[3:]
                 if stripped.endswith("```"):
                     stripped = stripped[:-3].strip()
 
-            # Handle case where Claude prefixes with text before JSON
+            # Handle prefix text before JSON
             json_start = stripped.find("{")
             if json_start > 0:
-                logger.debug("Stripping %d chars of prefix text before JSON", json_start)
                 stripped = stripped[json_start:]
 
             if not stripped:
@@ -248,46 +516,65 @@ class KnowledgeManager:
 
             data = json.loads(stripped)
 
-            # Write updated files
-            updated = []
-            if "trading_patterns" in data:
-                self._write_file("trading_patterns.md", data["trading_patterns"])
-                updated.append("trading_patterns")
-            if "self_assessment" in data:
-                self._write_file("self_assessment.md", data["self_assessment"])
-                updated.append("self_assessment")
-            if "session_history" in data:
-                self._write_file("session_history.md", data["session_history"])
-                updated.append("session_history")
+            # Process observations
+            new_obs_data = data.get("observations", [])
+            added = 0
+            for obs_data in new_obs_data[:5]:  # Cap at 5
+                try:
+                    cat = obs_data.get("category", "pattern")
+                    # Validate category
+                    if cat not in ("pattern", "bias", "edge", "regime"):
+                        cat = "pattern"
+                    obs = Observation(
+                        category=ObservationCategory(cat),
+                        text=obs_data.get("text", ""),
+                        based_on_resolutions=len(resolutions),
+                        resolution_count_at_creation=self._total_resolutions,
+                        expires_after_resolutions=obs_data.get("expires_after_resolutions", 30),
+                    )
+                    if obs.text:
+                        self._append_observation(obs)
+                        added += 1
+                except Exception:
+                    logger.debug("Skipping invalid observation", exc_info=True)
 
-            # Write updated feature config if returned
-            if "feature_config" in data and isinstance(data["feature_config"], dict):
+            # Expire old observations
+            expire_ids = data.get("expire_ids", [])
+            if expire_ids:
+                self._expire_observations(expire_ids)
+
+            # Append session history entry
+            session_entry = data.get("session_entry", "")
+            if session_entry:
+                self._append_session_history(session_entry)
+
+            # Update feature config if returned
+            fc = data.get("feature_config")
+            if fc and isinstance(fc, dict):
                 try:
                     self._feature_config_path.write_text(
-                        json.dumps(data["feature_config"], indent=2) + "\n"
+                        json.dumps(fc, indent=2) + "\n"
                     )
-                    updated.append("feature_config")
+                    logger.info("Updated feature config from reflection")
                 except OSError:
                     logger.warning("Could not write feature config")
 
+            # Save current scorecard as previous for next reflection
+            self._previous_scorecard = current_scorecard
+
             # Invalidate cache
             self._cache = None
-            logger.info("Reflection complete — updated: %s", ", ".join(updated) or "nothing")
+
+            logger.info(
+                "Reflection complete — added %d observations, expired %d, session_entry=%s",
+                added, len(expire_ids), bool(session_entry),
+            )
 
         except json.JSONDecodeError as e:
             logger.error("Reflection returned invalid JSON: %s", e)
-            logger.debug("Raw text that failed to parse (first 1000 chars): %s", stripped[:1000] if stripped else "(empty)")
+            logger.debug("Raw text (first 1000 chars): %s", stripped[:1000] if stripped else "(empty)")
+            # Still save scorecard so next reflection has a comparison
+            self._previous_scorecard = current_scorecard
         except Exception:
             logger.exception("Reflection failed")
-
-    def _read_file(self, name: str) -> str:
-        path = self._dir / name
-        try:
-            return path.read_text()
-        except OSError:
-            return ""
-
-    def _write_file(self, name: str, content: str) -> None:
-        path = self._dir / name
-        path.write_text(content)
-        logger.debug("Updated knowledge file: %s", path)
+            self._previous_scorecard = current_scorecard
