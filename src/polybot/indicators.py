@@ -675,6 +675,56 @@ def _volatility_30m(
     )
 
 
+@register("chainlink_divergence")
+def _chainlink_divergence(
+    snap: MarketSnapshot, params: dict, _session: SessionContext | None,
+) -> IndicatorResult | None:
+    """Binance vs Chainlink price divergence.
+
+    Since Polymarket resolves using Chainlink BTC/USD Data Streams,
+    any divergence between Binance (our primary feed) and Chainlink
+    (the resolution source) could lead to unexpected outcomes.
+
+    Large divergence = higher resolution risk.
+    """
+    if not snap.btc_price or snap.btc_price.chainlink_price is None:
+        return None
+
+    binance = snap.btc_price.price_usd
+    chainlink = snap.btc_price.chainlink_price
+    divergence = binance - chainlink
+    abs_div = abs(divergence)
+    pct = divergence / chainlink * 100 if chainlink else 0
+
+    if abs_div > 50:
+        signal = "HIGH divergence — resolution risk"
+    elif abs_div > 20:
+        signal = "moderate divergence — monitor"
+    elif abs_div > 5:
+        signal = "minor divergence"
+    else:
+        signal = "aligned"
+
+    # If Chainlink is higher, it means the resolution source sees a higher price
+    # This matters for "close >= open" comparisons
+    if divergence > 5:
+        note = "Chainlink LOWER → resolution may differ from Binance"
+    elif divergence < -5:
+        note = "Chainlink HIGHER → resolution may differ from Binance"
+    else:
+        note = ""
+
+    label = f"${divergence:+,.0f} ({pct:+.3f}%) — {signal}"
+    if note:
+        label += f" | {note}"
+
+    return IndicatorResult(
+        name="Chainlink Divergence",
+        value=divergence,
+        label=label,
+    )
+
+
 @register("flat_market_edge")
 def _flat_market_edge(
     snap: MarketSnapshot, params: dict, session: SessionContext | None,

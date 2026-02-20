@@ -164,6 +164,12 @@ def format_feature_vector(
                 f"- BTC at Candle Open: ${candle_open_btc:,.2f} → "
                 f"**Current move: ${diff:+,.2f} ({who_winning})**"
             )
+        if fv.market.btc_price.chainlink_price is not None:
+            lines.append(
+                f"- Chainlink On-Chain Price: ${fv.market.btc_price.chainlink_price:,.2f} "
+                f"(divergence: ${fv.market.btc_price.price_divergence:+,.2f})"
+                " — THIS is the resolution source"
+            )
         lines.append(
             f"- BTC 24h Change: {fv.market.btc_price.change_24h_pct:+.2f}% "
             "(⚠ NOT predictive for 5-min candles — ~40% go opposite to daily trend)"

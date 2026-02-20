@@ -292,13 +292,14 @@ class BtcPriceFeed:
             logger.error("All BTC price sources failed")
             return self._cache  # return stale cache
 
-        # Cross-reference: fetch Chainlink on-chain (async, non-blocking, just for logging)
+        # Cross-reference: fetch Chainlink on-chain (resolution source)
         chainlink_price = await self._fetch_chainlink_price()
+        divergence = None
         if chainlink_price is not None and price_usd:
-            diff = abs(price_usd - chainlink_price)
+            divergence = price_usd - chainlink_price
             logger.debug(
-                "Price cross-ref: Binance=$%.2f Chainlink=$%.2f diff=$%.2f",
-                price_usd, chainlink_price, diff,
+                "Price cross-ref: Binance=$%.2f Chainlink=$%.2f divergence=$%.2f",
+                price_usd, chainlink_price, divergence,
             )
 
         # Get 24h change from CoinGecko (non-blocking, cached separately)
@@ -307,6 +308,8 @@ class BtcPriceFeed:
         price = BtcPrice(
             price_usd=price_usd,
             change_24h_pct=change_24h,
+            chainlink_price=chainlink_price,
+            price_divergence=divergence,
         )
         self._cache = price
         self._cache_time = now

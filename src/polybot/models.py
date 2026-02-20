@@ -60,6 +60,8 @@ class BtcPrice(BaseModel):
     price_usd: float
     timestamp: float = Field(default_factory=time.time)
     change_24h_pct: float = 0.0
+    chainlink_price: float | None = None  # On-chain Chainlink BTC/USD (resolution source)
+    price_divergence: float | None = None  # Binance - Chainlink divergence ($)
 
 
 class BtcCandle(BaseModel):
