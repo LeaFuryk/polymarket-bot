@@ -593,6 +593,41 @@ class TradingAgent:
                     token_side=decision.token_side,
                 )
 
+        # Risk/reward-based position sizing: scale size down for worse R/R
+        if decision.action == Action.BUY:
+            target_ob = down_ob if decision.token_side == TokenSide.DOWN else up_ob
+            est_fill = target_ob.best_ask or 0.5
+            reward = 1.0 - est_fill
+            risk = est_fill
+            rr_ratio = reward / risk if risk > 0 else 0
+            min_rr = self._config.risk.min_reward_risk_ratio
+            excellent_rr = 2.0
+            if rr_ratio >= excellent_rr:
+                rr_scale = 1.0
+            elif rr_ratio > min_rr:
+                # Linear scale: 50% at min_rr, 100% at excellent_rr
+                rr_scale = 0.5 + 0.5 * (rr_ratio - min_rr) / (excellent_rr - min_rr)
+            else:
+                rr_scale = 0.5  # Will be blocked by risk manager anyway
+            if rr_scale < 1.0:
+                original_size = decision.size
+                scaled_size = round(decision.size * rr_scale, 1)
+                if scaled_size >= 1.0:
+                    decision = TradingDecision(
+                        action=decision.action,
+                        order_type=decision.order_type,
+                        size=scaled_size,
+                        confidence=decision.confidence,
+                        reasoning=decision.reasoning,
+                        market_view=decision.market_view,
+                        token_side=decision.token_side,
+                        limit_price=decision.limit_price,
+                    )
+                    logger.info(
+                        "R/R sizing: %.1f → %.1f shares (R/R=%.2f, scale=%.0f%%)",
+                        original_size, scaled_size, rr_ratio, rr_scale * 100,
+                    )
+
         self._last_action = f"{decision.action.value} {decision.token_side.value} {decision.size:.1f}"
         self._last_reasoning = decision.reasoning[:120]
         self._last_token_side = decision.token_side.value

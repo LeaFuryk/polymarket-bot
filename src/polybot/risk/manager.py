@@ -178,6 +178,20 @@ class RiskManager:
                     reason=f"Cannot sell {decision.size:.2f} {decision.token_side.value}, only hold {position.shares:.2f}",
                 ))
 
+        # Risk/reward ratio gate (BUY only)
+        if decision.action == Action.BUY:
+            est_fill = ob.best_ask or 0.5
+            reward = 1.0 - est_fill  # winning token pays $1
+            risk = est_fill          # losing token pays $0
+            rr_ratio = reward / risk if risk > 0 else 0
+            if rr_ratio < self._config.min_reward_risk_ratio:
+                results.append(RiskCheckResult(
+                    passed=False,
+                    check_name="reward_risk_ratio",
+                    reason=f"R/R ratio {rr_ratio:.2f} < min {self._config.min_reward_risk_ratio:.2f} "
+                           f"(entry {est_fill:.4f}, reward {reward:.4f}, risk {risk:.4f})",
+                ))
+
         # Order size vs depth check
         if decision.action == Action.BUY and ob.ask_depth > 0:
             fill_price = ob.best_ask or 0.5

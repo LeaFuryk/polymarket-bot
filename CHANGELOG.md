@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- **Minimum risk/reward ratio gate** — New `risk.min_reward_risk_ratio` config (default 1.3) blocks BUY entries where `(1 - entry_price) / entry_price` falls below the threshold (~$0.435 entry cutoff). This prevents the bot from entering positions where the potential loss exceeds the potential gain, fixing the win/loss asymmetry where losses were significantly larger than wins.
+- **Risk/reward-based position sizing** — BUY size is now scaled linearly based on R/R quality: 100% at R/R >= 2.0 (entry <= $0.33), ramping down to 50% at the minimum gate (R/R 1.3). Better entries get more capital, marginal entries get less.
+- **R/R discipline in AI prompt** — The system prompt now explains the risk/reward math and gate to Claude, so the AI can factor entry price quality into its recommendations before the risk manager intervenes.
+
+### Changed
 - **Direct Chainlink data feed integration** — The Chainlink on-chain BTC/USD price (the actual resolution source) is now exposed to the AI in the prompt alongside the Binance price, including the $ divergence between them. New `chainlink_divergence` indicator flags high divergence (>$50) as resolution risk. The `BtcPrice` model now carries `chainlink_price` and `price_divergence` fields.
 - **Hybrid ML + LLM scoring** (`ml_scorer.py`) — Online logistic regression model trained on 9 computed features (streak, magnitude, BTC vs open, volatility, volume, midpoints, imbalance, flat ratio). Trains incrementally after each candle resolution via gradient descent. ML prediction (UP probability + confidence) is passed to Claude as additional context. No external ML libraries — pure Python implementation. Model weights persisted to `ml_model.json`.
 - **Enhanced order book indicators** — Three new indicators: `down_orderbook_imbalance` (bid/ask depth ratio for DOWN token), `cross_book_flow` (UP vs DOWN depth comparison for informed flow detection), `best_entry_analysis` (compares UP/DOWN ask prices and risk/reward ratios). Previously only UP token orderbook was analyzed.
