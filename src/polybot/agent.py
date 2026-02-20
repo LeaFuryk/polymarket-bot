@@ -24,6 +24,7 @@ from polybot.indicators import (
     format_indicators,
 )
 from polybot.knowledge import KnowledgeManager
+from polybot.ml_scorer import MLScorer
 from polybot.prefilter import PreFilter
 from polybot.logging.trade_log import TradeLog
 from polybot.market_data.discovery import MarketDiscovery
@@ -149,6 +150,11 @@ class TradingAgent:
             data_dir=Path(config.logging.log_dir),
         )
 
+        # ML scorer (logistic regression baseline)
+        self._ml_scorer = MLScorer(
+            data_dir=Path(config.logging.log_dir),
+        )
+
         # Knowledge / feedback learning
         self._knowledge_manager = KnowledgeManager(config.logging.knowledge_dir, config.ai)
         self._feature_config = FeatureConfig(Path(config.logging.knowledge_dir).parent / "feature_config.json")
@@ -178,6 +184,10 @@ class TradingAgent:
         # AI cost tracking
         self._total_api_cost: float = 0.0
         self._last_cycle_api_cost: float = 0.0
+
+        # ML features for training after resolution
+        self._last_ml_features: tuple[str, dict[str, float]] | None = None
+        self._pending_ml_features: dict[str, dict[str, float]] = {}
 
     async def run(self) -> None:
         """Main entry point — run the trading loop until shutdown."""
@@ -293,6 +303,11 @@ class TradingAgent:
             # Record outcome for confidence calibration and exit analysis
             self._calibrator.record_outcome(resolution.slug, resolution.winner)
             self._exit_tracker.record_outcome(resolution.slug, resolution.winner)
+
+            # Train ML model on resolution outcome
+            ml_feats = self._pending_ml_features.pop(resolution.slug, None)
+            if ml_feats:
+                self._ml_scorer.train(ml_feats, up_won=(resolution.winner == "up"))
 
             # Update session stats (skip flat resolutions with no position)
             had_position = resolution_pnl != 0.0
@@ -450,6 +465,35 @@ class TradingAgent:
         indicators_text = format_indicators(indicator_results)
         if indicators_text:
             logger.debug("Indicators: %s", indicators_text[:200])
+
+        # Compute ML baseline prediction
+        btc_price_val = snapshot.btc_price.price_usd if snapshot.btc_price else None
+        ml_features = self._ml_scorer.extract_features(
+            candles=snapshot.btc_candles,
+            btc_price=btc_price_val,
+            candle_open=candle_open_btc,
+            up_mid=up_mid,
+            down_mid=down_mid,
+            up_bid_depth=snapshot.orderbook.bid_depth,
+            up_ask_depth=snapshot.orderbook.ask_depth,
+        )
+        ml_prediction = self._ml_scorer.predict(ml_features)
+        # Store features for training after resolution
+        if self._current_market:
+            self._pending_ml_features[self._current_market.slug] = ml_features
+
+        # Append ML prediction to indicators text
+        if ml_prediction.model_trained:
+            ml_line = (
+                f"- ML Baseline: {ml_prediction.up_probability:.0%} UP probability "
+                f"({ml_prediction.confidence})"
+            )
+        else:
+            ml_line = f"- ML Baseline: {self._ml_scorer.get_summary()}"
+        if indicators_text:
+            indicators_text += "\n" + ml_line
+        else:
+            indicators_text = "## Computed Indicators\n" + ml_line
 
         # 5b. Two-pass screening: fast Haiku check before expensive Sonnet call
         if self._config.ai.two_pass_enabled and not has_position:
