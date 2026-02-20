@@ -162,6 +162,8 @@ class TradingAgent:
         self._feature_config = FeatureConfig(Path(config.logging.knowledge_dir).parent / "feature_config.json")
         self._recent_resolutions: list[ResolutionRecord] = []
         self._recent_trades: list[TradeRecord] = []
+        # All trades this session (uncapped — for dashboard completeness)
+        self._session_trades: list[TradeRecord] = []
         self._resolutions_since_reflection: int = 0
 
         # Restore persisted state
@@ -557,17 +559,18 @@ class TradingAgent:
         logger.info("API cost: $%.4f (session total: $%.4f)", api_cost, self._total_api_cost)
 
         # Hard confidence gate: override low-confidence trades to HOLD (BUY only — never block exits)
-        if decision.action == Action.BUY and decision.confidence < 0.6:
+        min_conf = self._config.agent.min_confidence
+        if decision.action == Action.BUY and decision.confidence < min_conf:
             logger.info(
-                "Overriding %s to HOLD — confidence %.2f < 0.6 threshold",
-                decision.action.value, decision.confidence,
+                "Overriding %s to HOLD — confidence %.2f < %.2f threshold",
+                decision.action.value, decision.confidence, min_conf,
             )
             decision = TradingDecision(
                 action=Action.HOLD,
                 order_type=OrderType.MARKET,
                 size=0.0,
                 confidence=decision.confidence,
-                reasoning=f"Overridden: confidence {decision.confidence:.2f} below 0.6 threshold. "
+                reasoning=f"Overridden: confidence {decision.confidence:.2f} below {min_conf} threshold. "
                           f"Original: {decision.reasoning[:100]}",
                 market_view=decision.market_view,
                 token_side=decision.token_side,
@@ -788,6 +791,7 @@ class TradingAgent:
         self._recent_trades.append(record)
         if len(self._recent_trades) > 50:
             self._recent_trades = self._recent_trades[-50:]
+        self._session_trades.append(record)
 
     # --- Dashboard Data Writer ---
 
@@ -842,9 +846,9 @@ class TradingAgent:
                 "down_avg_entry": self._portfolio.down_position.avg_entry_price,
             }
 
-            # Trades list — includes per-trade financial snapshot for session tracking
+            # Trades list — use full session trades (uncapped) for dashboard completeness
             trades = []
-            for t in self._recent_trades:
+            for t in self._session_trades:
                 trade_entry = {
                     "timestamp": datetime.fromtimestamp(t.timestamp, tz=timezone.utc).isoformat(),
                     "cycle": t.cycle_number,

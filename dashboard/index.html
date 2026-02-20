@@ -1013,21 +1013,38 @@ function detectSessions(trades, resolutions) {
     };
   });
 
-  // Assign resolutions to sessions by timestamp overlap
+  // Build slug→session index: match resolutions to the session that traded that candle
+  const slugToSession = new Map();
+  for (const s of sessions) {
+    for (const t of s.trades) {
+      if (t.candle_slug) slugToSession.set(t.candle_slug, s);
+    }
+  }
+
+  // Assign resolutions to sessions — prefer slug match, fall back to nearest preceding session
   for (const r of resolutions) {
+    // Primary: match by candle slug (reliable even across restarts)
+    if (r.slug && slugToSession.has(r.slug)) {
+      slugToSession.get(r.slug).resolutions.push(r);
+      continue;
+    }
+    // Fallback: assign to the most recent session that ended before this resolution.
+    // This handles resolutions from candles that resolved after a run was stopped
+    // (e.g., pending bet recovery on restart). Those candles belong to the run
+    // that was active when they were trading.
     const rTs = new Date(r.timestamp).getTime();
     let bestSess = null;
     let bestDist = Infinity;
     for (const s of sessions) {
-      const sStart = new Date(s.startTs).getTime() - 60000; // 1min buffer before
-      const sEnd = new Date(s.endTs).getTime() + 5 * 60000; // 5min buffer after (resolution comes after last trade)
-      if (rTs >= sStart && rTs <= sEnd) {
-        const dist = Math.abs(rTs - (sStart + sEnd) / 2);
+      const sEnd = new Date(s.endTs).getTime();
+      const sStart = new Date(s.startTs).getTime();
+      // Resolution falls within the session window (with generous buffer)
+      if (rTs >= sStart - 60000 && rTs <= sEnd + 60 * 60000) {
+        const dist = Math.abs(rTs - sEnd);
         if (dist < bestDist) { bestDist = dist; bestSess = s; }
       }
     }
     if (bestSess) bestSess.resolutions.push(r);
-    // else: orphaned resolution (no matching trades), skip for session view
   }
 
   // Group sessions by date

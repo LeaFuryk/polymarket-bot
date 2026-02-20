@@ -19,6 +19,7 @@ agent:
   fast_poll_interval: 10       # seconds between cycles before first AI call (fast polling)
   initial_cash: 1000.0         # starting paper balance in USDC
   max_cycles: 0                # 0 = unlimited
+  min_confidence: 0.55         # minimum AI confidence to allow a BUY (lower = more trades)
 
 ai:
   model: "claude-sonnet-4-5-20250929"
