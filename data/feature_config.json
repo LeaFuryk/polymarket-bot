@@ -62,7 +62,7 @@
       "name": "btc_candle_momentum",
       "enabled": true,
       "params": {
-        "window": 4
+        "window": 6
       }
     },
     {
@@ -107,7 +107,7 @@
     },
     {
       "name": "flat_market_edge",
-      "enabled": true,
+      "enabled": false,
       "params": {
         "flat_threshold": 5.0
       }

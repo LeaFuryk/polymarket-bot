@@ -480,6 +480,7 @@ class TradingAgent:
             self._session_losses,
             self._session_resolution_pnl,
             calibration_summary=calibration_summary,
+            recent_trades=self._recent_trades,
         )
         logger.debug("Feedback context: %s", feedback_context[:200])
 
@@ -602,7 +603,7 @@ class TradingAgent:
                     confidence_drivers=decision.confidence_drivers,
                 )
 
-        # Risk/reward-based position sizing: scale size down for worse R/R
+        # Position sizing: scale by R/R quality AND BTC move magnitude
         if decision.action == Action.BUY:
             target_ob = down_ob if decision.token_side == TokenSide.DOWN else up_ob
             est_fill = target_ob.best_ask or 0.5
@@ -618,9 +619,25 @@ class TradingAgent:
                 rr_scale = 0.5 + 0.5 * (rr_ratio - min_rr) / (excellent_rr - min_rr)
             else:
                 rr_scale = 0.5  # Will be blocked by risk manager anyway
-            if rr_scale < 1.0:
+
+            # Move-magnitude scaling: reduce size when BTC hasn't moved much
+            # (small moves are noise — big positions on noise = big losses)
+            move_scale = 1.0
+            btc_price_now = snapshot.btc_price.price_usd if snapshot.btc_price else None
+            if candle_open_btc is not None and btc_price_now is not None:
+                btc_move = abs(btc_price_now - candle_open_btc)
+                if btc_move < 10:
+                    move_scale = 0.4  # near-flat: minimal size
+                elif btc_move < 30:
+                    move_scale = 0.6  # small move: reduced size
+                elif btc_move < 60:
+                    move_scale = 0.8  # moderate move: slightly reduced
+                # >= $60: full size (1.0)
+
+            combined_scale = rr_scale * move_scale
+            if combined_scale < 1.0:
                 original_size = decision.size
-                scaled_size = round(decision.size * rr_scale, 1)
+                scaled_size = round(decision.size * combined_scale, 1)
                 if scaled_size >= 1.0:
                     decision = TradingDecision(
                         action=decision.action,
@@ -633,8 +650,9 @@ class TradingAgent:
                         limit_price=decision.limit_price,
                     )
                     logger.info(
-                        "R/R sizing: %.1f → %.1f shares (R/R=%.2f, scale=%.0f%%)",
+                        "Position sizing: %.1f → %.1f shares (R/R=%.2f×%.0f%%, move=$%.0f×%.0f%%)",
                         original_size, scaled_size, rr_ratio, rr_scale * 100,
+                        btc_move if btc_price_now and candle_open_btc else 0, move_scale * 100,
                     )
 
         # Register shadow prediction for HOLD cycles (builds calibration data)

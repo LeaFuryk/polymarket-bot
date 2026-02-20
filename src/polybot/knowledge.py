@@ -344,8 +344,11 @@ class KnowledgeManager:
         session_losses: int,
         session_pnl: float,
         calibration_summary: str = "",
+        recent_trades: list[TradeRecord] | None = None,
     ) -> str:
         """Combine base knowledge + active observations into a prompt block."""
+        if recent_trades is None:
+            recent_trades = []
         lines: list[str] = []
 
         # Session stats
@@ -353,6 +356,38 @@ class KnowledgeManager:
         win_rate = (session_wins / total * 100) if total > 0 else 0.0
         lines.append(f"Session: {session_wins}W/{session_losses}L ({win_rate:.0f}% win rate) | PnL: ${session_pnl:+.4f}")
         lines.append("")
+
+        # Recent trade decisions with outcomes (so AI can learn from its own mistakes)
+        if recent_trades:
+            # Filter to trades with fills (BUY/SELL) and match to resolutions
+            res_by_slug = {r.slug: r for r in resolutions}
+            filled_trades = [
+                t for t in recent_trades
+                if t.action.value in ("BUY", "SELL") and t.fill_price
+            ]
+            if filled_trades:
+                # Show last 10 trade decisions with outcomes
+                recent_filled = filled_trades[-10:]
+                up_trades = [t for t in filled_trades if t.token_side.value == "up" and t.action.value == "BUY"]
+                down_trades = [t for t in filled_trades if t.token_side.value == "down" and t.action.value == "BUY"]
+                up_wins = sum(1 for t in up_trades if res_by_slug.get(t.candle_slug, None) and res_by_slug[t.candle_slug].winner == "up")
+                down_wins = sum(1 for t in down_trades if res_by_slug.get(t.candle_slug, None) and res_by_slug[t.candle_slug].winner == "down")
+                lines.append(f"Your trade record: UP buys {up_wins}W/{len(up_trades)-up_wins}L | DOWN buys {down_wins}W/{len(down_trades)-down_wins}L")
+                lines.append("")
+                lines.append("Your recent trades and outcomes:")
+                lines.append("| Token | Entry | Conf | Winner | Result |")
+                lines.append("|-------|-------|------|--------|--------|")
+                for t in recent_filled:
+                    res = res_by_slug.get(t.candle_slug)
+                    if res:
+                        won = t.token_side.value == res.winner
+                        result = "WIN" if won else "LOSS"
+                    else:
+                        result = "pending"
+                    lines.append(
+                        f"| {t.action.value} {t.token_side.value.upper()} | {t.fill_price:.4f} | {t.confidence:.2f} | {res.winner if res else '?'} | {result} |"
+                    )
+                lines.append("")
 
         # Last 10 resolutions as compact table
         if resolutions:
