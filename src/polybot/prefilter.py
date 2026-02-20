@@ -40,7 +40,7 @@ class PreFilter:
 
     def __init__(
         self,
-        min_time_remaining: float = 90.0,
+        min_time_remaining: float = 45.0,
         choppy_range_threshold: float = 50.0,
         choppy_max_entry: float = 0.28,
         no_streak_max_entry: float = 0.40,
