@@ -224,9 +224,14 @@ class TradingAgent:
             if max_cycles and cycle > max_cycles:
                 logger.info("Reached max_cycles=%d, stopping", max_cycles)
                 break
-            await self._run_cycle(cycle)
+            _snapshot, pf_passed = await self._run_cycle(cycle)
             if not self._shutdown and (not max_cycles or cycle < max_cycles):
-                await self._interruptible_sleep(self._config.agent.decision_interval)
+                interval = (
+                    self._config.agent.decision_interval
+                    if pf_passed
+                    else self._config.agent.fast_poll_interval
+                )
+                await self._interruptible_sleep(interval)
 
     async def _run_with_dashboard(self) -> None:
         cycle = 0
@@ -238,10 +243,15 @@ class TradingAgent:
                 if max_cycles and cycle > max_cycles:
                     logger.info("Reached max_cycles=%d, stopping", max_cycles)
                     break
-                snapshot = await self._run_cycle(cycle)
+                snapshot, pf_passed = await self._run_cycle(cycle)
                 live.update(self._build_dashboard(cycle, snapshot))
                 if not self._shutdown and (not max_cycles or cycle < max_cycles):
-                    await self._interruptible_sleep(self._config.agent.decision_interval)
+                    interval = (
+                        self._config.agent.decision_interval
+                        if pf_passed
+                        else self._config.agent.fast_poll_interval
+                    )
+                    await self._interruptible_sleep(interval)
 
     async def _discover_market(self) -> CandleMarket | None:
         """Discover the current candle market, handling rotation."""
@@ -347,8 +357,8 @@ class TradingAgent:
         # Reset positions for new market
         self._portfolio.reset_positions()
 
-    async def _run_cycle(self, cycle: int):
-        """Execute one decision cycle. Returns the market snapshot."""
+    async def _run_cycle(self, cycle: int) -> tuple:
+        """Execute one decision cycle. Returns (snapshot, prefilter_passed)."""
         logger.info("=== Cycle %d ===", cycle)
 
         # 0. Discover/rotate market
@@ -356,7 +366,7 @@ class TradingAgent:
         if market is None:
             logger.warning("No market available, skipping cycle")
             self._last_action = "SKIP (no market)"
-            return None
+            return None, False
 
         # Check resolution buffer
         time_remaining = market.time_remaining()
@@ -364,7 +374,7 @@ class TradingAgent:
         if time_remaining < buffer:
             logger.info("Too close to resolution (%.0fs < %ds), skipping", time_remaining, buffer)
             self._last_action = f"SKIP ({time_remaining:.0f}s to resolution)"
-            return None
+            return None, False
 
         # 1. Fetch market data
         try:
@@ -372,7 +382,7 @@ class TradingAgent:
         except Exception:
             logger.exception("Failed to fetch market data, skipping cycle")
             self._last_action = "SKIP (data error)"
-            return None
+            return None, False
 
         up_ob = snapshot.orderbook
         down_ob = snapshot.down_orderbook
@@ -407,7 +417,7 @@ class TradingAgent:
             self._last_action = "BLOCKED (pre-trade)"
             self._last_risk_status = reasons
             self._log_cycle(cycle, snapshot, risk_blocked=True, risk_reason=reasons)
-            return snapshot
+            return snapshot, False
 
         # 4b. Rules-based pre-filter (skip AI on obvious HOLDs)
         has_position = (
@@ -420,7 +430,7 @@ class TradingAgent:
             self._last_reasoning = pf_result.reason
             self._log_cycle(cycle, snapshot, risk_blocked=False, risk_reason="")
             self._write_dashboard_json(cycle, snapshot)
-            return snapshot
+            return snapshot, False
 
         # 5. Build feature vector and get AI decision
         features = FeatureVector(
@@ -510,7 +520,7 @@ class TradingAgent:
                 self._last_reasoning = screen_reason
                 self._log_cycle(cycle, snapshot, risk_blocked=False, risk_reason="")
                 self._write_dashboard_json(cycle, snapshot)
-                return snapshot
+                return snapshot, True
 
         decision, latency_ms, api_cost = await self._decision_engine.decide(
             features, feedback_context=feedback_context, indicators_text=indicators_text,
@@ -641,7 +651,7 @@ class TradingAgent:
         # 11. Write dashboard JSON
         self._write_dashboard_json(cycle, snapshot)
 
-        return snapshot
+        return snapshot, True
 
     def _log_cycle(
         self, cycle, snapshot, decision=None, latency_ms=0.0,
