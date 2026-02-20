@@ -126,6 +126,11 @@
       "name": "best_entry_analysis",
       "enabled": true,
       "params": {}
+    },
+    {
+      "name": "chainlink_divergence",
+      "enabled": true,
+      "params": {}
     }
   ]
 }
