@@ -47,7 +47,7 @@ An AI-powered paper trading agent that trades Polymarket BTC 5-minute candle pre
 
 ## How It Works
 
-The bot runs a continuous loop of 5-minute cycles. Each cycle it discovers the current BTC candle market on Polymarket, gathers data (including 200 historical 5-min BTC candles for micro-trend analysis), asks Claude for a trading decision, simulates execution, and logs everything. Every 3 candle resolutions, Claude reflects on its performance and updates its own knowledge base and indicator configuration.
+The bot runs a continuous loop of 5-minute cycles. Each cycle it discovers the current BTC candle market on Polymarket, gathers data (including 200 historical 5-min BTC candles for micro-trend analysis), asks Claude for a trading decision, simulates execution, and logs everything. Every 10 candle resolutions, Claude reflects on its performance using a quantitative scorecard and produces structured observations that feed into future decisions.
 
 ### The Self-Improving Loop
 
@@ -57,8 +57,8 @@ Decide ──► Trade ──► Resolve ──► Reflect ──► Adjust Inpu
   │          │          │           │              └─ Update data/feature_config.json
   │          │          │           │                 (enable/disable/tune indicators)
   │          │          │           │
-  │          │          │           └─ Claude analyzes W/L patterns,
-  │          │          │              writes data/knowledge/*.md files
+  │          │          │           └─ Claude sees scorecard (current vs previous batch),
+  │          │          │              produces observations → data/knowledge/observations.jsonl
   │          │          │
   │          │          └─ BTC candle closes → winner = up or down
   │          │             Winning token pays $1, loser pays $0
@@ -97,7 +97,7 @@ When a 5-minute candle expires and a new one begins:
 - Winning token positions settle at $1/share, losing at $0
 - Session W/L stats are updated
 - Portfolio positions reset for the new candle
-- Every 3 resolutions → **reflection** is triggered
+- Every 10 resolutions → **reflection** is triggered
 - Resolution counter is persisted to `logs/agent_state.json` so it survives restarts
 
 ### Pending Bet Recovery on Startup
@@ -115,17 +115,22 @@ This runs once at startup before the main trading loop begins. Candles that are 
 
 ### Reflection (Self-Improvement)
 
-After every 3 candle resolutions, the bot calls Claude with:
-- Recent resolution outcomes (W/L, BTC moves, PnL)
-- Recent trade history (actions, confidence, fills)
-- Current knowledge files
-- Current indicator configuration
+After every 10 candle resolutions, the bot calls Claude with a **quantitative scorecard** (current batch vs previous batch: win rate, avg PnL, avg win/loss size, hold rate) plus resolution/trade tables and active observations. This creates a real feedback loop where reflection can see if its changes helped.
 
-Claude produces:
-- **trading_patterns.md** — Observed market behavior patterns
-- **self_assessment.md** — Identified biases and recurring mistakes
-- **session_history.md** — Rolling log of recent session batches
-- **feature_config.json** (optional) — Updated indicator settings (at most 2 changes per reflection)
+Claude produces **structured observations** — descriptive, not imperative:
+- Good: "momentum plays at entry 0.30-0.40 won 3/4 times"
+- Forbidden: "NEVER trade above 0.40" or "require 0.72+ confidence"
+
+Each observation is categorized (pattern/bias/edge/regime) and stored in `observations.jsonl` with an expiry (default 30 resolutions). Reflection can also explicitly expire old observations that are contradicted by new data. This **append-only with decay** approach prevents the death spiral where reflection wrote escalating rules into persistent files.
+
+**Base knowledge** (`trading_patterns.md`, `self_assessment.md`) is **read-only** — human-curated strategy and bias notes injected into decisions as reference, never overwritten by reflection. Session history gets one row appended per reflection batch.
+
+The decision prompt shows active observations as contextual hints with age and remaining life:
+```
+## Recent Observations (contextual hints, not hard rules)
+- [pattern] momentum plays at entry 0.30-0.40 won 3/4 times (observed 5 resolutions ago, expires in 25)
+- [edge] late-candle entries (<90s) at <0.35 had 80% win rate (observed 3 resolutions ago, expires in 27)
+```
 
 ### Dynamic Feature Selection
 
@@ -249,9 +254,10 @@ polymarket-bot/
 ├── data/
 │   ├── feature_config.json            # Indicator settings (AI-managed)
 │   └── knowledge/
-│       ├── trading_patterns.md        # AI-written: market behavior observations
-│       ├── self_assessment.md         # AI-written: bias and mistake analysis
-│       └── session_history.md         # AI-written: rolling session summaries
+│       ├── trading_patterns.md        # Human-curated: strategy & patterns (read-only)
+│       ├── self_assessment.md         # Human-curated: known biases (read-only)
+│       ├── observations.jsonl         # AI-written: structured observations (append-only, auto-expire)
+│       └── session_history.md         # AI-written: rolling batch summaries
 ```
 
 ### Trade Logs (JSONL)
@@ -286,27 +292,29 @@ Prints a Rich table with: Total Cycles, Total Trades, Win Rate, Total PnL, Sharp
 
 The bot improves through two mechanisms that compound over time:
 
-### Knowledge Accumulation (every 3 resolutions)
+### Knowledge Accumulation (every 10 resolutions)
 
 ```
-Resolution 1-3: Bot trades, outcomes accumulate
-Resolution 3:   Claude reflection runs
-                 → Analyzes what worked/failed
-                 → Writes updated .md knowledge files
-                 → These files are injected into every future decision prompt
+Resolution 1-10:  Bot trades, outcomes accumulate
+Resolution 10:    Claude reflection runs
+                   → Sees scorecard: current batch vs previous (win rate, PnL, hold rate)
+                   → Produces 1-5 descriptive observations → appended to observations.jsonl
+                   → Can expire old observations contradicted by new data
+                   → Appends one-line summary to session_history.md
 
-Resolution 4-6: Bot trades with updated knowledge
-Resolution 6:   Another reflection
-                 → Builds on previous knowledge
-                 → Identifies new patterns or corrects old ones
+Resolution 11-20: Bot trades with base knowledge + active observations
+Resolution 20:    Another reflection
+                   → Scorecard shows delta from last batch
+                   → Old observations expire naturally (after 30 resolutions)
+                   → New observations replace them based on fresh data
 
 ... and so on
 ```
 
-The knowledge files are concise (< 100 lines each) and contain:
-- **Trading patterns** — "BTC momentum tends to persist within a candle", "wide spreads correlate with losses"
-- **Self assessment** — "Overconfident on down bets", "tends to trade too late in the candle"
-- **Session history** — Rolling table of recent batch outcomes
+The knowledge system has three layers:
+- **Base knowledge** (read-only) — `trading_patterns.md`, `self_assessment.md` — human-curated strategy and bias notes
+- **Observations** (append-only with decay) — `observations.jsonl` — AI-written descriptive observations that expire after ~30 resolutions
+- **Session history** — `session_history.md` — Rolling table of batch summaries (last 20)
 
 ### Feature Selection Tuning (alongside reflection)
 
@@ -321,12 +329,12 @@ This means the *input data* to decisions evolves over time, not just the decisio
 
 | Resolutions | What Happens |
 |-------------|--------------|
-| 0 | Bot starts with 6 default indicators + seeded knowledge (known biases, patterns) |
-| 1-2 | Trading with BTC candle analysis, accumulating outcomes |
-| 3 | First reflection — initial patterns identified, first possible indicator change |
-| 4-6 | Trading with first knowledge layer + possibly updated indicators |
-| 6 | Second reflection — patterns refined, more indicator tuning |
-| 9+ | Knowledge compounds; indicator selection stabilized to what works |
+| 0 | Bot starts with base knowledge + indicators, no observations yet |
+| 1-9 | Trading with base knowledge, accumulating outcomes |
+| 10 | First reflection — scorecard computed, 1-5 observations created, indicator tuning |
+| 11-19 | Trading with base knowledge + active observations as contextual hints |
+| 20 | Second reflection — scorecard shows delta vs batch 1, old observations may expire |
+| 30+ | Observations from batch 1 naturally expire; knowledge is always fresh |
 
 ---
 
@@ -372,8 +380,8 @@ Edit `src/polybot/decision_engine/prompts.py`:
 ### Improve the reflection prompt
 
 Edit `src/polybot/knowledge.py`:
-- `REFLECTION_PROMPT` — Controls what Claude analyzes and what files it produces
-- Add new knowledge file categories if needed
+- `REFLECTION_PROMPT` — Controls what Claude analyzes and what observations it produces
+- Observations are append-only with automatic expiry — safe to experiment with
 
 ### Activate WebSocket support
 
@@ -430,8 +438,8 @@ TradingAgent (agent.py) — main orchestration loop
  │   BTC open/close comparison → winner determination
  │
  ├── KnowledgeManager ─── Claude API
- │   Loads .md knowledge files for decisions
- │   Every 3 resolutions: reflection → updated .md + feature_config.json
+ │   Base knowledge (.md, read-only) + observations (JSONL, append-only with decay)
+ │   Every 10 resolutions: reflection → scorecard → observations + feature_config.json
  │
  ├── TradeLog
  │   JSONL daily-rotating: trades + resolutions
@@ -459,7 +467,7 @@ polymarket-bot/
 │   ├── agent.py                  # TradingAgent — main loop
 │   ├── config.py                 # AppConfig + YAML + env loading
 │   ├── indicators.py             # Indicator registry + 13 built-in indicators
-│   ├── knowledge.py              # KnowledgeManager + reflection
+│   ├── knowledge.py              # KnowledgeManager + structured reflection + scorecard
 │   ├── models.py                 # All Pydantic data models
 │   ├── resolution.py             # Candle winner determination
 │   ├── analysis/

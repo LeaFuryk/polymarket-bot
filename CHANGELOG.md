@@ -4,10 +4,24 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+- **Structured reflection system** — Complete rewrite of the reflection/knowledge architecture to prevent the death spiral where reflection wrote escalating rules into persistent files:
+  - **Structured observations** — Reflection now produces descriptive observations ("momentum plays at 0.30-0.40 won 3/4 times"), not imperatives ("NEVER trade above 0.40"). Stored in `observations.jsonl` with category (pattern/bias/edge/regime).
+  - **Append-only with decay** — Observations are appended to a JSONL file and automatically expire after a configurable number of resolutions (default 30). Reflection can also explicitly expire old observations by ID when contradicted by new data.
+  - **Quantitative scorecard** — Each reflection sees a scorecard comparing the current batch to the previous batch (win rate, avg PnL, avg win/loss size, hold rate with deltas). Creates a real feedback loop so reflection can see if its changes helped.
+  - **Base knowledge is read-only** — `trading_patterns.md` and `self_assessment.md` are human-curated reference files, never overwritten by reflection. Decision prompt shows them as "Strategy & Bias Notes (reference)".
+  - **Session history append-only** — One row appended per reflection batch, capped at 20 entries.
+  - **New models** — `ObservationCategory`, `Observation`, `Scorecard`, `ScorecardDelta` in `models.py`.
+  - **Knowledge state persistence** — Resolution counter and previous scorecard saved in `agent_state.json` so scorecard deltas work across restarts.
+  - **Reflection max_tokens reduced** from 16384 to 4096 (structured output is much smaller than rewriting entire files).
+
 ### Added
 - **Minimum risk/reward ratio gate** — New `risk.min_reward_risk_ratio` config (default 1.3) blocks BUY entries where `(1 - entry_price) / entry_price` falls below the threshold (~$0.435 entry cutoff). This prevents the bot from entering positions where the potential loss exceeds the potential gain, fixing the win/loss asymmetry where losses were significantly larger than wins.
 - **Risk/reward-based position sizing** — BUY size is now scaled linearly based on R/R quality: 100% at R/R >= 2.0 (entry <= $0.33), ramping down to 50% at the minimum gate (R/R 1.3). Better entries get more capital, marginal entries get less.
 - **R/R discipline in AI prompt** — The system prompt now explains the risk/reward math and gate to Claude, so the AI can factor entry price quality into its recommendations before the risk manager intervenes.
+
+### Fixed
+- **Reflection death spiral** — The reflection system was writing session-specific state (e.g., "-$21.63 LOSING SESSION", "require confidence >0.72") into persistent knowledge files. New sessions inherited stale losing-session rules, creating a permanent HOLD loop where the AI could never reach the self-imposed confidence threshold. Fixed by: (1) cleaning knowledge files to remove session-specific state and overly restrictive self-imposed rules, (2) adding guardrails to the reflection prompt explicitly forbidding session-specific state, escalating confidence thresholds, and absolute volatility filters in persistent knowledge files.
 
 ### Changed
 - **Direct Chainlink data feed integration** — The Chainlink on-chain BTC/USD price (the actual resolution source) is now exposed to the AI in the prompt alongside the Binance price, including the $ divergence between them. New `chainlink_divergence` indicator flags high divergence (>$50) as resolution risk. The `BtcPrice` model now carries `chainlink_price` and `price_divergence` fields.

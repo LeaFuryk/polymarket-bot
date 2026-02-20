@@ -271,7 +271,7 @@ def format_feature_vector(
     if feedback_context:
         lines.extend([
             "",
-            "## Performance Feedback & Learnings",
+            "## Performance Feedback & Observations",
             feedback_context,
         ])
 

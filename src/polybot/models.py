@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import time
 import uuid
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
 
@@ -334,3 +335,46 @@ class ResolutionRecord(BaseModel):
     down_pnl: float
     total_pnl: float
     timestamp: float = Field(default_factory=time.time)
+
+
+# --- Structured Reflection ---
+
+
+class ObservationCategory(str, Enum):
+    PATTERN = "pattern"
+    BIAS = "bias"
+    EDGE = "edge"
+    REGIME = "regime"
+
+
+class Observation(BaseModel):
+    """A single descriptive observation from reflection — append-only with decay."""
+
+    id: str = Field(default_factory=lambda: uuid.uuid4().hex[:12])
+    timestamp: str = Field(
+        default_factory=lambda: datetime.now(timezone.utc).isoformat()
+    )
+    category: ObservationCategory
+    text: str
+    based_on_resolutions: int  # how many resolutions were in the batch
+    resolution_count_at_creation: int  # global resolution counter when created
+    expires_after_resolutions: int = 30  # expire after this many new resolutions
+
+
+class Scorecard(BaseModel):
+    """Quantitative summary of a batch of resolutions."""
+
+    resolutions: int = 0
+    trades_taken: int = 0
+    win_rate: float = 0.0
+    avg_pnl_per_trade: float = 0.0
+    avg_win_size: float = 0.0
+    avg_loss_size: float = 0.0
+    hold_rate: float = 0.0
+
+
+class ScorecardDelta(BaseModel):
+    """Current scorecard vs previous batch for the reflection prompt."""
+
+    current: Scorecard
+    previous: Scorecard | None = None

@@ -1046,11 +1046,12 @@ class TradingAgent:
     # --- Agent State Persistence ---
 
     def _load_agent_state(self) -> None:
-        """Load persisted state (resolution counter + history) from disk."""
+        """Load persisted state (resolution counter + history + knowledge) from disk."""
         try:
             if self._state_path.exists():
                 data = json.loads(self._state_path.read_text())
                 self._resolutions_since_reflection = data.get("resolutions_since_reflection", 0)
+                self._knowledge_manager.load_state(data.get("knowledge", {}))
                 logger.info("Loaded agent state: resolutions_since_reflection=%d", self._resolutions_since_reflection)
         except Exception:
             logger.warning("Could not load agent state, starting fresh")
@@ -1136,6 +1137,7 @@ class TradingAgent:
             self._state_path.parent.mkdir(parents=True, exist_ok=True)
             self._state_path.write_text(json.dumps({
                 "resolutions_since_reflection": self._resolutions_since_reflection,
+                "knowledge": self._knowledge_manager.save_state(),
             }, indent=2) + "\n")
         except Exception:
             logger.warning("Could not save agent state")
