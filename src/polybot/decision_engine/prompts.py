@@ -103,6 +103,10 @@ based on past performance. Use them as supporting signals, not sole decision dri
 - confidence: your actual confidence (0.0-1.0)
 - reasoning: explain your analysis concisely
 - market_view: "bullish"/"bearish"/"neutral" + one-sentence thesis
+- hypothetical_direction: even on HOLD, predict which side ("up" or "down") you think will win \
+this candle. This builds calibration data without risking capital.
+- confidence_drivers: what specific data, signals, or conditions would increase your confidence? \
+For HOLD decisions, explain what would need to change for you to trade.
 """
 
 

@@ -125,13 +125,14 @@ class RiskManager:
         else:
             ob = snapshot.orderbook
 
-        # Spread check on the specific orderbook
-        if ob.spread_pct is not None and ob.spread_pct > self._config.max_spread_pct:
-            results.append(RiskCheckResult(
-                passed=False,
-                check_name="max_spread",
-                reason=f"{decision.token_side.value} spread {ob.spread_pct:.2%} > max {self._config.max_spread_pct:.2%}",
-            ))
+        # Spread check on the specific orderbook (BUY only — exits should never be blocked)
+        if decision.action == Action.BUY:
+            if ob.spread_pct is not None and ob.spread_pct > self._config.max_spread_pct:
+                results.append(RiskCheckResult(
+                    passed=False,
+                    check_name="max_spread",
+                    reason=f"{decision.token_side.value} spread {ob.spread_pct:.2%} > max {self._config.max_spread_pct:.2%}",
+                ))
 
         # Max position size
         if decision.action == Action.BUY:

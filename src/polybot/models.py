@@ -170,6 +170,8 @@ class TradingDecision(BaseModel):
     reasoning: str = ""
     market_view: str = ""  # bull/bear/neutral + brief thesis
     token_side: TokenSide = TokenSide.UP  # which token to trade (up or down)
+    hypothetical_direction: str = ""  # shadow prediction: "up" or "down"
+    confidence_drivers: str = ""  # what would increase confidence
 
 
 # --- Simulator ---

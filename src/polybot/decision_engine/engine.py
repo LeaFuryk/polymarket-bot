@@ -94,6 +94,8 @@ class DecisionEngine:
                 confidence=float(data["confidence"]),
                 reasoning=data.get("reasoning", ""),
                 market_view=data.get("market_view", ""),
+                hypothetical_direction=data.get("hypothetical_direction", ""),
+                confidence_drivers=data.get("confidence_drivers", ""),
             )
 
             logger.info(

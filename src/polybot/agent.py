@@ -138,7 +138,9 @@ class TradingAgent:
         )
 
         # Rules-based pre-filter (skips AI on obvious HOLDs)
-        self._prefilter = PreFilter()
+        self._prefilter = PreFilter(
+            min_reward_risk_ratio=config.risk.min_reward_risk_ratio,
+        )
 
         # Confidence calibration (tracks stated vs actual win rates)
         self._calibrator = ConfidenceCalibrator(
@@ -554,8 +556,8 @@ class TradingAgent:
         self._last_cycle_api_cost = api_cost
         logger.info("API cost: $%.4f (session total: $%.4f)", api_cost, self._total_api_cost)
 
-        # Hard confidence gate: override low-confidence trades to HOLD
-        if decision.action != Action.HOLD and decision.confidence < 0.6:
+        # Hard confidence gate: override low-confidence trades to HOLD (BUY only — never block exits)
+        if decision.action == Action.BUY and decision.confidence < 0.6:
             logger.info(
                 "Overriding %s to HOLD — confidence %.2f < 0.6 threshold",
                 decision.action.value, decision.confidence,
@@ -569,10 +571,12 @@ class TradingAgent:
                           f"Original: {decision.reasoning[:100]}",
                 market_view=decision.market_view,
                 token_side=decision.token_side,
+                hypothetical_direction=decision.hypothetical_direction,
+                confidence_drivers=decision.confidence_drivers,
             )
 
-        # Calibration gate: check if stated confidence is actually profitable
-        if decision.action != Action.HOLD:
+        # Calibration gate: check if stated confidence is actually profitable (BUY only — never block exits)
+        if decision.action == Action.BUY:
             cal = self._calibrator.check(decision.confidence)
             if cal.is_reliable and not cal.should_trade:
                 logger.info(
@@ -591,6 +595,8 @@ class TradingAgent:
                               f"Original: {decision.reasoning[:80]}",
                     market_view=decision.market_view,
                     token_side=decision.token_side,
+                    hypothetical_direction=decision.hypothetical_direction,
+                    confidence_drivers=decision.confidence_drivers,
                 )
 
         # Risk/reward-based position sizing: scale size down for worse R/R
@@ -627,6 +633,14 @@ class TradingAgent:
                         "R/R sizing: %.1f → %.1f shares (R/R=%.2f, scale=%.0f%%)",
                         original_size, scaled_size, rr_ratio, rr_scale * 100,
                     )
+
+        # Register shadow prediction for HOLD cycles (builds calibration data)
+        if decision.action == Action.HOLD and decision.hypothetical_direction and self._current_market:
+            self._calibrator.register_shadow(
+                self._current_market.slug,
+                decision.hypothetical_direction,
+                decision.confidence,
+            )
 
         self._last_action = f"{decision.action.value} {decision.token_side.value} {decision.size:.1f}"
         self._last_reasoning = decision.reasoning[:120]
@@ -757,6 +771,10 @@ class TradingAgent:
             record.market_view = decision.market_view
             record.ai_latency_ms = latency_ms
             record.ai_cost = self._last_cycle_api_cost
+            if decision.hypothetical_direction:
+                record.extra["hypothetical_direction"] = decision.hypothetical_direction
+            if decision.confidence_drivers:
+                record.extra["confidence_drivers"] = decision.confidence_drivers
 
         if fill:
             record.fill_price = fill.fill_price
@@ -923,6 +941,11 @@ class TradingAgent:
                 },
                 "calibration": {
                     "total_records": self._calibrator.total_records,
+                    "shadow_correct": self._calibrator._shadow_correct,
+                    "shadow_total": self._calibrator._shadow_total,
+                    "shadow_accuracy": round(
+                        self._calibrator._shadow_correct / self._calibrator._shadow_total, 3
+                    ) if self._calibrator._shadow_total > 0 else None,
                     "bins": [
                         {
                             "range": f"{b.bin_lower:.0%}-{b.bin_upper:.0%}",
