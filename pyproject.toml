@@ -29,6 +29,9 @@ dev = [
 
 [project.scripts]
 polybot-analyze = "polybot.analysis.report:main"
+polybot-archive = "polybot.analysis.archive:main"
+polybot-compare = "polybot.analysis.compare:main"
+polybot-validate = "polybot.analysis.validate:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

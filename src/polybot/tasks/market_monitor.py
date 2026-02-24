@@ -39,6 +39,7 @@ class MarketMonitor:
         resolution_tracker: ResolutionTracker,
         datastore: "DataStore | None" = None,
         feature_config: "FeatureConfig | None" = None,
+        market_history: "MarketHistoryStore | None" = None,
     ) -> None:
         self._config = config
         self._shared = shared
@@ -48,6 +49,7 @@ class MarketMonitor:
         self._resolution_tracker = resolution_tracker
         self._datastore = datastore
         self._feature_config = feature_config
+        self._market_history = market_history
         self._interval = config.monitor.market_monitor_interval
         self._rr_threshold = config.monitor.rr_trigger_threshold
         self._cooldown = config.monitor.ai_cooldown_seconds
@@ -148,6 +150,12 @@ class MarketMonitor:
                 snapshot, pf_snapshot, pf_result, rr_up, rr_down, btc_move,
             )
 
+        # Queue snapshot for persistent market history
+        if self._market_history is not None and self._market_history.current_candle_id is not None:
+            self._queue_market_history_snapshot(
+                snapshot, pf_snapshot, rr_up, rr_down, btc_move,
+            )
+
         # Decide whether to trigger AI
         best_rr = max(rr_up, rr_down)
         prefilter_passed = not pf_result.should_skip
@@ -236,3 +244,38 @@ class MarketMonitor:
             indicators_json=json.dumps(indicators_dict) if indicators_dict else "{}",
         )
         self._datastore.queue_snapshot(row)
+
+    def _queue_market_history_snapshot(
+        self, snapshot, pf_snapshot: PreFilterSnapshot,
+        rr_up: float, rr_down: float, btc_move: float,
+    ) -> None:
+        """Build a MarketSnapshotRow and queue it for persistent market history."""
+        from polybot.datastore import MarketSnapshotRow
+
+        up_ob = snapshot.orderbook
+        down_ob = snapshot.down_orderbook
+
+        row = MarketSnapshotRow(
+            candle_id=self._market_history.current_candle_id,
+            timestamp=pf_snapshot.timestamp,
+            time_remaining=pf_snapshot.time_remaining,
+            up_best_bid=up_ob.best_bid,
+            up_best_ask=up_ob.best_ask,
+            up_mid=up_ob.midpoint,
+            up_spread_pct=up_ob.spread_pct,
+            up_bid_depth=up_ob.bid_depth,
+            up_ask_depth=up_ob.ask_depth,
+            down_best_bid=down_ob.best_bid,
+            down_best_ask=down_ob.best_ask,
+            down_mid=down_ob.midpoint,
+            down_spread_pct=down_ob.spread_pct,
+            down_bid_depth=down_ob.bid_depth,
+            down_ask_depth=down_ob.ask_depth,
+            rr_up=rr_up,
+            rr_down=rr_down,
+            btc_price=pf_snapshot.btc_price,
+            btc_move_from_open=btc_move,
+            streak=pf_snapshot.streak,
+            streak_direction=pf_snapshot.streak_direction,
+        )
+        self._market_history.queue_snapshot(row)
