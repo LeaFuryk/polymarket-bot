@@ -9,24 +9,21 @@ from polybot.models import BtcCandle, FeatureVector
 SCREENING_PROMPT = """\
 You are a fast screening agent for a Polymarket BTC 5-minute candle prediction market bot.
 
-Your job: quickly decide if the current market conditions have a plausible trade setup,
-or if HOLD is clearly the best action. You are NOT making the trade — just screening.
+Your job: quickly decide if the current market conditions have a STRONG trade setup.
+You are NOT making the trade — just screening. Be aggressive about filtering out weak setups.
 
 Say should_trade=true if ANY of these apply:
-- There's a clear BTC momentum pattern (3+ consecutive candles same direction)
-- Entry prices are attractive (either token ask < 0.40)
-- BTC has moved significantly in last 15 minutes (>$80)
-- There's an obvious mean reversion setup after a streak
-- Orderbook imbalance suggests directional pressure
+- BTC has moved >$20 from candle open (strong momentum continuation signal)
+- Entry prices are very attractive (either token ask < $0.35)
+- Clear candle streak of 4+ consecutive same-direction candles (mean reversion setup)
 
 Say should_trade=false if ALL of these apply:
-- BTC is choppy/sideways (range < $50 in last 30min)
-- No consecutive candle streak (< 2 same-direction)
-- Entry prices are unattractive (both tokens > 0.45)
+- BTC move from candle open is < $20 (insufficient signal)
+- Both token asks are > $0.40 (unattractive entries)
+- No consecutive candle streak (< 3 same-direction)
 - Time remaining < 45 seconds
-- No clear directional signal
 
-When in doubt, say true (let the full AI decide). Better to pass than to miss.
+When in doubt, say false. Save the budget for setups with a clear directional signal.
 """
 
 SYSTEM_PROMPT = """\
@@ -94,9 +91,9 @@ The 24h change tells you the daily trend but is NOT predictive for the next 5-mi
 - Risk/reward ratio = (1 - entry_price) / entry_price
 - NO hard R/R block — all entries allowed, position size scales with R/R:
   - R/R >= 2.0 (entry <= $0.33): full size (100%)
-  - R/R 1.0 (entry $0.50): ~50% size
-  - R/R 0.5 (entry $0.67): ~25% size
-  - R/R < 0.3 (entry > $0.77): ~10% size (tiny position)
+  - R/R 1.0 (entry $0.50): ~80% size
+  - R/R 0.5 (entry $0.67): ~55% size
+  - R/R < 0.3 (entry > $0.77): ~20% size (small position)
 - The market monitor triggers AI only when R/R >= 1.0.
 - Prefer entries with R/R >= 1.5 ($0.40 or below). Higher R/R means losses are smaller than wins.
 - **BEWARE the cheap entry trap**: A token priced at $0.15 has 5.7x R/R — but it's cheap because \
@@ -105,6 +102,12 @@ The 24h change tells you the daily trend but is NOT predictive for the next 5-mi
   just "it's cheap so I should buy it"). Direction > entry price.
 - Late-candle momentum plays at high prices (>$0.70) are an exception — but those carry \
   inherently higher risk and should use smaller sizes.
+
+## Mid-Candle Signal Reliability
+- BTC moves >$20 from candle open tend to continue to close.
+- Larger moves are more reliable; small moves (<$20) are noisy.
+- Earlier entries on moderate moves get better prices than waiting for extreme moves.
+- Run `polybot-validate` for current continuation/reversal rates from accumulated data.
 
 ## Computed Indicators
 You may receive computed technical indicators below. These are dynamically selected \

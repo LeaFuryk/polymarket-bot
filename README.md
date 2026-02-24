@@ -54,7 +54,7 @@ The bot runs 6 concurrent async tasks in the same event loop. The MarketMonitor 
 ```
 Monitor ──► Trigger AI ──► Trade ──► Monitor P&L ──► SL/TP Exit
   │              │           │           │              │
-  │              │           │           │              └─ PositionMonitor detects -15%/+30%
+  │              │           │           │              └─ PositionMonitor detects -35%/+50%
   │              │           │           │                 → triggers AI exit evaluation
   │              │           │           │
   │              │           │           └─ PositionMonitor marks-to-market every 1s
@@ -89,7 +89,7 @@ All tasks are `asyncio.Task` in the same event loop (no OS threads). Safe for sh
 2. **Run prefilter** — Checks 1-5: time remaining, spread width, book depth, choppy market, entry setup
 3. **Record PreFilterSnapshot** — Per-second market state stored in a 300-entry deque (~5 min history)
 4. **Compute R/R** — Calculate risk/reward ratio for both UP and DOWN tokens
-5. **Trigger AI** — Sets `ai_trigger_event` when R/R >= 1.0, prefilter passes, and AI cooldown (45s) has elapsed
+5. **Trigger AI** — Sets `ai_trigger_event` when R/R >= 1.0, prefilter passes, and AI cooldown (60s) has elapsed
 
 ### AIDecision (event-driven)
 
@@ -101,7 +101,8 @@ Waits for entry triggers (from MarketMonitor) or exit triggers (from PositionMon
 4. **Claude decides** — Full Sonnet decision with structured JSON output
 5. **Confidence gate** — Override BUY to HOLD if confidence < 0.55
 6. **Calibration gate** — Override BUY to HOLD if calibrated win rate < break-even
-7. **Position sizing** — Extended R/R scale (no hard block): 100% at R/R >= 2.0, scaling down to 10% at R/R < 0.3. Multiplied by BTC move magnitude scaling
+7. **Anti-hedge guard** — Blocks BUY if opposite side has shares
+8. **Position sizing** — Flattened R/R scale: 100% at R/R >= 2.0, 80% at 1.0, 55% at 0.5, 20% minimum. Multiplied by BTC move magnitude scaling. Overconfidence cap (conf ≥ 0.70 + fill > $0.65 → 30% reduction)
 8. **Post-trade risk checks** — Position size, concentration, cash, spread (BUY only)
 9. **Execute + log** — Simulate fill, update portfolio, write TradeRecord
 
@@ -109,8 +110,8 @@ Waits for entry triggers (from MarketMonitor) or exit triggers (from PositionMon
 
 1. **Mark-to-market** — Update position values using cached snapshot
 2. **Compute P&L %** — For each open position (UP and DOWN independently)
-3. **Check thresholds** — Stop-loss at -15%, take-profit at +30% (configurable)
-4. **Trigger exit** — Push exit signal to AIDecision with reason and current P&L
+3. **Check thresholds** — Stop-loss at -35%, take-profit at +50% (configurable)
+4. **Trigger exit** — Push exit signal to AIDecision with reason and current P&L (respects AI cooldown; emergencies ≤-30% bypass)
 
 ### Market Rotation & Resolution
 
@@ -279,6 +280,7 @@ polymarket-bot/
 │
 ├── data/
 │   ├── feature_config.json            # Indicator settings (AI-managed)
+│   ├── market_history.db              # Persistent market data (never deleted, accumulates across iterations)
 │   └── knowledge/
 │       ├── trading_patterns.md        # Human-curated: strategy & patterns (read-only)
 │       ├── self_assessment.md         # Human-curated: known biases (read-only)
@@ -333,6 +335,19 @@ GROUP BY c.winner;
 
 Storage: ~150KB/candle, ~42MB/day. WAL mode enables concurrent reads while the bot writes.
 
+### Persistent Market History (`data/market_history.db`)
+
+A separate SQLite database that accumulates **pure market data** across all iterations — never deleted by `polybot-archive`. While `logs/polybot.db` mixes market data with session-specific decisions and portfolio state (and gets archived/cleaned each iteration), market history stores only what happened in the market: candle outcomes and per-second orderbook snapshots.
+
+| Table | Rows | Content |
+|-------|------|---------|
+| `market_candles` | 1 per 5-min candle | condition_id, slug, iteration label, BTC open/close, winner |
+| `market_snapshots` | ~300 per candle | Full UP+DOWN orderbook (bid/ask/mid/spread/depth), R/R ratios, BTC price, BTC move from open, streak |
+
+Each candle is tagged with an `iteration` label (e.g., `iter_003`) so you can track data provenance. The `UNIQUE(condition_id)` constraint prevents duplicates if the same candle is seen across restarts.
+
+With 500+ candles accumulated, you can statistically validate every assumption in the codebase — momentum continuation rates, reversal frequencies, optimal entry timing — instead of guessing.
+
 ### Analysis Report
 
 ```bash
@@ -341,6 +356,51 @@ polybot-analyze /path/to/logs
 ```
 
 Prints a Rich table with: Total Cycles, Total Trades, Win Rate, Total PnL, Sharpe Ratio, Max Drawdown, Avg Trade Size, Total Fees, Final Portfolio, Final Cash.
+
+### Iteration Archive & Comparison
+
+Archive a complete iteration snapshot before starting a fresh run:
+
+```bash
+polybot-archive                    # → archive/iter_001/, then clean working dirs
+polybot-archive --name "baseline"  # → archive/baseline/, then clean
+polybot-archive --no-clean         # archive without cleaning
+```
+
+Each archive contains all generated artifacts (trade logs, resolutions, SQLite DB, AI knowledge, feature config) plus a `summary.json` with key metrics: date range, candles, trades, win rate, PnL, fees, AI cost, net result, reflections count, and enabled indicators.
+
+Compare performance across all archived iterations:
+
+```bash
+polybot-compare                    # Rich table of all iterations side-by-side
+```
+
+Shows label, date range, candles, trades, win rate, PnL, fees, AI cost, and net result with color-coded deltas from the previous iteration.
+
+### Assumption Validation
+
+Validate trading assumptions against accumulated market history data:
+
+```bash
+polybot-validate                        # All reports
+polybot-validate --report momentum      # Specific report
+polybot-validate --report reversals     # Reversal rates
+polybot-validate --report entry         # Optimal entry timing
+polybot-validate --report distribution  # BTC move distribution
+polybot-validate --min-candles 50       # Require 50+ samples for full confidence
+```
+
+**Reports:**
+
+| Report | What it shows |
+|--------|--------------|
+| `summary` | Total candles, date range, iterations, UP/DOWN win split, avg BTC move, data quality |
+| `momentum` | For each move × time bucket: % where mid-candle BTC direction = final winner |
+| `reversals` | Same data inverted: % where mid-candle direction ≠ final winner |
+| `entry` | Average best ask price for the winning side at each time-remaining bucket |
+| `distribution` | Percentiles (10th–95th) of absolute BTC moves at candle close |
+
+Requires `data/market_history.db` — accumulated automatically by the bot across iterations. Low-sample cells are dimmed; cells below `--min-candles` threshold are flagged.
 
 ---
 
@@ -400,14 +460,14 @@ This means the *input data* to decisions evolves over time, not just the decisio
 
 The most direct levers are in `config/default.yaml`:
 
-- **`monitor.ai_cooldown_seconds`** — Minimum time between AI calls (default 45s). Lower = more responsive but higher API costs
+- **`monitor.ai_cooldown_seconds`** — Minimum time between AI calls (default 60s). Lower = more responsive but higher API costs
 - **`monitor.rr_trigger_threshold`** — R/R ratio needed to trigger AI (default 1.0, entry <= $0.50)
-- **`monitor.stop_loss_pct`** / **`monitor.take_profit_pct`** — Position exit thresholds (default -15%/+30%)
+- **`monitor.stop_loss_pct`** / **`monitor.take_profit_pct`** — Position exit thresholds (default -35%/+50%)
 - **`initial_cash`** — Affects position sizing through risk percentages
 - **`temperature`** — Currently 0.0 (deterministic); slight increase (0.1-0.3) may help exploration
 - **`risk.max_position_pct`** — Increase for more aggressive sizing, decrease for safety
 - **`risk.daily_loss_limit_pct`** — Tighter stop-loss or wider runway
-- **`risk.min_reward_risk_ratio`** — Minimum risk/reward ratio (kept for reference). No hard block — position size scales with R/R quality: 100% at R/R >= 2.0, 50% at 1.0, 25% at 0.5, 10% minimum
+- **`risk.min_reward_risk_ratio`** — Minimum risk/reward ratio (kept for reference). No hard block — position size scales with R/R quality: 100% at R/R >= 2.0, 80% at 1.0, 55% at 0.5, 20% minimum
 
 ### Add new indicators
 
@@ -518,9 +578,13 @@ TradingAgent (agent.py) — orchestrator, launches 6 concurrent tasks
  │   Base knowledge (.md, read-only) + observations (JSONL, append-only with decay)
  │   Every 10 resolutions: reflection → scorecard → observations + feature_config.json
  │
- ├── DataStore (datastore.py) — 6th async task
+ ├── DataStore (datastore.py) — async task
  │   SQLite WAL mode, batched writes from asyncio.Queue
  │   candles + snapshots (1/sec) + decisions → logs/polybot.db
+ │
+ ├── MarketHistoryStore (datastore.py) — async task
+ │   Persistent market data across iterations → data/market_history.db
+ │   Pure market observables only (no decisions/portfolio)
  │
  ├── TradeLog
  │   JSONL daily-rotating: trades + resolutions
@@ -535,6 +599,8 @@ TradingAgent (agent.py) — orchestrator, launches 6 concurrent tasks
 
 ```
 polymarket-bot/
+├── archive/                         # Iteration snapshots (gitignored)
+│   └── iter_001/                    # Each archive preserves logs/, data/, summary.json
 ├── config/
 │   └── default.yaml              # Primary configuration
 ├── dashboard/
@@ -554,7 +620,10 @@ polymarket-bot/
 │   ├── models.py                 # All Pydantic data models
 │   ├── resolution.py             # Candle winner determination
 │   ├── analysis/
-│   │   └── report.py             # polybot-analyze CLI
+│   │   ├── archive.py            # polybot-archive CLI — iteration snapshots
+│   │   ├── compare.py            # polybot-compare CLI — cross-iteration comparison
+│   │   ├── report.py             # polybot-analyze CLI
+│   │   └── validate.py           # polybot-validate CLI — assumption validation against market history
 │   ├── decision_engine/
 │   │   ├── engine.py             # Claude API decision calls
 │   │   ├── prompts.py            # System prompt + feature formatting

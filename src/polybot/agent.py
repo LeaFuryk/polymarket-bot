@@ -15,7 +15,7 @@ from rich.text import Text
 
 from polybot.calibration import ConfidenceCalibrator
 from polybot.config import AppConfig
-from polybot.datastore import DataStore
+from polybot.datastore import DataStore, MarketHistoryStore
 from polybot.exit_tracker import ExitTracker
 from polybot.decision_engine.engine import DecisionEngine
 from polybot.indicators import (
@@ -198,6 +198,13 @@ class TradingAgent:
         if config.logging.sqlite_enabled:
             self._datastore = DataStore(config.logging.sqlite_db_path)
 
+        # Persistent market history store (never deleted by archive)
+        iteration_label = self._compute_iteration_label()
+        self._market_history = MarketHistoryStore(
+            config.logging.market_history_db_path,
+            iteration=iteration_label,
+        )
+
         # Shared state for concurrent tasks
         self._shared = SharedState()
 
@@ -218,6 +225,9 @@ class TradingAgent:
         if self._datastore is not None:
             self._datastore.open()
 
+        # Open persistent market history store
+        self._market_history.open()
+
         # Load BTC 5-min candle history
         await self._market_data.btc_feed.load_candle_history(200)
 
@@ -234,6 +244,7 @@ class TradingAgent:
             resolution_tracker=self._resolution_tracker,
             datastore=self._datastore,
             feature_config=self._feature_config if self._datastore else None,
+            market_history=self._market_history,
         )
 
         self._ai_decision = AIDecision(
@@ -279,6 +290,9 @@ class TradingAgent:
             tasks.append(
                 asyncio.create_task(self._datastore.writer_loop(), name="datastore_writer")
             )
+        tasks.append(
+            asyncio.create_task(self._market_history.writer_loop(), name="market_history_writer")
+        )
 
         try:
             # Wait until shutdown
@@ -292,6 +306,20 @@ class TradingAgent:
             await asyncio.gather(*tasks, return_exceptions=True)
         finally:
             await self._shutdown_components()
+
+    def _compute_iteration_label(self) -> str:
+        """Determine current iteration label from archive count."""
+        archive_dir = Path.cwd() / "archive"
+        if not archive_dir.exists():
+            return "iter_001"
+        existing = sorted(
+            d.name for d in archive_dir.iterdir()
+            if d.is_dir() and d.name.startswith("iter_")
+        )
+        if not existing:
+            return "iter_001"
+        last_num = max(int(d.split("_")[1]) for d in existing)
+        return f"iter_{last_num + 1:03d}"
 
     def _handle_signal(self) -> None:
         logger.info("Shutdown signal received")
@@ -380,6 +408,15 @@ class TradingAgent:
                         btc_open=btc_snapshot.price_usd,
                     )
 
+                # Begin candle in persistent market history
+                self._market_history.begin_candle(
+                    condition_id=new_market.condition_id,
+                    slug=new_market.slug,
+                    start_time=new_market.start_time,
+                    end_time=new_market.end_time,
+                    btc_open=btc_snapshot.price_usd,
+                )
+
         return self._current_market
 
     async def _handle_market_transition(self) -> None:
@@ -434,6 +471,14 @@ class TradingAgent:
                         btc_close=resolution.btc_close,
                         winner=resolution.winner,
                         resolution_pnl=resolution_pnl,
+                    )
+
+                # Resolve candle in persistent market history
+                if self._market_history.current_candle_id is not None:
+                    self._market_history.resolve_candle(
+                        candle_id=self._market_history.current_candle_id,
+                        btc_close=resolution.btc_close,
+                        winner=resolution.winner,
                     )
 
                 # Sync stats to AI decision task
@@ -862,6 +907,7 @@ class TradingAgent:
         logger.info("Shutting down components...")
         if self._datastore is not None:
             await self._datastore.close()
+        await self._market_history.close()
         await self._discovery.close()
         await self._market_data.close()
         self._trade_log.close()

@@ -66,10 +66,10 @@ class RiskConfig(BaseModel):
 class MonitorConfig(BaseModel):
     market_monitor_interval: float = 1.0     # seconds between market data fetches
     position_monitor_interval: float = 1.0   # seconds between P&L checks
-    ai_cooldown_seconds: float = 45.0        # min seconds between AI calls
+    ai_cooldown_seconds: float = 60.0        # min seconds between AI calls
     rr_trigger_threshold: float = 1.0        # R/R to trigger AI (entry <= $0.50)
-    stop_loss_pct: float = -0.15             # -15% triggers exit evaluation
-    take_profit_pct: float = 0.30            # +30% triggers exit evaluation
+    stop_loss_pct: float = -0.35             # -35% triggers exit evaluation
+    take_profit_pct: float = 0.50            # +50% triggers exit evaluation
     btc_price_cache_ttl: float = 2.0         # seconds (was 30s)
 
 
@@ -79,6 +79,7 @@ class LoggingConfig(BaseModel):
     jsonl_enabled: bool = True
     sqlite_enabled: bool = True
     sqlite_db_path: str = "logs/polybot.db"
+    market_history_db_path: str = "data/market_history.db"
     dashboard_enabled: bool = True
     dashboard_refresh_rate: int = 2
 

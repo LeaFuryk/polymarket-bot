@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- **Persistent market history database** (`data/market_history.db`) — A separate SQLite database that accumulates pure market data (candle outcomes + per-second orderbook snapshots) across all iterations. Never deleted by `polybot-archive`. Each candle is tagged with an iteration label. Two tables: `market_candles` (condition_id, slug, iteration, BTC open/close, winner) and `market_snapshots` (full UP+DOWN orderbook, R/R, BTC price, BTC move, streak). Enables statistical validation of trading assumptions with hundreds of candles instead of guessing.
+- **`MarketHistoryStore`** class in `datastore.py` — Same async queue + batched writer pattern as `DataStore`, but stores only market observables (no decisions, portfolio, or session-specific data). Runs as its own async task alongside the session DataStore.
+- **`polybot-validate` CLI** — Queries `data/market_history.db` to validate trading assumptions with Rich tables. Five reports: momentum continuation (% where mid-candle BTC direction = final winner, by move × time bucket), reversal rates (inverse), optimal entry timing (avg winner ask price by time bucket), BTC move distribution (percentiles), and summary header. Supports `--report`, `--min-candles`, and `--db` flags. Low-sample cells are dimmed.
+- **`logging.market_history_db_path`** config field — Path to persistent market history database (default `data/market_history.db`).
+
+### Changed
+- **Softened reversal prompt** — Removed hardcoded percentages ("~97% continuation", "NEVER reversed") from the system prompt's Mid-Candle Signal Reliability section. Replaced with directional guidance ("tend to continue", "larger moves are more reliable") and a pointer to `polybot-validate` for current data-backed rates. Prevents wrong assumptions from being baked into the prompt.
+- **Archive cleanup excludes market history** — `polybot-archive` cleanup only touches `logs/` and AI-written knowledge files. `data/market_history.db` is explicitly excluded with a code comment confirming it's intentional.
+
+### Changed
+- **Anti-hedging guard** — Blocks BUY on one side when holding shares on the opposite side. Prevents both-side bets that averaged -$2.85 per hedge in prior run. Overrides to HOLD with logged reason.
+- **Position sizing ~3x increase** — Flattened R/R scaling curve (R/R 1.0 now 80% vs old 50%, R/R 0.5 now 55% vs old 25%, minimum 20% vs old 10%). Move-magnitude floors raised (small moves 60% vs 40%, medium 80% vs 60%). `max_position_pct` increased from 25% to 40%. Average position should rise from ~$7.82 to ~$20-25.
+- **Wider SL/TP thresholds** — Stop-loss widened from -15% to -35%, take-profit from +30% to +50%. Prevents premature exits on positions that ultimately win.
+- **Reversal awareness in AI prompt** — New "CRITICAL: Mid-Candle Reversal Risk" section warns AI that ~35-40% of mid-candle moves reverse. Caps confidence at 0.55-0.62 for $30-80 moves. Reserves 0.70+ for large sustained moves with <120s remaining.
+- **AI cooldown increased 45s → 60s** — Reduces AI calls per candle. Combined with exit trigger cooldown and aggressive screening, targets ~50% reduction in AI spend.
+- **Exit trigger cooldown** — SL/TP exit triggers now respect AI cooldown. Non-emergency exits (PnL > -30%) skip AI call when on cooldown. True emergencies (PnL ≤ -30%) bypass cooldown.
+- **Haiku screening recalibrated from data** — BTC move threshold lowered from $40 to $20 based on SQLite analysis: moves >$20 have 96.8% momentum continuation rate, >$50 is 100%. The $40 threshold was blocking the $20-50 range where entries are cheaper and signals are already 97%+ reliable. Entry price threshold relaxed to $0.40. "When in doubt, say false" preserved.
+- **Reversal risk prompt corrected from data** — Replaced speculative "35-40% reversal rate" with actual observed data: 3.2% reversal rate, only in $20-30 range. Moves >$50 have never reversed. Prompt now encourages acting on $20+ moves instead of waiting for $100+.
+- **Overconfidence size cap** — When confidence ≥ 0.70 AND estimated fill > $0.65, position size reduced by 30%. The 0.70+ confidence bin had the worst win rate (57.7%) in prior run.
+
+### Added
+- **Iteration archive & comparison tools** — Two new CLI commands for managing iteration snapshots:
+  - `polybot-archive` — Copies all generated artifacts (trade logs, resolutions, SQLite DB, AI-written knowledge, feature config) into `archive/<label>/`, computes a `summary.json` with key metrics (date range, candles, trades, win rate, PnL, fees, AI cost, net result, enabled indicators), and cleans working directories for a fresh start. Supports `--name` for custom labels and `--no-clean` to skip cleanup.
+  - `polybot-compare` — Scans all `archive/*/summary.json` files and prints a Rich table comparing iterations side-by-side with color-coded deltas from previous iteration (win rate, PnL, net result).
 - **SQLite analytics layer** — Per-second market replay and decision analysis. Three tables (`candles`, `snapshots`, `decisions`) persist every tick of orderbook state, computed indicators, AI decisions, and resolution outcomes. Queryable via standard SQL with `json_extract()` for indicator values.
   - `candles` — 1 row per 5-min candle (slug, BTC open/close, winner, PnL)
   - `snapshots` — ~300 rows per candle (1/sec: full UP+DOWN orderbook, R/R ratios, BTC price, prefilter result, streak, all computed indicators as JSON)

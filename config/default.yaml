@@ -35,7 +35,7 @@ simulator:
   limit_order_ttl: 300        # default TTL for limit orders (seconds)
 
 risk:
-  max_position_pct: 0.25      # max 25% of portfolio in single position
+  max_position_pct: 0.40      # max 40% of portfolio in single position
   max_spread_pct: 0.10        # skip if spread > 10% (DOWN tokens often have wider spreads)
   min_liquidity: 100.0        # minimum orderbook depth in USDC
   daily_loss_limit_pct: 0.10  # stop trading if daily loss > 10%
@@ -45,10 +45,10 @@ risk:
 monitor:
   market_monitor_interval: 1.0
   position_monitor_interval: 1.0
-  ai_cooldown_seconds: 45
+  ai_cooldown_seconds: 60
   rr_trigger_threshold: 1.0
-  stop_loss_pct: -0.15
-  take_profit_pct: 0.30
+  stop_loss_pct: -0.35
+  take_profit_pct: 0.50
   btc_price_cache_ttl: 2.0
 
 logging:
@@ -56,5 +56,6 @@ logging:
   jsonl_enabled: true
   sqlite_enabled: true
   sqlite_db_path: "logs/polybot.db"
+  market_history_db_path: "data/market_history.db"
   dashboard_enabled: true
   dashboard_refresh_rate: 2   # seconds
