@@ -66,5 +66,9 @@ class SharedState:
         # Candle rotation coordination
         self.rotation_in_progress: bool = False
 
+        # Session resolution stats (synced from agent for indicator computation)
+        self.session_wins: int = 0
+        self.session_losses: int = 0
+
         # Shutdown flag
         self.shutdown: bool = False

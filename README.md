@@ -16,7 +16,7 @@ An AI-powered paper trading agent that trades Polymarket BTC 5-minute candle pre
 | Data Models | Pydantic v2 |
 | Config | YAML + `.env` overrides |
 | Dashboard | Rich live terminal UI + standalone web dashboard |
-| Logging | JSONL (daily-rotating trade + resolution logs) |
+| Logging | JSONL (daily-rotating trade + resolution logs) + SQLite analytics |
 | Package | `setuptools` with `src/` layout |
 
 ### Dependencies
@@ -47,7 +47,7 @@ An AI-powered paper trading agent that trades Polymarket BTC 5-minute candle pre
 
 ## How It Works
 
-The bot runs 5 concurrent async tasks in the same event loop. The MarketMonitor fetches data every second, runs prefilter checks, and triggers the AI when conditions are favorable. The AIDecision task waits for triggers and runs the full decision pipeline. The PositionMonitor tracks open positions every second and triggers exits at stop-loss/take-profit thresholds. Every 10 candle resolutions, Claude reflects on its performance using a quantitative scorecard and produces structured observations that feed into future decisions.
+The bot runs 6 concurrent async tasks in the same event loop. The MarketMonitor fetches data every second, runs prefilter checks, and triggers the AI when conditions are favorable. The AIDecision task waits for triggers and runs the full decision pipeline. The PositionMonitor tracks open positions every second and triggers exits at stop-loss/take-profit thresholds. Every 10 candle resolutions, Claude reflects on its performance using a quantitative scorecard and produces structured observations that feed into future decisions.
 
 ### The Self-Improving Loop
 
@@ -78,6 +78,7 @@ TradingAgent.run()  (orchestrator)
     +-- PositionMonitor (1s loop) -- tracks P&L, triggers exits at SL/TP
     +-- RotationLoop (5s loop) -- handles candle transitions
     +-- DashboardLoop (2s loop) -- writes dashboard JSON
+    +-- DataStore writer (async) -- batched SQLite inserts from queue
 ```
 
 All tasks are `asyncio.Task` in the same event loop (no OS threads). Safe for shared state.
@@ -273,7 +274,8 @@ polymarket-bot/
 │   ├── trades_20260218.jsonl          # One TradeRecord per cycle (daily rotation)
 │   ├── resolutions_20260218.jsonl     # One ResolutionRecord per candle close
 │   ├── dashboard_data.json            # Live dashboard state (updated each cycle)
-│   └── agent_state.json               # Persisted agent state (survives restarts)
+│   ├── agent_state.json               # Persisted agent state (survives restarts)
+│   └── polybot.db                     # SQLite analytics (per-second snapshots, decisions, candle outcomes)
 │
 ├── data/
 │   ├── feature_config.json            # Indicator settings (AI-managed)
@@ -300,6 +302,36 @@ Each line in `resolutions_*.jsonl` records:
 - BTC open and close prices
 - Winner (up/down)
 - PnL per token and total
+
+### SQLite Analytics (`logs/polybot.db`)
+
+Per-second market replay and decision analysis. Three tables:
+
+| Table | Rows | Content |
+|-------|------|---------|
+| `candles` | 1 per 5-min candle | slug, BTC open/close, winner, resolution PnL |
+| `snapshots` | ~300 per candle | Full UP+DOWN orderbook, R/R, BTC price, prefilter, streak, indicators JSON |
+| `decisions` | 1-5 per candle | AI action, confidence, reasoning, fill, risk, portfolio state, indicators JSON |
+
+Example queries:
+
+```sql
+-- Best entry point per candle vs what the bot actually got
+SELECT c.slug, c.winner,
+    MIN(CASE WHEN c.winner='up' THEN s.up_best_ask ELSE s.down_best_ask END) AS best_entry,
+    (SELECT d.fill_price FROM decisions d WHERE d.candle_id=c.candle_id AND d.action='BUY' LIMIT 1) AS actual_entry
+FROM candles c JOIN snapshots s ON s.candle_id = c.candle_id
+WHERE c.winner IS NOT NULL GROUP BY c.candle_id;
+
+-- Streak + R/R vs outcomes (strategy discovery)
+SELECT c.winner, COUNT(DISTINCT c.candle_id) AS n,
+    AVG(json_extract(s.indicators_json, '$.btc_vs_candle_open.value')) AS avg_btc_move
+FROM snapshots s JOIN candles c ON c.candle_id = s.candle_id
+WHERE c.winner IS NOT NULL AND s.streak >= 3 AND s.rr_up > 1.5
+GROUP BY c.winner;
+```
+
+Storage: ~150KB/candle, ~42MB/day. WAL mode enables concurrent reads while the bot writes.
 
 ### Analysis Report
 
@@ -424,7 +456,7 @@ This would give sub-second market data instead of polling REST every 60s.
 - **Multi-timeframe analysis** — Feed indicators from both 5-min and longer timeframes
 - **Ensemble decisions** — Run multiple Claude calls with different temperatures and aggregate
 - **Backtesting** — Replay historical JSONL logs through the decision engine
-- **SQLite storage** — The config field `sqlite_enabled` exists but isn't wired yet; implement for queryable trade history
+- **SQLite query tooling** — The SQLite analytics store (`logs/polybot.db`) captures per-second snapshots, decisions, and candle outcomes. Build analysis scripts or a query UI on top of it
 - **Dynamic SL/TP thresholds** — Currently stop-loss (-15%) and take-profit (+30%) are fixed; could adapt based on time remaining, volatility, or position size
 - **Cross-candle learning** — Track BTC price patterns across multiple candles for longer-term trend detection
 
@@ -433,7 +465,7 @@ This would give sub-second market data instead of polling REST every 60s.
 ## Architecture
 
 ```
-TradingAgent (agent.py) — orchestrator, launches 5 concurrent tasks
+TradingAgent (agent.py) — orchestrator, launches 6 concurrent tasks
  │
  ├── SharedState (shared_state.py) — central coordination hub
  │   PreFilterSnapshot deque, asyncio.Event/Queue, position P&L, rotation flag
@@ -486,6 +518,10 @@ TradingAgent (agent.py) — orchestrator, launches 5 concurrent tasks
  │   Base knowledge (.md, read-only) + observations (JSONL, append-only with decay)
  │   Every 10 resolutions: reflection → scorecard → observations + feature_config.json
  │
+ ├── DataStore (datastore.py) — 6th async task
+ │   SQLite WAL mode, batched writes from asyncio.Queue
+ │   candles + snapshots (1/sec) + decisions → logs/polybot.db
+ │
  ├── TradeLog
  │   JSONL daily-rotating: trades + resolutions
  │
@@ -512,6 +548,7 @@ polymarket-bot/
 │   ├── agent.py                  # TradingAgent — orchestrator (launches 5 async tasks)
 │   ├── shared_state.py           # SharedState + PreFilterSnapshot — task coordination
 │   ├── config.py                 # AppConfig + MonitorConfig + YAML + env loading
+│   ├── datastore.py              # SQLite analytics — per-second snapshots + decisions + candles
 │   ├── indicators.py             # Indicator registry + 13 built-in indicators
 │   ├── knowledge.py              # KnowledgeManager + structured reflection + scorecard
 │   ├── models.py                 # All Pydantic data models

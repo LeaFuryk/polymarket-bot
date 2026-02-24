@@ -7,10 +7,16 @@ event when conditions are favorable.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import time
 
 from polybot.config import AppConfig
+from polybot.indicators import (
+    FeatureConfig,
+    SessionContext,
+    compute_indicators,
+)
 from polybot.market_data.provider import MarketDataProvider
 from polybot.prefilter import PreFilter
 from polybot.resolution import ResolutionTracker
@@ -31,6 +37,8 @@ class MarketMonitor:
         prefilter: PreFilter,
         portfolio: Portfolio,
         resolution_tracker: ResolutionTracker,
+        datastore: "DataStore | None" = None,
+        feature_config: "FeatureConfig | None" = None,
     ) -> None:
         self._config = config
         self._shared = shared
@@ -38,6 +46,8 @@ class MarketMonitor:
         self._prefilter = prefilter
         self._portfolio = portfolio
         self._resolution_tracker = resolution_tracker
+        self._datastore = datastore
+        self._feature_config = feature_config
         self._interval = config.monitor.market_monitor_interval
         self._rr_threshold = config.monitor.rr_trigger_threshold
         self._cooldown = config.monitor.ai_cooldown_seconds
@@ -132,6 +142,12 @@ class MarketMonitor:
         )
         self._shared.prefilter_history.append(pf_snapshot)
 
+        # Queue snapshot for SQLite analytics
+        if self._datastore is not None and self._datastore.current_candle_id is not None:
+            self._queue_snapshot(
+                snapshot, pf_snapshot, pf_result, rr_up, rr_down, btc_move,
+            )
+
         # Decide whether to trigger AI
         best_rr = max(rr_up, rr_down)
         prefilter_passed = not pf_result.should_skip
@@ -164,3 +180,59 @@ class MarketMonitor:
                     "AI triggered: %s (cooldown=%.0fs elapsed)",
                     self._shared.ai_trigger_reason, elapsed,
                 )
+
+    def _queue_snapshot(
+        self, snapshot, pf_snapshot: PreFilterSnapshot, pf_result,
+        rr_up: float, rr_down: float, btc_move: float,
+    ) -> None:
+        """Build a SnapshotRow from current tick data and queue it."""
+        from polybot.datastore import SnapshotRow
+
+        up_ob = snapshot.orderbook
+        down_ob = snapshot.down_orderbook
+
+        # Compute indicators if feature_config is available
+        indicators_dict: dict = {}
+        if self._feature_config is not None:
+            try:
+                self._feature_config.load()
+                session_ctx = SessionContext(
+                    wins=self._shared.session_wins,
+                    losses=self._shared.session_losses,
+                    candle_open_btc=self._shared.candle_open_btc,
+                )
+                results = compute_indicators(snapshot, self._feature_config, session_ctx)
+                indicators_dict = {
+                    r.name: {"value": r.value, "label": r.label}
+                    for r in results
+                }
+            except Exception:
+                logger.debug("Indicator computation failed for snapshot", exc_info=True)
+
+        row = SnapshotRow(
+            candle_id=self._datastore.current_candle_id,
+            timestamp=pf_snapshot.timestamp,
+            time_remaining=pf_snapshot.time_remaining,
+            up_best_bid=up_ob.best_bid,
+            up_best_ask=up_ob.best_ask,
+            up_mid=up_ob.midpoint,
+            up_spread_pct=up_ob.spread_pct,
+            up_bid_depth=up_ob.bid_depth,
+            up_ask_depth=up_ob.ask_depth,
+            down_best_bid=down_ob.best_bid,
+            down_best_ask=down_ob.best_ask,
+            down_mid=down_ob.midpoint,
+            down_spread_pct=down_ob.spread_pct,
+            down_bid_depth=down_ob.bid_depth,
+            down_ask_depth=down_ob.ask_depth,
+            rr_up=rr_up,
+            rr_down=rr_down,
+            btc_price=pf_snapshot.btc_price,
+            btc_move_from_open=btc_move,
+            streak=pf_snapshot.streak,
+            streak_direction=pf_snapshot.streak_direction,
+            prefilter_passed=not pf_result.should_skip,
+            prefilter_reasons="; ".join(pf_snapshot.reasons),
+            indicators_json=json.dumps(indicators_dict) if indicators_dict else "{}",
+        )
+        self._datastore.queue_snapshot(row)

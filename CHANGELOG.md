@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- **SQLite analytics layer** — Per-second market replay and decision analysis. Three tables (`candles`, `snapshots`, `decisions`) persist every tick of orderbook state, computed indicators, AI decisions, and resolution outcomes. Queryable via standard SQL with `json_extract()` for indicator values.
+  - `candles` — 1 row per 5-min candle (slug, BTC open/close, winner, PnL)
+  - `snapshots` — ~300 rows per candle (1/sec: full UP+DOWN orderbook, R/R ratios, BTC price, prefilter result, streak, all computed indicators as JSON)
+  - `decisions` — 1-5 rows per candle (AI action, confidence, reasoning, fill price/size, risk state, portfolio state, indicators as JSON)
+- **`src/polybot/datastore.py`** — `DataStore` class with non-blocking `asyncio.Queue` and batched background writer (6th async task). Flushes every 5s or 50 rows via `executemany()` in WAL mode (~10ms for 60 rows). Zero impact on trading latency (<1ms queue overhead).
+- **`logging.sqlite_db_path`** config field — Path to SQLite database (default `logs/polybot.db`)
+- **`SharedState.session_wins/session_losses`** — Session resolution stats synced from agent, enabling indicator computation in MarketMonitor snapshots
+- **Per-second indicator computation in MarketMonitor** — All enabled indicators are computed every tick and stored in `snapshots.indicators_json`, not just at AI decision time. Previously indicators were computed and discarded; now every second of indicator history is queryable.
+
 ### Changed
 - **Multi-task concurrent architecture** — Replaced the monolithic single-loop `_run_cycle()` with 5 concurrent `asyncio.Task`s running in the same event loop:
   - **MarketMonitor** (1s loop) — fetches market data, runs prefilter checks 1-5, records `PreFilterSnapshot` every second, triggers AI when R/R >= 1.0 and prefilter passes
