@@ -156,14 +156,11 @@ class MarketMonitor:
                 snapshot, pf_snapshot, rr_up, rr_down, btc_move,
             )
 
-        # Decide whether to trigger AI
+        # Decide whether to trigger AI (entry only — exits come from PositionMonitor's queue)
         best_rr = max(rr_up, rr_down)
         prefilter_passed = not pf_result.should_skip
 
-        # Always trigger for exit decisions when we have a position
-        force_trigger = has_position and prefilter_passed
-
-        should_trigger = force_trigger or (
+        should_trigger = (
             prefilter_passed
             and best_rr >= self._rr_threshold
         )
@@ -172,17 +169,13 @@ class MarketMonitor:
             # Check cooldown
             now = time.time()
             elapsed = now - self._shared.ai_last_call_time
-            if elapsed >= self._cooldown or force_trigger:
+            if elapsed >= self._cooldown:
                 best_side = "up" if rr_up >= rr_down else "down"
                 self._shared.ai_trigger_reason = (
                     f"R/R={best_rr:.2f} ({best_side}), "
                     f"prefilter={'PASS' if prefilter_passed else 'SKIP'}, "
                     f"btc_move=${btc_move:+.0f}"
                 )
-                if force_trigger:
-                    self._shared.ai_trigger_reason = (
-                        f"position_check: {self._shared.ai_trigger_reason}"
-                    )
                 self._shared.ai_trigger_event.set()
                 logger.info(
                     "AI triggered: %s (cooldown=%.0fs elapsed)",

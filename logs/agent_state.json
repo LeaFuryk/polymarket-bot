@@ -1,15 +1,15 @@
 {
-  "resolutions_since_reflection": 9,
+  "resolutions_since_reflection": 3,
   "knowledge": {
-    "total_resolutions": 70,
+    "total_resolutions": 50,
     "previous_scorecard": {
       "resolutions": 20,
-      "trades_taken": 0,
-      "win_rate": 0.0,
-      "avg_pnl_per_trade": 0.0,
-      "avg_win_size": 0.0,
-      "avg_loss_size": 0.0,
-      "hold_rate": 1.0
+      "trades_taken": 3,
+      "win_rate": 0.7857142857142857,
+      "avg_pnl_per_trade": 3.9225825477922065,
+      "avg_win_size": 6.461334374233568,
+      "avg_loss_size": -5.386174149159451,
+      "hold_rate": 0.3
     }
   }
 }

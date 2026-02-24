@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+- **Wider SL/TP thresholds** — Stop-loss widened from -35% to -60%, take-profit from +50% to +80%. Analysis showed $60.92 lost to premature exits where 9/10 sells were on winning positions.
+- **Guard winning exits near expiry** — If position is profitable AND BTC direction matches position side AND < 120s remaining, skip the exit trigger and let it ride to resolution. Prevents selling winners right before they pay out.
+- **Minimum position size = 40 shares** — Enforced after R/R × move scaling, before risk manager caps. Previous avg was 9 shares — too small to capture meaningful edge.
+- **Removed overconfidence size cap** — Deleted the 30% size reduction when confidence >= 0.70 AND fill > $0.65. Data showed this was cutting winning trades.
+- **Raised move-magnitude scaling floors** — Small moves (<$10) now 80% (was 60%), medium (<$30) now 90% (was 80%), large (<$60) now 100% (was 90%). Reduces missed profit from undersized positions.
+- **Tighter Haiku screening** — Entry attractiveness threshold lowered to ask < $0.30 (was $0.35). Added explicit "$0 BTC move is NEVER a trade setup" rule. Added: BTC move < $15 AND no streak AND time < 120s = always false. Targets 50%+ screening rate (was 26%).
+- **Stop force-triggering AI when positioned** — Removed `force_trigger = has_position and prefilter_passed` from MarketMonitor. Exit triggers from PositionMonitor's queue still work. Saves 5-10 wasted HOLD calls per positioned candle.
+- **Lower BTC move description thresholds** — FLAT < $5, SMALL $5-15, MODERATE $15-30, STRONG $30+ (was $5/$20/$50). Matches the actual signal quality observed in data.
+
 ### Added
 - **Persistent market history database** (`data/market_history.db`) — A separate SQLite database that accumulates pure market data (candle outcomes + per-second orderbook snapshots) across all iterations. Never deleted by `polybot-archive`. Each candle is tagged with an iteration label. Two tables: `market_candles` (condition_id, slug, iteration, BTC open/close, winner) and `market_snapshots` (full UP+DOWN orderbook, R/R, BTC price, BTC move, streak). Enables statistical validation of trading assumptions with hundreds of candles instead of guessing.
 - **`MarketHistoryStore`** class in `datastore.py` — Same async queue + batched writer pattern as `DataStore`, but stores only market observables (no decisions, portfolio, or session-specific data). Runs as its own async task alongside the session DataStore.

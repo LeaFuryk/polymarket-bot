@@ -236,12 +236,44 @@ class AIDecision:
             cycle, token_side_str, reason, pnl_pct * 100,
         )
 
+        # Exit trigger cooldown: skip if on cooldown and not a true emergency (> -30%)
+        cooldown = self._config.monitor.ai_cooldown_seconds
+        elapsed = time.time() - self._shared.ai_last_call_time
+        if elapsed < cooldown and pnl_pct > -0.30:
+            logger.info(
+                "Exit trigger on cooldown (%.0fs < %.0fs, pnl=%.1f%% > -30%%) — skipping",
+                elapsed, cooldown, pnl_pct * 100,
+            )
+            return
+
         snapshot = self._shared.latest_snapshot
         market = self._shared.current_market
         if snapshot is None or market is None:
             return
 
         time_remaining = market.time_remaining()
+
+        # Guard against selling winners near expiry: if position is profitable
+        # and BTC direction matches position side and < 120s remaining, skip exit
+        if pnl_pct > 0 and time_remaining < 120:
+            btc_price_now = snapshot.btc_price.price_usd if snapshot.btc_price else None
+            candle_open = self._shared.candle_open_btc
+            if btc_price_now is not None and candle_open is not None:
+                btc_diff = btc_price_now - candle_open
+                btc_favors_up = btc_diff >= 0
+                position_is_up = token_side_str.lower() == "up"
+                direction_matches = (position_is_up and btc_favors_up) or (
+                    not position_is_up and not btc_favors_up
+                )
+                if direction_matches:
+                    logger.info(
+                        "Skipping exit on winning %s position (P&L=%.1f%%, BTC %s$%.0f, "
+                        "%.0fs left) — let it ride to resolution",
+                        token_side_str, pnl_pct * 100,
+                        "+" if btc_diff >= 0 else "", btc_diff, time_remaining,
+                    )
+                    return
+
         up_ob = snapshot.orderbook
         down_ob = snapshot.down_orderbook
         up_mid = up_ob.midpoint
@@ -420,6 +452,41 @@ class AIDecision:
                     confidence_drivers=decision.confidence_drivers,
                 )
 
+        # Anti-hedging guard: don't buy one side while holding the other
+        if decision.action == Action.BUY:
+            if decision.token_side == TokenSide.DOWN and self._portfolio.up_position.shares > 0:
+                logger.info(
+                    "Anti-hedge block: skipping DOWN buy while holding %.1f UP shares",
+                    self._portfolio.up_position.shares,
+                )
+                decision = TradingDecision(
+                    action=Action.HOLD,
+                    order_type=OrderType.MARKET,
+                    size=0.0,
+                    confidence=decision.confidence,
+                    reasoning=f"Anti-hedge: holding UP shares, blocked DOWN buy. Original: {decision.reasoning[:80]}",
+                    market_view=decision.market_view,
+                    token_side=decision.token_side,
+                    hypothetical_direction=decision.hypothetical_direction,
+                    confidence_drivers=decision.confidence_drivers,
+                )
+            elif decision.token_side == TokenSide.UP and self._portfolio.down_position.shares > 0:
+                logger.info(
+                    "Anti-hedge block: skipping UP buy while holding %.1f DOWN shares",
+                    self._portfolio.down_position.shares,
+                )
+                decision = TradingDecision(
+                    action=Action.HOLD,
+                    order_type=OrderType.MARKET,
+                    size=0.0,
+                    confidence=decision.confidence,
+                    reasoning=f"Anti-hedge: holding DOWN shares, blocked UP buy. Original: {decision.reasoning[:80]}",
+                    market_view=decision.market_view,
+                    token_side=decision.token_side,
+                    hypothetical_direction=decision.hypothetical_direction,
+                    confidence_drivers=decision.confidence_drivers,
+                )
+
         # Extended R/R position sizing (no hard block)
         if decision.action == Action.BUY:
             target_ob = down_ob if decision.token_side == TokenSide.DOWN else up_ob
@@ -428,30 +495,30 @@ class AIDecision:
             risk_val = est_fill
             rr_ratio = reward / risk_val if risk_val > 0 else 0
 
-            # Extended R/R scale — no hard block, just size scaling
+            # Extended R/R scale — flattened for ~3x larger positions
             if rr_ratio >= 2.0:
                 rr_scale = 1.0
             elif rr_ratio >= 1.0:
-                rr_scale = 0.5 + 0.5 * (rr_ratio - 1.0)    # 50%-100%
+                rr_scale = 0.80 + 0.20 * (rr_ratio - 1.0)    # 80%-100%
             elif rr_ratio >= 0.5:
-                rr_scale = 0.25 + 0.25 * (rr_ratio - 0.5) / 0.5  # 25%-50%
+                rr_scale = 0.55 + 0.25 * (rr_ratio - 0.5) / 0.5  # 55%-80%
             elif rr_ratio >= 0.3:
-                rr_scale = 0.10 + 0.15 * (rr_ratio - 0.3) / 0.2  # 10%-25%
+                rr_scale = 0.20 + 0.35 * (rr_ratio - 0.3) / 0.2  # 20%-55%
             else:
-                rr_scale = 0.10  # minimum 10%
+                rr_scale = 0.20  # minimum 20%
 
-            # Move-magnitude scaling
+            # Move-magnitude scaling (raised floors — small moves still get decent size)
             move_scale = 1.0
             btc_price_now = snapshot.btc_price.price_usd if snapshot.btc_price else None
             btc_move = 0.0
             if candle_open_btc is not None and btc_price_now is not None:
                 btc_move = abs(btc_price_now - candle_open_btc)
                 if btc_move < 10:
-                    move_scale = 0.4
+                    move_scale = 0.80
                 elif btc_move < 30:
-                    move_scale = 0.6
+                    move_scale = 0.90
                 elif btc_move < 60:
-                    move_scale = 0.8
+                    move_scale = 1.0
 
             combined_scale = rr_scale * move_scale
             if combined_scale < 1.0:
@@ -473,6 +540,23 @@ class AIDecision:
                         original_size, scaled_size, rr_ratio, rr_scale * 100,
                         btc_move, move_scale * 100,
                     )
+
+            # Enforce minimum position size of 40 shares
+            if decision.size < 40:
+                logger.info(
+                    "Min size floor: %.1f → 40 shares",
+                    decision.size,
+                )
+                decision = TradingDecision(
+                    action=decision.action,
+                    order_type=decision.order_type,
+                    size=40,
+                    confidence=decision.confidence,
+                    reasoning=decision.reasoning,
+                    market_view=decision.market_view,
+                    token_side=decision.token_side,
+                    limit_price=decision.limit_price,
+                )
 
         # Shadow predictions for HOLD
         if decision.action == Action.HOLD and decision.hypothetical_direction and market:

@@ -12,16 +12,17 @@ You are a fast screening agent for a Polymarket BTC 5-minute candle prediction m
 Your job: quickly decide if the current market conditions have a STRONG trade setup.
 You are NOT making the trade — just screening. Be aggressive about filtering out weak setups.
 
+A $0 BTC move is NEVER a trade setup. No movement = no signal = no trade.
+
 Say should_trade=true if ANY of these apply:
-- BTC has moved >$20 from candle open (strong momentum continuation signal)
-- Entry prices are very attractive (either token ask < $0.35)
+- BTC has moved >$15 from candle open (momentum continuation signal)
+- Entry prices are very attractive (either token ask < $0.30)
 - Clear candle streak of 4+ consecutive same-direction candles (mean reversion setup)
 
-Say should_trade=false if ALL of these apply:
-- BTC move from candle open is < $20 (insufficient signal)
-- Both token asks are > $0.40 (unattractive entries)
-- No consecutive candle streak (< 3 same-direction)
-- Time remaining < 45 seconds
+Say should_trade=false if ANY of these apply:
+- BTC move from candle open < $15 AND no streak (< 3 same-direction) AND time < 120s
+- Both token asks are > $0.40 (unattractive entries) AND BTC move < $15
+- BTC move is $0 (no signal at all)
 
 When in doubt, say false. Save the budget for setups with a clear directional signal.
 """
@@ -104,8 +105,8 @@ The 24h change tells you the daily trend but is NOT predictive for the next 5-mi
   inherently higher risk and should use smaller sizes.
 
 ## Mid-Candle Signal Reliability
-- BTC moves >$20 from candle open tend to continue to close.
-- Larger moves are more reliable; small moves (<$20) are noisy.
+- BTC moves >$15 from candle open tend to continue to close.
+- Larger moves are more reliable; small moves (<$15) are noisy.
 - Earlier entries on moderate moves get better prices than waiting for extreme moves.
 - Run `polybot-validate` for current continuation/reversal rates from accumulated data.
 
@@ -146,12 +147,12 @@ def format_feature_vector(
         abs_diff = abs(diff)
         if abs_diff < 5:
             move_desc = "FLAT (no signal yet — wait for movement)"
-        elif abs_diff < 20:
+        elif abs_diff < 15:
             move_desc = "SMALL move — low conviction"
-        elif abs_diff < 50:
+        elif abs_diff < 30:
             move_desc = "MODERATE move — tradeable signal"
         else:
-            move_desc = "LARGE move — strong signal"
+            move_desc = "STRONG move — high conviction signal"
         who_winning = "UP winning" if diff >= 0 else "DOWN winning"
         btc_move_line = (
             f"## >>> PRIMARY SIGNAL: BTC vs Candle Open <<<\n"
