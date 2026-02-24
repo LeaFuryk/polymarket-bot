@@ -5,6 +5,40 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Changed
+- **Multi-task concurrent architecture** — Replaced the monolithic single-loop `_run_cycle()` with 5 concurrent `asyncio.Task`s running in the same event loop:
+  - **MarketMonitor** (1s loop) — fetches market data, runs prefilter checks 1-5, records `PreFilterSnapshot` every second, triggers AI when R/R >= 1.0 and prefilter passes
+  - **AIDecision** (event-driven) — waits for entry triggers from MarketMonitor or exit triggers from PositionMonitor, runs the full AI decision pipeline (feature vector, indicators, ML, two-pass screening, confidence/calibration gates, position sizing, execution)
+  - **PositionMonitor** (1s loop) — marks positions to market, computes real-time P&L %, triggers exit evaluation at stop-loss (-15%) or take-profit (+30%)
+  - **RotationLoop** (5s loop) — discovers markets, handles candle transitions and resolution
+  - **DashboardLoop** (2s loop) — writes dashboard JSON from shared state
+- **R/R hard block removed** — The R/R gate in both the prefilter (Check 6) and risk manager `post_trade_checks` has been removed. All entries are now allowed; position size scales with R/R quality instead of blocking:
+  - R/R >= 2.0 (entry <= $0.33): 100% size
+  - R/R 1.0 (entry $0.50): 50% size
+  - R/R 0.5 (entry $0.67): 25% size
+  - R/R < 0.3 (entry > $0.77): 10% size (tiny position)
+- **AI cooldown** — Minimum 45 seconds between AI calls (configurable via `monitor.ai_cooldown_seconds`), preventing over-trading while still allowing rapid response to market changes
+- **BTC price cache TTL reduced from 30s to 2s** — Configurable via `monitor.btc_price_cache_ttl`. Enables the 1-second market monitor loop to see near-real-time BTC prices
+- **System prompt updated** — R/R discipline section now describes the sliding scale instead of the hard block
+
+### Added
+- **`src/polybot/shared_state.py`** — Central coordination hub (`SharedState` class) for concurrent tasks. Contains `PreFilterSnapshot` dataclass for per-second market state recording, `asyncio.Event` for AI triggering, `asyncio.Queue` for exit signals, and real-time P&L tracking
+- **`src/polybot/tasks/` package** — Three new task modules:
+  - `market_monitor.py` — 1-second market data polling with prefilter and AI trigger logic
+  - `ai_decision.py` — Event-driven AI decision pipeline with entry and exit handling
+  - `position_monitor.py` — Real-time position P&L tracking with stop-loss/take-profit triggers
+- **Stop-loss/take-profit monitoring** — Positions are marked to market every second. When P&L hits -15% (stop-loss) or +30% (take-profit), an exit evaluation is triggered through the AI with full context about why the exit was triggered
+- **`MonitorConfig`** — New config section with 7 parameters: `market_monitor_interval`, `position_monitor_interval`, `ai_cooldown_seconds`, `rr_trigger_threshold`, `stop_loss_pct`, `take_profit_pct`, `btc_price_cache_ttl`
+- **Monitor section in `config/default.yaml`** — All monitor parameters exposed for tuning
+- **Dashboard: monitor stats** — New `monitor` section in dashboard JSON showing prefilter snapshot count, AI cooldown remaining, and last trigger reason
+- **Dashboard: position P&L** — New `position_pnl` section showing real-time P&L % for open positions
+
+### Removed
+- **Prefilter Check 6 (R/R ratio block)** — No longer blocks AI calls based on R/R ratio; R/R is handled by position sizing only
+- **Risk manager R/R gate** — `reward_risk_ratio` check removed from `post_trade_checks`; entries at any price are allowed with size scaling
+- **`_run_cycle()`, `_run_plain()`, `_run_with_dashboard()`, `_next_sleep_interval()`** — Replaced by concurrent task architecture
+- **Adaptive polling** — No longer needed; market monitor runs every 1 second continuously
+
+### Changed
 - **Confidence gate lowered from 0.6 to 0.55** — AI confidence clustered at 0.55/0.58, just below the old 0.6 gate. Now configurable via `agent.min_confidence` in config.
 - **Calibration gate `MIN_SAMPLES` raised from 5 to 15** — The calibration gate was blocking trades based on tiny sample sizes (5 trades). Now requires 15+ samples per confidence bin before activating.
 - **Confidence gate now configurable** — New `agent.min_confidence` config field (default 0.55) allows tuning the confidence threshold without code changes.

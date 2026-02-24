@@ -63,6 +63,16 @@ class RiskConfig(BaseModel):
     min_reward_risk_ratio: float = 1.3  # (1 - entry_price) / entry_price must exceed this
 
 
+class MonitorConfig(BaseModel):
+    market_monitor_interval: float = 1.0     # seconds between market data fetches
+    position_monitor_interval: float = 1.0   # seconds between P&L checks
+    ai_cooldown_seconds: float = 45.0        # min seconds between AI calls
+    rr_trigger_threshold: float = 1.0        # R/R to trigger AI (entry <= $0.50)
+    stop_loss_pct: float = -0.15             # -15% triggers exit evaluation
+    take_profit_pct: float = 0.30            # +30% triggers exit evaluation
+    btc_price_cache_ttl: float = 2.0         # seconds (was 30s)
+
+
 class LoggingConfig(BaseModel):
     log_dir: str = "logs"
     knowledge_dir: str = "data/knowledge"
@@ -79,6 +89,7 @@ class AppConfig(BaseModel):
     ai: AiConfig = Field(default_factory=AiConfig)
     simulator: SimulatorConfig = Field(default_factory=SimulatorConfig)
     risk: RiskConfig = Field(default_factory=RiskConfig)
+    monitor: MonitorConfig = Field(default_factory=MonitorConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
 
 

@@ -92,11 +92,12 @@ The 24h change tells you the daily trend but is NOT predictive for the next 5-mi
 ## Risk/Reward Discipline
 - Every BUY is a binary bet: win pays $1, lose pays $0.
 - Risk/reward ratio = (1 - entry_price) / entry_price
-- Entries with R/R < 1.3 are **blocked by risk management** (entry > ~$0.435).
-- Even entries that pass the gate get **position size scaled down** for marginal R/R:
+- NO hard R/R block — all entries allowed, position size scales with R/R:
   - R/R >= 2.0 (entry <= $0.33): full size (100%)
-  - R/R 1.5 (entry $0.40): ~75% size
-  - R/R 1.3 (entry $0.43): ~50% size
+  - R/R 1.0 (entry $0.50): ~50% size
+  - R/R 0.5 (entry $0.67): ~25% size
+  - R/R < 0.3 (entry > $0.77): ~10% size (tiny position)
+- The market monitor triggers AI only when R/R >= 1.0.
 - Prefer entries with R/R >= 1.5 ($0.40 or below). Higher R/R means losses are smaller than wins.
 - **BEWARE the cheap entry trap**: A token priced at $0.15 has 5.7x R/R — but it's cheap because \
   the market thinks it has ~15% chance of winning. High R/R ≠ good trade. Only buy cheap tokens \

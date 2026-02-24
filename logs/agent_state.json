@@ -1,4 +1,15 @@
 {
-  "resolutions_since_reflection": 0,
-  "knowledge": {}
+  "resolutions_since_reflection": 9,
+  "knowledge": {
+    "total_resolutions": 70,
+    "previous_scorecard": {
+      "resolutions": 20,
+      "trades_taken": 0,
+      "win_rate": 0.0,
+      "avg_pnl_per_trade": 0.0,
+      "avg_win_size": 0.0,
+      "avg_loss_size": 0.0,
+      "hold_rate": 1.0
+    }
+  }
 }

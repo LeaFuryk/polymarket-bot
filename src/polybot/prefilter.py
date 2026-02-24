@@ -47,7 +47,6 @@ class PreFilter:
         min_streak_for_trade: int = 0,
         max_spread_pct: float = 0.08,
         min_book_depth: float = 50.0,
-        min_reward_risk_ratio: float = 1.3,
     ) -> None:
         self.min_time_remaining = min_time_remaining
         self.choppy_range_threshold = choppy_range_threshold
@@ -56,7 +55,6 @@ class PreFilter:
         self.min_streak_for_trade = min_streak_for_trade
         self.max_spread_pct = max_spread_pct
         self.min_book_depth = min_book_depth
-        self.min_reward_risk_ratio = min_reward_risk_ratio
 
         # Stats tracking
         self.total_checks = 0
@@ -150,19 +148,6 @@ class PreFilter:
             self.total_skipped += 1
             logger.info("Pre-filter SKIP: %s", result.reason)
             return result
-
-        # Check 6: Risk/reward ratio too low (saves AI call — R/R is known pre-AI)
-        if best_entry < 1.0:
-            rr = (1.0 - best_entry) / best_entry
-            if rr < self.min_reward_risk_ratio:
-                result.should_skip = True
-                result.reason = (
-                    f"R/R ratio {rr:.2f} < {self.min_reward_risk_ratio:.2f} "
-                    f"(best entry {best_entry:.3f}, would be blocked post-trade anyway)"
-                )
-                self.total_skipped += 1
-                logger.info("Pre-filter SKIP: %s", result.reason)
-                return result
 
         # All checks passed — call AI
         return result

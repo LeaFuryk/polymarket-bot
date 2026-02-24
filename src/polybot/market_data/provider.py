@@ -23,7 +23,8 @@ class MarketDataProvider:
     def __init__(self, config: AppConfig) -> None:
         self._config = config
         self._rest = PolymarketRestClient(config.market, config.api)
-        self._btc = BtcPriceFeed(config.api)
+        cache_ttl = config.monitor.btc_price_cache_ttl if hasattr(config, 'monitor') else 30
+        self._btc = BtcPriceFeed(config.api, cache_ttl=cache_ttl)
         self._price_history: deque[float] = deque(maxlen=PRICE_HISTORY_SIZE)
         self._btc_price_history: deque[float] = deque(maxlen=PRICE_HISTORY_SIZE)
         self._ws_orderbook = None  # set by websocket module when active
