@@ -88,6 +88,9 @@ class AIDecision:
         self._feature_config = feature_config
         self._resolution_tracker = resolution_tracker
 
+        # Optional SQLite analytics
+        self._datastore = None  # set by agent if sqlite_enabled
+
         # Shared mutable state from agent
         self._recent_resolutions = recent_resolutions
         self._recent_trades = recent_trades
@@ -620,7 +623,63 @@ class AIDecision:
 
         self._trade_log.write(record)
 
+        # Queue decision for SQLite analytics
+        if self._datastore is not None and self._datastore.current_candle_id is not None:
+            self._queue_decision(cycle, snapshot, decision, latency_ms, fill, risk_blocked, risk_reason)
+
         self._recent_trades.append(record)
         if len(self._recent_trades) > 50:
             del self._recent_trades[:-50]
         self._session_trades.append(record)
+
+    def _queue_decision(
+        self, cycle, snapshot, decision=None, latency_ms=0.0,
+        fill=None, risk_blocked=False, risk_reason="",
+    ) -> None:
+        """Build a DecisionRow and queue it for SQLite analytics."""
+        import json
+        from polybot.datastore import DecisionRow
+
+        # Compute indicators for the decision context
+        indicators_dict: dict = {}
+        try:
+            self._feature_config.load()
+            session_ctx = SessionContext(
+                wins=self.session_wins,
+                losses=self.session_losses,
+                candle_open_btc=self._shared.candle_open_btc,
+            )
+            results = compute_indicators(snapshot, self._feature_config, session_ctx)
+            indicators_dict = {
+                r.name: {"value": r.value, "label": r.label}
+                for r in results
+            }
+        except Exception:
+            logger.debug("Indicator computation failed for decision", exc_info=True)
+
+        row = DecisionRow(
+            candle_id=self._datastore.current_candle_id,
+            timestamp=time.time(),
+            cycle=cycle,
+            trigger_type="entry",
+            action=decision.action.value if decision else "HOLD",
+            token_side=decision.token_side.value if decision else "up",
+            confidence=decision.confidence if decision else 0.0,
+            reasoning=decision.reasoning if decision else "",
+            market_view=decision.market_view if decision else "",
+            decision_size=decision.size if decision else 0.0,
+            fill_price=fill.fill_price if fill else None,
+            fill_size=fill.size if fill else None,
+            slippage_bps=fill.slippage_bps if fill else None,
+            fee_amount=fill.fee_amount if fill else 0.0,
+            risk_blocked=risk_blocked,
+            risk_reason=risk_reason,
+            cash=self._portfolio.cash,
+            portfolio_value=self._portfolio.total_value,
+            up_shares=self._portfolio.up_position.shares,
+            down_shares=self._portfolio.down_position.shares,
+            ai_cost=self._last_cycle_api_cost,
+            ai_latency_ms=latency_ms,
+            indicators_json=json.dumps(indicators_dict) if indicators_dict else "{}",
+        )
+        self._datastore.queue_decision(row)

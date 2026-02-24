@@ -55,5 +55,6 @@ logging:
   log_dir: "logs"
   jsonl_enabled: true
   sqlite_enabled: true
+  sqlite_db_path: "logs/polybot.db"
   dashboard_enabled: true
   dashboard_refresh_rate: 2   # seconds

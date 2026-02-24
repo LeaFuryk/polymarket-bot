@@ -78,6 +78,7 @@ class LoggingConfig(BaseModel):
     knowledge_dir: str = "data/knowledge"
     jsonl_enabled: bool = True
     sqlite_enabled: bool = True
+    sqlite_db_path: str = "logs/polybot.db"
     dashboard_enabled: bool = True
     dashboard_refresh_rate: int = 2
 

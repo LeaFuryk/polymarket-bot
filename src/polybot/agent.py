@@ -15,6 +15,7 @@ from rich.text import Text
 
 from polybot.calibration import ConfidenceCalibrator
 from polybot.config import AppConfig
+from polybot.datastore import DataStore
 from polybot.exit_tracker import ExitTracker
 from polybot.decision_engine.engine import DecisionEngine
 from polybot.indicators import (
@@ -192,6 +193,11 @@ class TradingAgent:
         # ML features for training after resolution
         self._pending_ml_features: dict[str, dict[str, float]] = {}
 
+        # SQLite analytics store
+        self._datastore: DataStore | None = None
+        if config.logging.sqlite_enabled:
+            self._datastore = DataStore(config.logging.sqlite_db_path)
+
         # Shared state for concurrent tasks
         self._shared = SharedState()
 
@@ -208,6 +214,10 @@ class TradingAgent:
         for sig in (signal.SIGINT, signal.SIGTERM):
             loop.add_signal_handler(sig, self._handle_signal)
 
+        # Open SQLite analytics store
+        if self._datastore is not None:
+            self._datastore.open()
+
         # Load BTC 5-min candle history
         await self._market_data.btc_feed.load_candle_history(200)
 
@@ -222,6 +232,8 @@ class TradingAgent:
             prefilter=self._prefilter,
             portfolio=self._portfolio,
             resolution_tracker=self._resolution_tracker,
+            datastore=self._datastore,
+            feature_config=self._feature_config if self._datastore else None,
         )
 
         self._ai_decision = AIDecision(
@@ -246,6 +258,9 @@ class TradingAgent:
             pending_ml_features=self._pending_ml_features,
         )
 
+        if self._datastore is not None:
+            self._ai_decision._datastore = self._datastore
+
         self._position_monitor = PositionMonitor(
             config=self._config,
             shared=self._shared,
@@ -260,6 +275,10 @@ class TradingAgent:
             asyncio.create_task(self._rotation_loop(), name="rotation_loop"),
             asyncio.create_task(self._dashboard_loop(), name="dashboard_loop"),
         ]
+        if self._datastore is not None:
+            tasks.append(
+                asyncio.create_task(self._datastore.writer_loop(), name="datastore_writer")
+            )
 
         try:
             # Wait until shutdown
@@ -350,6 +369,17 @@ class TradingAgent:
                 self._resolution_tracker.record_candle_open(new_market, btc_snapshot.price_usd)
                 self._shared.candle_open_btc = btc_snapshot.price_usd
 
+                # Begin candle in SQLite analytics
+                if self._datastore is not None:
+                    self._datastore.begin_candle(
+                        condition_id=new_market.condition_id,
+                        slug=new_market.slug,
+                        title=new_market.title,
+                        start_time=new_market.start_time,
+                        end_time=new_market.end_time,
+                        btc_open=btc_snapshot.price_usd,
+                    )
+
         return self._current_market
 
     async def _handle_market_transition(self) -> None:
@@ -397,11 +427,24 @@ class TradingAgent:
                         self._session_losses += 1
                     self._session_resolution_pnl += resolution_pnl
 
+                # Resolve candle in SQLite analytics
+                if self._datastore is not None and self._datastore.current_candle_id is not None:
+                    self._datastore.resolve_candle(
+                        candle_id=self._datastore.current_candle_id,
+                        btc_close=resolution.btc_close,
+                        winner=resolution.winner,
+                        resolution_pnl=resolution_pnl,
+                    )
+
                 # Sync stats to AI decision task
                 if self._ai_decision:
                     self._ai_decision.session_wins = self._session_wins
                     self._ai_decision.session_losses = self._session_losses
                     self._ai_decision.session_resolution_pnl = self._session_resolution_pnl
+
+                # Sync stats to SharedState for indicator computation in MarketMonitor
+                self._shared.session_wins = self._session_wins
+                self._shared.session_losses = self._session_losses
 
                 logger.info(
                     "Resolution: %s winner=%s pnl=%.4f | Session: W%d/L%d total_pnl=%.4f",
@@ -817,6 +860,8 @@ class TradingAgent:
 
     async def _shutdown_components(self) -> None:
         logger.info("Shutting down components...")
+        if self._datastore is not None:
+            await self._datastore.close()
         await self._discovery.close()
         await self._market_data.close()
         self._trade_log.close()
