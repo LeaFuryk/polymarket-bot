@@ -47,8 +47,8 @@ monitor:
   position_monitor_interval: 1.0
   ai_cooldown_seconds: 60
   rr_trigger_threshold: 1.0
-  stop_loss_pct: -0.35
-  take_profit_pct: 0.50
+  stop_loss_pct: -0.60
+  take_profit_pct: 0.80
   btc_price_cache_ttl: 2.0
 
 logging:

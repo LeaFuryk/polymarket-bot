@@ -20,6 +20,8 @@ logs/*.db
 .mypy_cache/
 .ruff_cache/
 
+archive/
+
 .DS_Store
 *.swp
 *.swo
