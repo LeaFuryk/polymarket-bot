@@ -37,10 +37,11 @@ class BtcPriceFeed:
     # Full candle history refresh interval (seconds)
     _CANDLE_REFRESH_INTERVAL = 600  # 10 minutes
 
-    def __init__(self, api_config: ApiConfig) -> None:
+    def __init__(self, api_config: ApiConfig, cache_ttl: float = CACHE_TTL) -> None:
         self._coingecko_url = api_config.coingecko_url
         self._rpc_url = api_config.ethereum_rpc_url
         self._chainlink_address = api_config.chainlink_btcusd_address
+        self._cache_ttl = cache_ttl
         self._client = httpx.AsyncClient(timeout=10.0)
         self._cache: BtcPrice | None = None
         self._cache_time: float = 0.0
@@ -275,7 +276,7 @@ class BtcPriceFeed:
         for resolution, since the on-chain feed is too stale for 5-min candles).
         """
         now = time.time()
-        if self._cache and (now - self._cache_time) < CACHE_TTL:
+        if self._cache and (now - self._cache_time) < self._cache_ttl:
             return self._cache
 
         # Primary: Binance real-time spot price

@@ -47,47 +47,69 @@ An AI-powered paper trading agent that trades Polymarket BTC 5-minute candle pre
 
 ## How It Works
 
-The bot runs a continuous loop of 5-minute cycles. Each cycle it discovers the current BTC candle market on Polymarket, gathers data (including 200 historical 5-min BTC candles for micro-trend analysis), asks Claude for a trading decision, simulates execution, and logs everything. Every 10 candle resolutions, Claude reflects on its performance using a quantitative scorecard and produces structured observations that feed into future decisions.
+The bot runs 5 concurrent async tasks in the same event loop. The MarketMonitor fetches data every second, runs prefilter checks, and triggers the AI when conditions are favorable. The AIDecision task waits for triggers and runs the full decision pipeline. The PositionMonitor tracks open positions every second and triggers exits at stop-loss/take-profit thresholds. Every 10 candle resolutions, Claude reflects on its performance using a quantitative scorecard and produces structured observations that feed into future decisions.
 
 ### The Self-Improving Loop
 
 ```
-Decide ──► Trade ──► Resolve ──► Reflect ──► Adjust Inputs ──► Decide (better)
-  │          │          │           │              │
-  │          │          │           │              └─ Update data/feature_config.json
-  │          │          │           │                 (enable/disable/tune indicators)
-  │          │          │           │
-  │          │          │           └─ Claude sees scorecard (current vs previous batch),
-  │          │          │              produces observations → data/knowledge/observations.jsonl
-  │          │          │
-  │          │          └─ BTC candle closes → winner = up or down
-  │          │             Winning token pays $1, loser pays $0
-  │          │
-  │          └─ Simulated execution with slippage + 20bps fees
+Monitor ──► Trigger AI ──► Trade ──► Monitor P&L ──► SL/TP Exit
+  │              │           │           │              │
+  │              │           │           │              └─ PositionMonitor detects -15%/+30%
+  │              │           │           │                 → triggers AI exit evaluation
+  │              │           │           │
+  │              │           │           └─ PositionMonitor marks-to-market every 1s
+  │              │           │
+  │              │           └─ Simulated execution with slippage + 20bps fees
+  │              │
+  │              └─ AIDecision: indicators, ML, two-pass screen, Claude → JSON
   │
-  └─ Claude reads: orderbook, BTC 5-min candle history, positions,
-     risk state, computed indicators, past learnings → outputs JSON
+  └─ MarketMonitor: 1s data fetch, prefilter, R/R check → trigger AI
+
+Resolve ──► Reflect ──► Adjust Inputs ──► (next candle)
 ```
 
-### Decision Cycle (14 steps)
+### Multi-Task Architecture
 
-Each cycle (~60 seconds) the agent executes:
+```
+TradingAgent.run()  (orchestrator)
+    |
+    +-- MarketMonitor (1s loop) -- fetches data, runs prefilter, records snapshots, signals AI
+    +-- AIDecision (event-driven) -- makes trades when triggered, has cooldown
+    +-- PositionMonitor (1s loop) -- tracks P&L, triggers exits at SL/TP
+    +-- RotationLoop (5s loop) -- handles candle transitions
+    +-- DashboardLoop (2s loop) -- writes dashboard JSON
+```
 
-1. **Discover market** — Query Gamma API for the active BTC 5-min candle. Detect rotation to a new candle.
-2. **Resolution buffer** — Skip trading if <10 seconds remain (too close to expiry).
-3. **Fetch snapshot** — Up + Down orderbooks, BTC spot price, latest 5-min candle, last trade price.
-4. **Mark-to-market** — Update unrealized PnL on both token positions.
-5. **Check limit fills** — Scan pending limit orders against current orderbook.
-6. **Pre-trade risk checks** — Daily loss halt, minimum liquidity. Run *before* Claude API call to save cost.
-7. **Rules-based pre-filter** — Cheap checks (time remaining, choppy market, entry pricing, candle streaks, R/R ratio) skip obvious HOLDs without calling Claude, saving 60-70% of AI costs. R/R pre-filter prevents wasting AI calls when both tokens are too expensive (ask > ~$0.435).
-8. **Two-pass screening** — If enabled, Haiku (fast/cheap) screens "is there a trade?" before calling Sonnet. Costs ~$0.0003 vs ~$0.005 for full decision. Skipped when positions are open.
-9. **Build context** — Assemble FeatureVector + BTC candle history + feedback context + computed indicators.
-10. **Claude decides** — Structured JSON: `action`, `token_side`, `order_type`, `size`, `confidence`, `reasoning`, `hypothetical_direction` (shadow prediction), `confidence_drivers` (pre-mortem for BUY: what would make this trade lose; for HOLD: what would need to change). The AI sees its own recent trade record (UP/DOWN win rates + individual trade outcomes) to enable real-time self-correction.
-11. **Confidence gate** — Hard override: if confidence < `min_confidence` (default 0.55, configurable via `agent.min_confidence`), the trade is forced to HOLD regardless of Claude's recommendation.
-12. **Calibration gate** — Checks stated confidence against historical calibration data. If the actual win rate at that confidence level is below break-even (55%), the trade is overridden to HOLD. Requires 15+ samples per confidence bin before activating (prevents noise from small samples).
-13. **Position sizing** — BUY size is dynamically scaled by two factors: (a) R/R quality (50-100% based on entry price), and (b) BTC move magnitude (40% at <$10 move, 60% at <$30, 80% at <$60, 100% at $60+). These multiply together — a marginal R/R trade on a tiny BTC move gets ~20% of requested size.
-14. **Post-trade risk checks** — Validate position sizing, concentration, cash sufficiency, and risk/reward ratio (entries with R/R < 1.3 are blocked). Spread checks apply to BUY only — SELL/exit orders are never blocked by wide spreads.
-15. **Execute + log** — Simulate fill, update portfolio, write TradeRecord to JSONL, write dashboard JSON.
+All tasks are `asyncio.Task` in the same event loop (no OS threads). Safe for shared state.
+
+### MarketMonitor (every 1 second)
+
+1. **Fetch snapshot** — Up + Down orderbooks, BTC spot price (2s cache TTL), latest 5-min candle
+2. **Run prefilter** — Checks 1-5: time remaining, spread width, book depth, choppy market, entry setup
+3. **Record PreFilterSnapshot** — Per-second market state stored in a 300-entry deque (~5 min history)
+4. **Compute R/R** — Calculate risk/reward ratio for both UP and DOWN tokens
+5. **Trigger AI** — Sets `ai_trigger_event` when R/R >= 1.0, prefilter passes, and AI cooldown (45s) has elapsed
+
+### AIDecision (event-driven)
+
+Waits for entry triggers (from MarketMonitor) or exit triggers (from PositionMonitor):
+
+1. **Pre-trade risk checks** — Daily loss halt, minimum liquidity
+2. **Build context** — FeatureVector + BTC candle history + feedback context + computed indicators + ML prediction
+3. **Two-pass screening** — Haiku screens first (entry only, not exits)
+4. **Claude decides** — Full Sonnet decision with structured JSON output
+5. **Confidence gate** — Override BUY to HOLD if confidence < 0.55
+6. **Calibration gate** — Override BUY to HOLD if calibrated win rate < break-even
+7. **Position sizing** — Extended R/R scale (no hard block): 100% at R/R >= 2.0, scaling down to 10% at R/R < 0.3. Multiplied by BTC move magnitude scaling
+8. **Post-trade risk checks** — Position size, concentration, cash, spread (BUY only)
+9. **Execute + log** — Simulate fill, update portfolio, write TradeRecord
+
+### PositionMonitor (every 1 second)
+
+1. **Mark-to-market** — Update position values using cached snapshot
+2. **Compute P&L %** — For each open position (UP and DOWN independently)
+3. **Check thresholds** — Stop-loss at -15%, take-profit at +30% (configurable)
+4. **Trigger exit** — Push exit signal to AIDecision with reason and current P&L
 
 ### Market Rotation & Resolution
 
@@ -232,7 +254,7 @@ Set `dashboard_enabled: false` in `config/default.yaml` for structured log outpu
 | `POLYBOT_AI_MODEL` | Claude model ID | `claude-sonnet-4-5-20250929` |
 | `POLYBOT_AGENT_DECISION_INTERVAL` | Seconds between cycles after first AI call | `60` |
 | `POLYBOT_AGENT_FAST_POLL_INTERVAL` | Seconds between cycles before first AI call | `10` |
-| `POLYBOT_AGENT_INITIAL_CASH` | Starting paper balance | `10000.0` |
+| `POLYBOT_AGENT_INITIAL_CASH` | Starting paper balance | `1000.0` |
 | `POLYBOT_AGENT_MAX_CYCLES` | Stop after N cycles (0=unlimited) | `0` |
 | `POLYBOT_AGENT_MIN_CONFIDENCE` | Minimum AI confidence to allow BUY | `0.55` |
 | `POLYBOT_MARKET_CONDITION_ID` | Pin a specific market | auto-discovered |
@@ -346,12 +368,14 @@ This means the *input data* to decisions evolves over time, not just the decisio
 
 The most direct levers are in `config/default.yaml`:
 
-- **`decision_interval`** / **`fast_poll_interval`** — The bot uses adaptive polling: 10s fast checks until the pre-filter first passes and the AI is called, then 60s intervals for the rest of the candle. This gives fast opportunity detection without multiplying AI costs
+- **`monitor.ai_cooldown_seconds`** — Minimum time between AI calls (default 45s). Lower = more responsive but higher API costs
+- **`monitor.rr_trigger_threshold`** — R/R ratio needed to trigger AI (default 1.0, entry <= $0.50)
+- **`monitor.stop_loss_pct`** / **`monitor.take_profit_pct`** — Position exit thresholds (default -15%/+30%)
 - **`initial_cash`** — Affects position sizing through risk percentages
 - **`temperature`** — Currently 0.0 (deterministic); slight increase (0.1-0.3) may help exploration
 - **`risk.max_position_pct`** — Increase for more aggressive sizing, decrease for safety
 - **`risk.daily_loss_limit_pct`** — Tighter stop-loss or wider runway
-- **`risk.min_reward_risk_ratio`** — Minimum risk/reward ratio for entries (default 1.3 blocks entries above ~$0.435). Position size is also scaled down for marginal R/R: 50% at the gate, ramping to 100% at R/R 2.0
+- **`risk.min_reward_risk_ratio`** — Minimum risk/reward ratio (kept for reference). No hard block — position size scales with R/R quality: 100% at R/R >= 2.0, 50% at 1.0, 25% at 0.5, 10% minimum
 
 ### Add new indicators
 
@@ -401,7 +425,7 @@ This would give sub-second market data instead of polling REST every 60s.
 - **Ensemble decisions** — Run multiple Claude calls with different temperatures and aggregate
 - **Backtesting** — Replay historical JSONL logs through the decision engine
 - **SQLite storage** — The config field `sqlite_enabled` exists but isn't wired yet; implement for queryable trade history
-- **Position management within candle** — Currently the bot can enter and exit mid-candle; add explicit take-profit / stop-loss logic
+- **Dynamic SL/TP thresholds** — Currently stop-loss (-15%) and take-profit (+30%) are fixed; could adapt based on time remaining, volatility, or position size
 - **Cross-candle learning** — Track BTC price patterns across multiple candles for longer-term trend detection
 
 ---
@@ -409,7 +433,26 @@ This would give sub-second market data instead of polling REST every 60s.
 ## Architecture
 
 ```
-TradingAgent (agent.py) — main orchestration loop
+TradingAgent (agent.py) — orchestrator, launches 5 concurrent tasks
+ │
+ ├── SharedState (shared_state.py) — central coordination hub
+ │   PreFilterSnapshot deque, asyncio.Event/Queue, position P&L, rotation flag
+ │
+ ├── MarketMonitor (tasks/market_monitor.py) — 1s loop
+ │   MarketDataProvider → prefilter → PreFilterSnapshot → trigger AI
+ │
+ ├── AIDecision (tasks/ai_decision.py) — event-driven
+ │   Waits on ai_trigger_event (entry) or exit_trigger_queue (SL/TP)
+ │   → FeatureVector → indicators → ML → screen → Claude → execute
+ │
+ ├── PositionMonitor (tasks/position_monitor.py) — 1s loop
+ │   Mark-to-market → P&L % → SL/TP check → exit_trigger_queue
+ │
+ ├── RotationLoop — 5s loop (in agent.py)
+ │   MarketDiscovery → candle transition → resolution → reflection
+ │
+ ├── DashboardLoop — 2s loop (in agent.py)
+ │   Writes dashboard JSON from shared state
  │
  ├── MarketDiscovery ─── Gamma API
  │   Finds current BTC 5-min candle market by slug pattern
@@ -419,7 +462,7 @@ TradingAgent (agent.py) — main orchestration loop
  │
  ├── RiskManager
  │   Pre-trade: daily halt, min liquidity
- │   Post-trade: spread, position size, concentration, cash, short-sell, R/R ratio gate
+ │   Post-trade: spread, position size, concentration, cash, short-sell, depth
  │
  ├── FeatureConfig + Indicators
  │   Reads data/feature_config.json → runs enabled indicators → prompt text
@@ -466,8 +509,9 @@ polymarket-bot/
 ├── logs/                         # Trade logs, resolution logs, dashboard JSON, agent state
 ├── src/polybot/
 │   ├── __main__.py               # Entry point
-│   ├── agent.py                  # TradingAgent — main loop
-│   ├── config.py                 # AppConfig + YAML + env loading
+│   ├── agent.py                  # TradingAgent — orchestrator (launches 5 async tasks)
+│   ├── shared_state.py           # SharedState + PreFilterSnapshot — task coordination
+│   ├── config.py                 # AppConfig + MonitorConfig + YAML + env loading
 │   ├── indicators.py             # Indicator registry + 13 built-in indicators
 │   ├── knowledge.py              # KnowledgeManager + structured reflection + scorecard
 │   ├── models.py                 # All Pydantic data models
@@ -487,10 +531,14 @@ polymarket-bot/
 │   │   └── provider.py           # Unified MarketSnapshot facade
 │   ├── risk/
 │   │   └── manager.py            # Pre/post-trade risk checks
-│   └── simulator/
-│       ├── engine.py             # Market order execution simulation
-│       ├── orderbook.py          # Limit order lifecycle
-│       └── portfolio.py          # Dual-position portfolio tracking
+│   ├── simulator/
+│   │   ├── engine.py             # Market order execution simulation
+│   │   ├── orderbook.py          # Limit order lifecycle
+│   │   └── portfolio.py          # Dual-position portfolio tracking
+│   └── tasks/
+│       ├── market_monitor.py     # 1s market data polling + prefilter + AI trigger
+│       ├── ai_decision.py        # Event-driven AI decision pipeline
+│       └── position_monitor.py   # Real-time P&L tracking + SL/TP exits
 ├── tests/                        # pytest + pytest-asyncio
 ├── .env.example                  # Environment variable template
 └── pyproject.toml                # Package definition + dependencies

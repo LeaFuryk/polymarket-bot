@@ -1,4 +1,4 @@
-"""Core trading agent — orchestrates the decision loop with dynamic market discovery."""
+"""Core trading agent — orchestrates concurrent tasks with dynamic market discovery."""
 
 from __future__ import annotations
 
@@ -41,9 +41,13 @@ from polybot.models import (
 )
 from polybot.resolution import ResolutionTracker
 from polybot.risk.manager import RiskManager
+from polybot.shared_state import SharedState
 from polybot.simulator.engine import ExecutionSimulator
 from polybot.simulator.orderbook import SimulatedOrderBook
 from polybot.simulator.portfolio import Portfolio
+from polybot.tasks.market_monitor import MarketMonitor
+from polybot.tasks.ai_decision import AIDecision
+from polybot.tasks.position_monitor import PositionMonitor
 
 logger = logging.getLogger(__name__)
 
@@ -115,11 +119,10 @@ def _compute_pnl_from_trades(trades: list[dict], winner: str) -> float:
 
 
 class TradingAgent:
-    """Main trading loop — glues together all sub-components with market rotation."""
+    """Orchestrator — launches concurrent tasks for market monitoring, AI decisions, and position management."""
 
     def __init__(self, config: AppConfig) -> None:
         self._config = config
-        self._shutdown = False
 
         # Sub-components
         self._discovery = MarketDiscovery(config)
@@ -137,22 +140,20 @@ class TradingAgent:
             rest_client=self._market_data._rest,
         )
 
-        # Rules-based pre-filter (skips AI on obvious HOLDs)
-        self._prefilter = PreFilter(
-            min_reward_risk_ratio=config.risk.min_reward_risk_ratio,
-        )
+        # Rules-based pre-filter (checks 1-5 only, no R/R gate)
+        self._prefilter = PreFilter()
 
-        # Confidence calibration (tracks stated vs actual win rates)
+        # Confidence calibration
         self._calibrator = ConfidenceCalibrator(
             data_dir=Path(config.logging.log_dir),
         )
 
-        # Exit strategy tracker (what-if analysis for SELL decisions)
+        # Exit strategy tracker
         self._exit_tracker = ExitTracker(
             data_dir=Path(config.logging.log_dir),
         )
 
-        # ML scorer (logistic regression baseline)
+        # ML scorer
         self._ml_scorer = MLScorer(
             data_dir=Path(config.logging.log_dir),
         )
@@ -162,7 +163,6 @@ class TradingAgent:
         self._feature_config = FeatureConfig(Path(config.logging.knowledge_dir).parent / "feature_config.json")
         self._recent_resolutions: list[ResolutionRecord] = []
         self._recent_trades: list[TradeRecord] = []
-        # All trades this session (uncapped — for dashboard completeness)
         self._session_trades: list[TradeRecord] = []
         self._resolutions_since_reflection: int = 0
 
@@ -190,14 +190,17 @@ class TradingAgent:
         self._last_cycle_api_cost: float = 0.0
 
         # ML features for training after resolution
-        self._last_ml_features: tuple[str, dict[str, float]] | None = None
         self._pending_ml_features: dict[str, dict[str, float]] = {}
 
-        # Adaptive polling: fast until first AI call per candle, then slow
-        self._ai_called_this_candle: bool = False
+        # Shared state for concurrent tasks
+        self._shared = SharedState()
+
+        # Task objects (created in run())
+        self._ai_decision: AIDecision | None = None
+        self._position_monitor: PositionMonitor | None = None
 
     async def run(self) -> None:
-        """Main entry point — run the trading loop until shutdown."""
+        """Main entry point — launches concurrent tasks."""
         _setup_logging(self._config)
         logger.info("TradingAgent starting — cash=%.2f", self._config.agent.initial_cash)
 
@@ -205,79 +208,119 @@ class TradingAgent:
         for sig in (signal.SIGINT, signal.SIGTERM):
             loop.add_signal_handler(sig, self._handle_signal)
 
-        # Load BTC 5-min candle history before starting the loop
+        # Load BTC 5-min candle history
         await self._market_data.btc_feed.load_candle_history(200)
 
         # Resolve any pending bets from previous sessions
         await self._resolve_pending_bets()
 
+        # Create task objects
+        market_monitor = MarketMonitor(
+            config=self._config,
+            shared=self._shared,
+            market_data=self._market_data,
+            prefilter=self._prefilter,
+            portfolio=self._portfolio,
+            resolution_tracker=self._resolution_tracker,
+        )
+
+        self._ai_decision = AIDecision(
+            config=self._config,
+            shared=self._shared,
+            decision_engine=self._decision_engine,
+            execution_sim=self._execution_sim,
+            orderbook=self._orderbook,
+            portfolio=self._portfolio,
+            risk=self._risk,
+            trade_log=self._trade_log,
+            prefilter=self._prefilter,
+            calibrator=self._calibrator,
+            exit_tracker=self._exit_tracker,
+            ml_scorer=self._ml_scorer,
+            knowledge_manager=self._knowledge_manager,
+            feature_config=self._feature_config,
+            resolution_tracker=self._resolution_tracker,
+            recent_resolutions=self._recent_resolutions,
+            recent_trades=self._recent_trades,
+            session_trades=self._session_trades,
+            pending_ml_features=self._pending_ml_features,
+        )
+
+        self._position_monitor = PositionMonitor(
+            config=self._config,
+            shared=self._shared,
+            portfolio=self._portfolio,
+        )
+
+        # Launch all tasks concurrently
+        tasks = [
+            asyncio.create_task(market_monitor.run(), name="market_monitor"),
+            asyncio.create_task(self._ai_decision.run(), name="ai_decision"),
+            asyncio.create_task(self._position_monitor.run(), name="position_monitor"),
+            asyncio.create_task(self._rotation_loop(), name="rotation_loop"),
+            asyncio.create_task(self._dashboard_loop(), name="dashboard_loop"),
+        ]
+
         try:
-            if self._config.logging.dashboard_enabled:
-                await self._run_with_dashboard()
-            else:
-                await self._run_plain()
+            # Wait until shutdown
+            while not self._shared.shutdown:
+                await asyncio.sleep(0.5)
+
+            # Signal all tasks to stop
+            logger.info("Shutdown: waiting for tasks to complete...")
+            for task in tasks:
+                task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
         finally:
             await self._shutdown_components()
 
     def _handle_signal(self) -> None:
         logger.info("Shutdown signal received")
-        self._shutdown = True
+        self._shared.shutdown = True
 
-    def _next_sleep_interval(self) -> float:
-        """Calculate sleep duration, syncing to candle boundaries.
+    async def _rotation_loop(self) -> None:
+        """Discovers markets and handles candle transitions (every 5s)."""
+        logger.info("RotationLoop started")
+        while not self._shared.shutdown:
+            try:
+                await self._discover_market()
+            except Exception:
+                logger.exception("RotationLoop error")
+            await asyncio.sleep(5.0)
+        logger.info("RotationLoop stopped")
 
-        Uses fast polling (10s) until first AI call, then slow (60s).
-        If the current candle ends before the next scheduled check,
-        syncs to the new candle start + 10s buffer for data to populate.
-        """
-        base = (
-            self._config.agent.decision_interval
-            if self._ai_called_this_candle
-            else self._config.agent.fast_poll_interval
-        )
-        if self._current_market:
-            remaining = self._current_market.time_remaining()
-            candle_sync = remaining + 10  # wake 10s into next candle
-            if 0 < candle_sync < base:
-                logger.debug(
-                    "Syncing to candle boundary: %.0fs remaining + 10s = %.0fs (vs %ds base)",
-                    remaining, candle_sync, base,
-                )
-                return candle_sync
-        return float(base)
+    async def _dashboard_loop(self) -> None:
+        """Writes dashboard JSON from shared state (every 2s)."""
+        logger.info("DashboardLoop started")
+        while not self._shared.shutdown:
+            try:
+                self._sync_from_ai_decision()
+                snapshot = self._shared.latest_snapshot
+                if snapshot is not None:
+                    self._write_dashboard_json(0, snapshot)
+            except Exception:
+                logger.debug("DashboardLoop error", exc_info=True)
+            await asyncio.sleep(2.0)
+        logger.info("DashboardLoop stopped")
 
-    async def _run_plain(self) -> None:
-        cycle = 0
-        max_cycles = self._config.agent.max_cycles
-        while not self._shutdown:
-            cycle += 1
-            if max_cycles and cycle > max_cycles:
-                logger.info("Reached max_cycles=%d, stopping", max_cycles)
-                break
-            await self._run_cycle(cycle)
-            if not self._shutdown and (not max_cycles or cycle < max_cycles):
-                await self._interruptible_sleep(self._next_sleep_interval())
-
-    async def _run_with_dashboard(self) -> None:
-        cycle = 0
-        max_cycles = self._config.agent.max_cycles
-        refresh = self._config.logging.dashboard_refresh_rate
-        with Live(self._build_dashboard(0, None), refresh_per_second=refresh) as live:
-            while not self._shutdown:
-                cycle += 1
-                if max_cycles and cycle > max_cycles:
-                    logger.info("Reached max_cycles=%d, stopping", max_cycles)
-                    break
-                snapshot, _pf_passed = await self._run_cycle(cycle)
-                live.update(self._build_dashboard(cycle, snapshot))
-                if not self._shutdown and (not max_cycles or cycle < max_cycles):
-                    await self._interruptible_sleep(self._next_sleep_interval())
+    def _sync_from_ai_decision(self) -> None:
+        """Sync dashboard state from the AIDecision task."""
+        if self._ai_decision is None:
+            return
+        self._last_action = self._ai_decision.last_action
+        self._last_reasoning = self._ai_decision.last_reasoning
+        self._last_risk_status = self._ai_decision.last_risk_status
+        self._last_token_side = self._ai_decision.last_token_side
+        self._session_wins = self._ai_decision.session_wins
+        self._session_losses = self._ai_decision.session_losses
+        self._session_resolution_pnl = self._ai_decision.session_resolution_pnl
+        self._total_api_cost = self._ai_decision.total_api_cost
+        self._last_cycle_api_cost = self._ai_decision.last_cycle_api_cost
 
     async def _discover_market(self) -> CandleMarket | None:
         """Discover the current candle market, handling rotation."""
         new_market = await self._discovery.get_current_market()
         if new_market is None:
-            # Try next market if current one isn't available yet
             new_market = await self._discovery.get_next_market()
 
         if new_market is None:
@@ -295,521 +338,116 @@ class TradingAgent:
         if self._current_market is None or new_market.condition_id != self._current_market.condition_id:
             self._current_market = new_market
             self._market_data.set_market(new_market)
-            self._ai_called_this_candle = False  # Reset for new candle
+
+            # Update shared state
+            self._shared.current_market = new_market
+
             logger.info("Active market: %s (ends in %.0fs)", new_market.title, new_market.time_remaining())
 
-            # Record BTC price at candle open for resolution tracking
+            # Record BTC price at candle open
             btc_snapshot = await self._market_data.btc_feed.get_price()
             if btc_snapshot:
                 self._resolution_tracker.record_candle_open(new_market, btc_snapshot.price_usd)
+                self._shared.candle_open_btc = btc_snapshot.price_usd
 
         return self._current_market
 
     async def _handle_market_transition(self) -> None:
         """Handle transition between candle markets — resolve winner via BTC price."""
-        # Cancel pending limit orders (they're for the old market)
-        cancelled = self._orderbook.cancel_all()
-        if cancelled:
-            logger.info("Cancelled %d pending orders on market rotation", cancelled)
+        # Pause other tasks during rotation
+        self._shared.rotation_in_progress = True
 
-        # Resolve candle winner using BTC price
-        if self._current_market is not None:
-            btc_snapshot = await self._market_data.btc_feed.get_price()
-            btc_price = btc_snapshot.price_usd if btc_snapshot else 0.0
-
-            resolution = await self._resolution_tracker.resolve(
-                self._current_market, btc_price,
-            )
-
-            # Settle positions using actual winner
-            resolution_pnl = self._portfolio.resolve_market(resolution.winner)
-            resolution.total_pnl = resolution_pnl
-            resolution.up_pnl = self._portfolio.up_position.realized_pnl
-            resolution.down_pnl = self._portfolio.down_position.realized_pnl
-
-            # Log resolution
-            self._trade_log.write_resolution(resolution)
-            self._last_resolution = resolution
-
-            # Record outcome for confidence calibration and exit analysis
-            self._calibrator.record_outcome(resolution.slug, resolution.winner)
-            self._exit_tracker.record_outcome(resolution.slug, resolution.winner)
-
-            # Train ML model on resolution outcome
-            ml_feats = self._pending_ml_features.pop(resolution.slug, None)
-            if ml_feats:
-                self._ml_scorer.train(ml_feats, up_won=(resolution.winner == "up"))
-
-            # Update session stats (skip flat resolutions with no position)
-            had_position = resolution_pnl != 0.0
-            if had_position:
-                if resolution_pnl > 0:
-                    self._session_wins += 1
-                else:
-                    self._session_losses += 1
-                self._session_resolution_pnl += resolution_pnl
-
-            logger.info(
-                "Resolution: %s winner=%s pnl=%.4f | Session: W%d/L%d total_pnl=%.4f",
-                resolution.slug, resolution.winner, resolution_pnl,
-                self._session_wins, self._session_losses, self._session_resolution_pnl,
-            )
-
-            # Track for feedback learning
-            self._recent_resolutions.append(resolution)
-            if len(self._recent_resolutions) > 20:
-                self._recent_resolutions = self._recent_resolutions[-20:]
-
-            self._resolutions_since_reflection += 1
-            self._save_agent_state()
-            if self._resolutions_since_reflection >= 10:
-                logger.info("Triggering reflection after %d resolutions", self._resolutions_since_reflection)
-                self._resolutions_since_reflection = 0
-                await self._knowledge_manager.reflect(
-                    self._recent_resolutions, self._recent_trades,
-                )
-                # Deduct reflection API cost
-                reflection_cost = self._knowledge_manager.last_reflection_cost
-                if reflection_cost > 0:
-                    self._portfolio.cash -= reflection_cost
-                    self._total_api_cost += reflection_cost
-                    logger.info("Reflection API cost: $%.4f (session total: $%.4f)", reflection_cost, self._total_api_cost)
-
-        # Reset positions for new market
-        self._portfolio.reset_positions()
-
-    async def _run_cycle(self, cycle: int) -> tuple:
-        """Execute one decision cycle. Returns (snapshot, prefilter_passed)."""
-        logger.info("=== Cycle %d ===", cycle)
-
-        # 0. Discover/rotate market
-        market = await self._discover_market()
-        if market is None:
-            logger.warning("No market available, skipping cycle")
-            self._last_action = "SKIP (no market)"
-            return None, False
-
-        # Check resolution buffer
-        time_remaining = market.time_remaining()
-        buffer = self._config.agent.resolution_buffer_seconds
-        if time_remaining < buffer:
-            logger.info("Too close to resolution (%.0fs < %ds), skipping", time_remaining, buffer)
-            self._last_action = f"SKIP ({time_remaining:.0f}s to resolution)"
-            return None, False
-
-        # 1. Fetch market data
         try:
-            snapshot = await self._market_data.get_snapshot()
-        except Exception:
-            logger.exception("Failed to fetch market data, skipping cycle")
-            self._last_action = "SKIP (data error)"
-            return None, False
+            # Cancel pending limit orders
+            cancelled = self._orderbook.cancel_all()
+            if cancelled:
+                logger.info("Cancelled %d pending orders on market rotation", cancelled)
 
-        up_ob = snapshot.orderbook
-        down_ob = snapshot.down_orderbook
-        up_mid = up_ob.midpoint
-        down_mid = down_ob.midpoint
+            # Resolve candle winner
+            if self._current_market is not None:
+                btc_snapshot = await self._market_data.btc_feed.get_price()
+                btc_price = btc_snapshot.price_usd if btc_snapshot else 0.0
 
-        # 2. Mark-to-market portfolio
-        if up_mid is not None:
-            self._portfolio.mark_to_market(up_mid, down_mid)
-        portfolio_value = self._portfolio.total_value_at_market(
-            up_mid or 0.5, down_mid
-        )
-        self._risk.update_portfolio_peak(portfolio_value)
+                resolution = await self._resolution_tracker.resolve(
+                    self._current_market, btc_price,
+                )
 
-        # 3. Check pending limit order fills (using Up orderbook for now)
-        limit_fills = self._orderbook.check_fills(up_ob)
-        for fill in limit_fills:
-            # TODO: track which token side the limit order was for
-            self._portfolio.apply_fill(fill, TokenSide.UP)
-            pnl = 0.0
-            if fill.side.value == "SELL":
-                pnl = (fill.fill_price - self._portfolio.up_position.avg_entry_price) * fill.size
-            self._risk.record_trade(pnl, fill.fee_amount)
-            logger.info("Limit fill applied: %s %.2f @ %.4f", fill.side.value, fill.size, fill.fill_price)
+                resolution_pnl = self._portfolio.resolve_market(resolution.winner)
+                resolution.total_pnl = resolution_pnl
+                resolution.up_pnl = self._portfolio.up_position.realized_pnl
+                resolution.down_pnl = self._portfolio.down_position.realized_pnl
 
-        # 4. Pre-trade risk checks
-        pre_checks = self._risk.pre_trade_checks(snapshot)
-        pre_failed = [c for c in pre_checks if not c.passed]
-        if pre_failed:
-            reasons = "; ".join(c.reason for c in pre_failed)
-            logger.warning("Pre-trade risk blocked: %s", reasons)
-            self._last_action = "BLOCKED (pre-trade)"
-            self._last_risk_status = reasons
-            self._log_cycle(cycle, snapshot, risk_blocked=True, risk_reason=reasons)
-            return snapshot, False
+                self._trade_log.write_resolution(resolution)
+                self._last_resolution = resolution
 
-        # 4b. Rules-based pre-filter (skip AI on obvious HOLDs)
-        has_position = (
-            self._portfolio.up_position.shares > 0
-            or self._portfolio.down_position.shares > 0
-        )
-        pf_result = self._prefilter.check(time_remaining, snapshot, has_position)
-        if pf_result.should_skip:
-            self._last_action = f"HOLD (pre-filter: {pf_result.reason[:60]})"
-            self._last_reasoning = pf_result.reason
-            self._log_cycle(cycle, snapshot, risk_blocked=False, risk_reason="")
-            self._write_dashboard_json(cycle, snapshot)
-            return snapshot, False
+                self._calibrator.record_outcome(resolution.slug, resolution.winner)
+                self._exit_tracker.record_outcome(resolution.slug, resolution.winner)
 
-        # Mark that AI was called this candle (switches to slow polling)
-        self._ai_called_this_candle = True
+                # Train ML model
+                ml_feats = self._pending_ml_features.pop(resolution.slug, None)
+                if ml_feats:
+                    self._ml_scorer.train(ml_feats, up_won=(resolution.winner == "up"))
 
-        # 5. Build feature vector and get AI decision
-        features = FeatureVector(
-            market=snapshot,
-            position=self._portfolio.position,
-            up_position=self._portfolio.up_position,
-            down_position=self._portfolio.down_position,
-            risk=self._risk.state,
-            portfolio_cash=self._portfolio.cash,
-            portfolio_total_value=portfolio_value,
-            cycle_number=cycle,
-            time_remaining=time_remaining,
-        )
+                # Update session stats
+                had_position = resolution_pnl != 0.0
+                if had_position:
+                    if resolution_pnl > 0:
+                        self._session_wins += 1
+                    else:
+                        self._session_losses += 1
+                    self._session_resolution_pnl += resolution_pnl
 
-        exit_summary = self._exit_tracker.get_summary()
-        calibration_summary = self._calibrator.get_calibration_summary()
-        if exit_summary:
-            calibration_summary = calibration_summary + "\n" + exit_summary
+                # Sync stats to AI decision task
+                if self._ai_decision:
+                    self._ai_decision.session_wins = self._session_wins
+                    self._ai_decision.session_losses = self._session_losses
+                    self._ai_decision.session_resolution_pnl = self._session_resolution_pnl
 
-        feedback_context = self._knowledge_manager.build_feedback_context(
-            self._recent_resolutions,
-            self._session_wins,
-            self._session_losses,
-            self._session_resolution_pnl,
-            calibration_summary=calibration_summary,
-            recent_trades=self._recent_trades,
-        )
-        logger.debug("Feedback context: %s", feedback_context[:200])
-
-        # Compute dynamic indicators
-        self._feature_config.load()
-        candle_open_btc = None
-        if self._current_market:
-            candle_open_btc = self._resolution_tracker.get_candle_open(
-                self._current_market.condition_id
-            )
-        session_ctx = SessionContext(
-            wins=self._session_wins,
-            losses=self._session_losses,
-            candle_open_btc=candle_open_btc,
-        )
-        indicator_results = compute_indicators(snapshot, self._feature_config, session_ctx)
-        indicators_text = format_indicators(indicator_results)
-        if indicators_text:
-            logger.debug("Indicators: %s", indicators_text[:200])
-
-        # Compute ML baseline prediction
-        btc_price_val = snapshot.btc_price.price_usd if snapshot.btc_price else None
-        ml_features = self._ml_scorer.extract_features(
-            candles=snapshot.btc_candles,
-            btc_price=btc_price_val,
-            candle_open=candle_open_btc,
-            up_mid=up_mid,
-            down_mid=down_mid,
-            up_bid_depth=snapshot.orderbook.bid_depth,
-            up_ask_depth=snapshot.orderbook.ask_depth,
-        )
-        ml_prediction = self._ml_scorer.predict(ml_features)
-        # Store features for training after resolution
-        if self._current_market:
-            self._pending_ml_features[self._current_market.slug] = ml_features
-
-        # Append ML prediction to indicators text
-        if ml_prediction.model_trained:
-            ml_line = (
-                f"- ML Baseline: {ml_prediction.up_probability:.0%} UP probability "
-                f"({ml_prediction.confidence})"
-            )
-        else:
-            ml_line = f"- ML Baseline: {self._ml_scorer.get_summary()}"
-        if indicators_text:
-            indicators_text += "\n" + ml_line
-        else:
-            indicators_text = "## Computed Indicators\n" + ml_line
-
-        # 5b. Two-pass screening: fast Haiku check before expensive Sonnet call
-        if self._config.ai.two_pass_enabled and not has_position:
-            should_trade, screen_reason, screen_cost = await self._decision_engine.screen(
-                features, indicators_text=indicators_text,
-            )
-            # Deduct screening cost
-            self._portfolio.cash -= screen_cost
-            self._total_api_cost += screen_cost
-            self._last_cycle_api_cost = screen_cost
-
-            if not should_trade:
-                self._last_action = f"HOLD (screen: {screen_reason[:60]})"
-                self._last_reasoning = screen_reason
-                self._log_cycle(cycle, snapshot, risk_blocked=False, risk_reason="")
-                self._write_dashboard_json(cycle, snapshot)
-                return snapshot, True
-
-        decision, latency_ms, api_cost = await self._decision_engine.decide(
-            features, feedback_context=feedback_context, indicators_text=indicators_text,
-            ai_cycle_cost=self._last_cycle_api_cost, ai_session_cost=self._total_api_cost,
-            candle_open_btc=candle_open_btc,
-        )
-
-        # Deduct API cost from cash (the bot pays for its own brain)
-        self._portfolio.cash -= api_cost
-        self._total_api_cost += api_cost
-        self._last_cycle_api_cost = api_cost
-        logger.info("API cost: $%.4f (session total: $%.4f)", api_cost, self._total_api_cost)
-
-        # Hard confidence gate: override low-confidence trades to HOLD (BUY only — never block exits)
-        min_conf = self._config.agent.min_confidence
-        if decision.action == Action.BUY and decision.confidence < min_conf:
-            logger.info(
-                "Overriding %s to HOLD — confidence %.2f < %.2f threshold",
-                decision.action.value, decision.confidence, min_conf,
-            )
-            decision = TradingDecision(
-                action=Action.HOLD,
-                order_type=OrderType.MARKET,
-                size=0.0,
-                confidence=decision.confidence,
-                reasoning=f"Overridden: confidence {decision.confidence:.2f} below {min_conf} threshold. "
-                          f"Original: {decision.reasoning[:100]}",
-                market_view=decision.market_view,
-                token_side=decision.token_side,
-                hypothetical_direction=decision.hypothetical_direction,
-                confidence_drivers=decision.confidence_drivers,
-            )
-
-        # Calibration gate: check if stated confidence is actually profitable (BUY only — never block exits)
-        if decision.action == Action.BUY:
-            cal = self._calibrator.check(decision.confidence)
-            if cal.is_reliable and not cal.should_trade:
                 logger.info(
-                    "Calibration override %s to HOLD — stated %.2f but actual win rate %.0f%% "
-                    "(%d samples, need %.0f%% break-even)",
-                    decision.action.value, decision.confidence,
-                    cal.calibrated_win_rate * 100, cal.sample_count,
-                    self._calibrator._break_even * 100,
-                )
-                decision = TradingDecision(
-                    action=Action.HOLD,
-                    order_type=OrderType.MARKET,
-                    size=0.0,
-                    confidence=decision.confidence,
-                    reasoning=f"Calibration override: {cal.reason}. "
-                              f"Original: {decision.reasoning[:80]}",
-                    market_view=decision.market_view,
-                    token_side=decision.token_side,
-                    hypothetical_direction=decision.hypothetical_direction,
-                    confidence_drivers=decision.confidence_drivers,
+                    "Resolution: %s winner=%s pnl=%.4f | Session: W%d/L%d total_pnl=%.4f",
+                    resolution.slug, resolution.winner, resolution_pnl,
+                    self._session_wins, self._session_losses, self._session_resolution_pnl,
                 )
 
-        # Position sizing: scale by R/R quality AND BTC move magnitude
-        if decision.action == Action.BUY:
-            target_ob = down_ob if decision.token_side == TokenSide.DOWN else up_ob
-            est_fill = target_ob.best_ask or 0.5
-            reward = 1.0 - est_fill
-            risk = est_fill
-            rr_ratio = reward / risk if risk > 0 else 0
-            min_rr = self._config.risk.min_reward_risk_ratio
-            excellent_rr = 2.0
-            if rr_ratio >= excellent_rr:
-                rr_scale = 1.0
-            elif rr_ratio > min_rr:
-                # Linear scale: 50% at min_rr, 100% at excellent_rr
-                rr_scale = 0.5 + 0.5 * (rr_ratio - min_rr) / (excellent_rr - min_rr)
-            else:
-                rr_scale = 0.5  # Will be blocked by risk manager anyway
+                self._recent_resolutions.append(resolution)
+                if len(self._recent_resolutions) > 20:
+                    self._recent_resolutions = self._recent_resolutions[-20:]
 
-            # Move-magnitude scaling: reduce size when BTC hasn't moved much
-            # (small moves are noise — big positions on noise = big losses)
-            move_scale = 1.0
-            btc_price_now = snapshot.btc_price.price_usd if snapshot.btc_price else None
-            if candle_open_btc is not None and btc_price_now is not None:
-                btc_move = abs(btc_price_now - candle_open_btc)
-                if btc_move < 10:
-                    move_scale = 0.4  # near-flat: minimal size
-                elif btc_move < 30:
-                    move_scale = 0.6  # small move: reduced size
-                elif btc_move < 60:
-                    move_scale = 0.8  # moderate move: slightly reduced
-                # >= $60: full size (1.0)
-
-            combined_scale = rr_scale * move_scale
-            if combined_scale < 1.0:
-                original_size = decision.size
-                scaled_size = round(decision.size * combined_scale, 1)
-                if scaled_size >= 1.0:
-                    decision = TradingDecision(
-                        action=decision.action,
-                        order_type=decision.order_type,
-                        size=scaled_size,
-                        confidence=decision.confidence,
-                        reasoning=decision.reasoning,
-                        market_view=decision.market_view,
-                        token_side=decision.token_side,
-                        limit_price=decision.limit_price,
+                self._resolutions_since_reflection += 1
+                self._save_agent_state()
+                if self._resolutions_since_reflection >= 10:
+                    logger.info("Triggering reflection after %d resolutions", self._resolutions_since_reflection)
+                    self._resolutions_since_reflection = 0
+                    await self._knowledge_manager.reflect(
+                        self._recent_resolutions, self._recent_trades,
                     )
-                    logger.info(
-                        "Position sizing: %.1f → %.1f shares (R/R=%.2f×%.0f%%, move=$%.0f×%.0f%%)",
-                        original_size, scaled_size, rr_ratio, rr_scale * 100,
-                        btc_move if btc_price_now and candle_open_btc else 0, move_scale * 100,
-                    )
+                    reflection_cost = self._knowledge_manager.last_reflection_cost
+                    if reflection_cost > 0:
+                        self._portfolio.cash -= reflection_cost
+                        self._total_api_cost += reflection_cost
+                        if self._ai_decision:
+                            self._ai_decision.total_api_cost = self._total_api_cost
+                        logger.info("Reflection API cost: $%.4f (session total: $%.4f)", reflection_cost, self._total_api_cost)
 
-        # Register shadow prediction for HOLD cycles (builds calibration data)
-        if decision.action == Action.HOLD and decision.hypothetical_direction and self._current_market:
-            self._calibrator.register_shadow(
-                self._current_market.slug,
-                decision.hypothetical_direction,
-                decision.confidence,
-            )
+            # Reset positions and triggers for new market
+            self._portfolio.reset_positions()
+            if self._position_monitor:
+                self._position_monitor.reset_triggers()
 
-        self._last_action = f"{decision.action.value} {decision.token_side.value} {decision.size:.1f}"
-        self._last_reasoning = decision.reasoning[:120]
-        self._last_token_side = decision.token_side.value
+            # Clear exit trigger queue
+            while not self._shared.exit_trigger_queue.empty():
+                try:
+                    self._shared.exit_trigger_queue.get_nowait()
+                except asyncio.QueueEmpty:
+                    break
 
-        # 6. Post-trade risk checks (skip for HOLD)
-        risk_blocked = False
-        risk_reason = ""
-        if decision.action != Action.HOLD:
-            # Get the position for the specific token being traded
-            token_position = self._portfolio.get_position(decision.token_side)
-            post_checks = self._risk.post_trade_checks(
-                decision, token_position,
-                self._portfolio.cash, portfolio_value, snapshot,
-            )
-            post_failed = [c for c in post_checks if not c.passed]
-            if post_failed:
-                risk_reason = "; ".join(c.reason for c in post_failed)
-                logger.warning("Post-trade risk blocked %s %s: %s",
-                               decision.action.value, decision.token_side.value, risk_reason)
-                self._last_action = f"BLOCKED ({decision.action.value} {decision.token_side.value})"
-                self._last_risk_status = risk_reason
-                risk_blocked = True
+            # Reset shared state for new candle
+            self._shared.candle_open_btc = None
+            self._shared.position_pnl_pct.clear()
+            self._shared.prefilter_history.clear()
 
-        # 7. Execute — select correct orderbook based on token_side
-        fill = None
-        if not risk_blocked and decision.action != Action.HOLD:
-            target_ob = down_ob if decision.token_side == TokenSide.DOWN else up_ob
-            if decision.order_type == OrderType.MARKET:
-                fill = self._execution_sim.execute(decision, target_ob)
-            elif decision.order_type == OrderType.LIMIT:
-                self._orderbook.add_order(decision)
-
-        # 8. Apply fill
-        if fill:
-            self._portfolio.apply_fill(fill, decision.token_side)
-            token_pos = self._portfolio.get_position(decision.token_side)
-            realized = 0.0
-            if fill.side.value == "SELL":
-                realized = (fill.fill_price - token_pos.avg_entry_price) * fill.size
-            self._risk.record_trade(realized, fill.fee_amount)
-
-            # Register with calibration tracker (BUY only — SELLs are exits)
-            if decision.action == Action.BUY and self._current_market:
-                self._calibrator.register_trade(
-                    slug=self._current_market.slug,
-                    confidence=decision.confidence,
-                    token_side=decision.token_side.value,
-                    entry_price=fill.fill_price,
-                )
-
-            # Register exits for what-if analysis (SELL only)
-            if decision.action == Action.SELL and self._current_market:
-                self._exit_tracker.register_exit(
-                    slug=self._current_market.slug,
-                    token_side=decision.token_side.value,
-                    entry_price=token_pos.avg_entry_price,
-                    exit_price=fill.fill_price,
-                    exit_size=fill.size,
-                    time_remaining=time_remaining,
-                )
-
-        # 9. Post-fill mark-to-market
-        if up_mid is not None:
-            self._portfolio.mark_to_market(up_mid, down_mid)
-        portfolio_value = self._portfolio.total_value_at_market(up_mid or 0.5, down_mid)
-        self._risk.update_portfolio_peak(portfolio_value)
-        self._last_risk_status = "HALTED" if self._risk.state.is_halted else "OK"
-
-        # 10. Log
-        self._log_cycle(
-            cycle, snapshot,
-            decision=decision, latency_ms=latency_ms,
-            fill=fill, risk_blocked=risk_blocked, risk_reason=risk_reason,
-        )
-
-        # 11. Write dashboard JSON
-        self._write_dashboard_json(cycle, snapshot)
-
-        return snapshot, True
-
-    def _log_cycle(
-        self, cycle, snapshot, decision=None, latency_ms=0.0,
-        fill=None, risk_blocked=False, risk_reason="",
-    ) -> None:
-        ob = snapshot.orderbook
-        pos = self._portfolio.position
-        mid = ob.midpoint
-        down_mid = snapshot.down_orderbook.midpoint
-
-        record = TradeRecord(
-            cycle_number=cycle,
-            midpoint=ob.midpoint,
-            spread=ob.spread,
-            spread_pct=ob.spread_pct,
-            best_bid=ob.best_bid,
-            best_ask=ob.best_ask,
-            bid_depth=ob.bid_depth,
-            ask_depth=ob.ask_depth,
-            last_trade_price=snapshot.last_trade_price,
-            btc_price_usd=snapshot.btc_price.price_usd if snapshot.btc_price else None,
-            volume_24h=snapshot.volume_24h,
-            position_shares=pos.shares,
-            position_avg_entry=pos.avg_entry_price,
-            cash=self._portfolio.cash,
-            portfolio_value=self._portfolio.total_value_at_market(mid or 0.5, down_mid),
-            realized_pnl=pos.realized_pnl,
-            unrealized_pnl=pos.unrealized_pnl,
-            daily_pnl=self._risk.state.daily_pnl,
-            risk_halted=self._risk.state.is_halted,
-            risk_blocked=risk_blocked,
-            risk_block_reason=risk_reason,
-        )
-
-        # Attach candle metadata for dashboard
-        if self._current_market:
-            record.candle_slug = self._current_market.slug
-            record.extra["time_remaining"] = self._current_market.time_remaining()
-
-        if decision:
-            record.action = decision.action
-            record.order_type = decision.order_type
-            record.token_side = decision.token_side
-            record.decision_size = decision.size
-            record.limit_price = decision.limit_price
-            record.confidence = decision.confidence
-            record.reasoning = decision.reasoning
-            record.market_view = decision.market_view
-            record.ai_latency_ms = latency_ms
-            record.ai_cost = self._last_cycle_api_cost
-            if decision.hypothetical_direction:
-                record.extra["hypothetical_direction"] = decision.hypothetical_direction
-            if decision.confidence_drivers:
-                record.extra["confidence_drivers"] = decision.confidence_drivers
-
-        if fill:
-            record.fill_price = fill.fill_price
-            record.fill_size = fill.size
-            record.slippage_bps = fill.slippage_bps
-            record.fee_amount = fill.fee_amount
-
-        self._trade_log.write(record)
-
-        # Track all trades (including HOLDs) for dashboard and reflection
-        self._recent_trades.append(record)
-        if len(self._recent_trades) > 50:
-            self._recent_trades = self._recent_trades[-50:]
-        self._session_trades.append(record)
+        finally:
+            self._shared.rotation_in_progress = False
 
     # --- Dashboard Data Writer ---
 
@@ -864,7 +502,10 @@ class TradingAgent:
                 "down_avg_entry": self._portfolio.down_position.avg_entry_price,
             }
 
-            # Trades list — use full session trades (uncapped) for dashboard completeness
+            # Position P&L from position monitor
+            position_pnl = dict(self._shared.position_pnl_pct)
+
+            # Trades list
             trades = []
             for t in self._session_trades:
                 trade_entry = {
@@ -884,7 +525,6 @@ class TradingAgent:
                     "time_remaining_at_trade": t.extra.get("time_remaining", 0),
                     "risk_blocked": t.risk_blocked,
                     "risk_block_reason": t.risk_block_reason,
-                    # Per-trade financial state (for per-session dashboard metrics)
                     "cash": t.cash,
                     "portfolio_value": t.portfolio_value,
                     "fee": t.fee_amount,
@@ -907,11 +547,10 @@ class TradingAgent:
                     "pnl": r.total_pnl,
                 })
 
-            # Merge historical + current session data for full dashboard view
+            # Merge historical + current session data
             all_trades = self._historical_trades + trades
             all_resolutions = self._historical_resolutions + resolutions
 
-            # Compute all-time stats from all resolutions
             all_time_pnl = sum(r.get("pnl", 0) for r in all_resolutions)
             all_time_wins = sum(1 for r in all_resolutions if r.get("pnl", 0) > 0.001)
             all_time_losses = sum(1 for r in all_resolutions if r.get("pnl", 0) < -0.001)
@@ -931,7 +570,7 @@ class TradingAgent:
                     "portfolio_value": portfolio_value,
                     "initial_cash": self._config.agent.initial_cash,
                     "market_trading_pnl": self._portfolio.market_trading_pnl,
-                    "cycles_run": cycle,
+                    "cycles_run": self._ai_decision._cycle_count if self._ai_decision else 0,
                     "prefilter_skip_rate": self._prefilter.skip_rate,
                     "prefilter_skipped": self._prefilter.total_skipped,
                     "prefilter_checked": self._prefilter.total_checks,
@@ -948,6 +587,7 @@ class TradingAgent:
                 "current_market": current_market,
                 "btc": btc_info,
                 "positions": positions,
+                "position_pnl": position_pnl,
                 "trades": all_trades,
                 "resolutions": all_resolutions,
                 "risk": {
@@ -987,6 +627,11 @@ class TradingAgent:
                     "total_saved": round(self._exit_tracker._total_saved, 4),
                     "total_missed": round(self._exit_tracker._total_missed, 4),
                 },
+                "monitor": {
+                    "prefilter_snapshots": len(self._shared.prefilter_history),
+                    "ai_cooldown_remaining": max(0, self._config.monitor.ai_cooldown_seconds - (time.time() - self._shared.ai_last_call_time)),
+                    "last_trigger_reason": self._shared.ai_trigger_reason,
+                },
             }
 
             dashboard_path.write_text(json.dumps(data, indent=2) + "\n")
@@ -997,7 +642,6 @@ class TradingAgent:
 
     async def _resolve_pending_bets(self) -> None:
         """Check for trades with no matching resolution and resolve them."""
-        # Group historical trades by candle_slug
         trades_by_slug: dict[str, list[dict]] = {}
         for t in self._historical_trades:
             slug = t.get("candle_slug", "")
@@ -1005,10 +649,8 @@ class TradingAgent:
                 continue
             trades_by_slug.setdefault(slug, []).append(t)
 
-        # Index resolved slugs
         resolved_slugs = {r.get("slug", "") for r in self._historical_resolutions}
 
-        # Find unresolved slugs that have actual fills (not just HOLDs)
         unresolved = []
         for slug, trades in trades_by_slug.items():
             if slug in resolved_slugs:
@@ -1024,9 +666,7 @@ class TradingAgent:
         if not unresolved:
             return
 
-        # Sort oldest first (slug ends with Unix timestamp)
         unresolved.sort(key=lambda s: int(s.rsplit("-", 1)[-1]) if s.rsplit("-", 1)[-1].isdigit() else 0)
-
         logger.info("Found %d unresolved candle(s) with fills: %s", len(unresolved), unresolved)
 
         for slug in unresolved:
@@ -1039,19 +679,16 @@ class TradingAgent:
         """Resolve a single pending bet by looking up the actual outcome."""
         from datetime import datetime, timezone
 
-        # Fetch market info from Gamma API
         market = await self._discovery.fetch_market_by_slug(slug)
         if market is None:
             logger.warning("Could not fetch market for pending bet: %s (may be delisted)", slug)
             return
 
-        # Skip if candle hasn't ended yet
         now = time.time()
         if market.end_time > now:
             logger.info("Skipping pending bet %s — candle still live (ends in %.0fs)", slug, market.end_time - now)
             return
 
-        # Get BTC open and close prices from Binance historical API
         btc_open = await self._market_data.btc_feed.get_price_at(market.start_time)
         btc_close = await self._market_data.btc_feed.get_price_at(market.end_time)
 
@@ -1059,20 +696,15 @@ class TradingAgent:
             logger.warning("Could not fetch BTC prices for pending bet: %s (open=%s close=%s)", slug, btc_open, btc_close)
             return
 
-        # Resolve via the resolution tracker (handles BTC comparison + Polymarket verification)
         resolution = await self._resolution_tracker.resolve(market, btc_close)
-        # The resolver may not have the open price cached, so override with our fetched values
         resolution.btc_open = btc_open
         resolution.btc_close = btc_close
 
-        # Compute PnL from logged trades
         pnl = _compute_pnl_from_trades(trades, resolution.winner)
         resolution.total_pnl = pnl
 
-        # Write to resolution log
         self._trade_log.write_resolution(resolution)
 
-        # Append to historical resolutions for dashboard
         self._historical_resolutions.append({
             "timestamp": datetime.fromtimestamp(resolution.timestamp, tz=timezone.utc).isoformat(),
             "slug": resolution.slug,
@@ -1091,7 +723,7 @@ class TradingAgent:
     # --- Agent State Persistence ---
 
     def _load_agent_state(self) -> None:
-        """Load persisted state (resolution counter + history + knowledge) from disk."""
+        """Load persisted state from disk."""
         try:
             if self._state_path.exists():
                 data = json.loads(self._state_path.read_text())
@@ -1101,18 +733,16 @@ class TradingAgent:
         except Exception:
             logger.warning("Could not load agent state, starting fresh")
 
-        # Load historical resolutions from JSONL log
         self._historical_resolutions: list[dict] = []
         self._historical_trades: list[dict] = []
         self._load_history_from_logs()
 
     def _load_history_from_logs(self) -> None:
-        """Load past resolutions and trades from JSONL log files for dashboard history."""
+        """Load past resolutions and trades from JSONL log files."""
         from datetime import datetime, timezone
 
         log_dir = Path(self._config.logging.log_dir)
 
-        # Load all resolution JSONL files
         for res_file in sorted(log_dir.glob("resolutions_*.jsonl")):
             try:
                 for line in res_file.read_text().strip().split("\n"):
@@ -1133,7 +763,6 @@ class TradingAgent:
             except Exception:
                 logger.debug("Could not load resolution file %s", res_file, exc_info=True)
 
-        # Load all trade JSONL files
         for trade_file in sorted(log_dir.glob("trades_*.jsonl")):
             try:
                 for line in trade_file.read_text().strip().split("\n"):
@@ -1160,7 +789,6 @@ class TradingAgent:
                         "time_remaining_at_trade": t.get("extra", {}).get("time_remaining", 0),
                         "risk_blocked": t.get("risk_blocked", False),
                         "risk_block_reason": t.get("risk_block_reason", ""),
-                        # Per-trade financial state
                         "cash": t.get("cash"),
                         "portfolio_value": t.get("portfolio_value"),
                         "fee": t.get("fee_amount", 0),
@@ -1186,123 +814,6 @@ class TradingAgent:
             }, indent=2) + "\n")
         except Exception:
             logger.warning("Could not save agent state")
-
-    # --- Rich Dashboard ---
-
-    def _build_dashboard(self, cycle: int, snapshot) -> Table:
-        grid = Table(title="Polymarket BTC 5-Min Candle Bot", show_header=False, expand=True)
-        grid.add_column("Section", style="bold cyan", width=22)
-        grid.add_column("Details", style="white")
-
-        # Candle market info
-        if self._current_market:
-            remaining = self._current_market.time_remaining()
-            market_title = f"{self._current_market.title} ({remaining:.0f}s remaining)"
-        else:
-            market_title = "Discovering market..."
-        grid.add_row("Candle Market", market_title)
-        grid.add_row("Cycle", str(cycle))
-
-        # Up token orderbook
-        if snapshot and snapshot.orderbook.midpoint is not None:
-            up_ob = snapshot.orderbook
-            up_info = (
-                f"Bid: {up_ob.best_bid:.4f}  Ask: {up_ob.best_ask:.4f}  "
-                f"Mid: {up_ob.midpoint:.4f}  Spread: {up_ob.spread_pct:.2%}"
-            )
-        else:
-            up_info = "Waiting for data..."
-        grid.add_row("Up Token", up_info)
-
-        # Down token orderbook
-        if snapshot and snapshot.down_orderbook.midpoint is not None:
-            down_ob = snapshot.down_orderbook
-            down_info = (
-                f"Bid: {down_ob.best_bid:.4f}  Ask: {down_ob.best_ask:.4f}  "
-                f"Mid: {down_ob.midpoint:.4f}  Spread: {down_ob.spread_pct:.2%}"
-            )
-        else:
-            down_info = "Waiting for data..."
-        grid.add_row("Down Token", down_info)
-
-        # Up position
-        up_pos = self._portfolio.up_position
-        if up_pos.shares > 0:
-            up_pos_info = (
-                f"Shares: {up_pos.shares:.2f}  Avg: {up_pos.avg_entry_price:.4f}  "
-                f"UnrPnL: {up_pos.unrealized_pnl:+.2f}"
-            )
-        else:
-            up_pos_info = "Flat"
-        grid.add_row("Up Position", up_pos_info)
-
-        # Down position
-        down_pos = self._portfolio.down_position
-        if down_pos.shares > 0:
-            down_pos_info = (
-                f"Shares: {down_pos.shares:.2f}  Avg: {down_pos.avg_entry_price:.4f}  "
-                f"UnrPnL: {down_pos.unrealized_pnl:+.2f}"
-            )
-        else:
-            down_pos_info = "Flat"
-        grid.add_row("Down Position", down_pos_info)
-
-        # Portfolio
-        up_mid = snapshot.orderbook.midpoint if snapshot else None
-        down_mid = snapshot.down_orderbook.midpoint if snapshot else None
-        total = self._portfolio.total_value_at_market(up_mid or 0.5, down_mid)
-        pnl = total - self._config.agent.initial_cash
-        portfolio_info = (
-            f"Cash: ${self._portfolio.cash:,.2f}  "
-            f"Total: ${total:,.2f}  "
-            f"PnL: {pnl:+,.2f}"
-        )
-        grid.add_row("Portfolio", portfolio_info)
-
-        # Last action
-        grid.add_row("Last Action", self._last_action)
-        grid.add_row("Reasoning", self._last_reasoning or "—")
-
-        # Risk
-        risk_style = "red" if self._last_risk_status != "OK" else "green"
-        grid.add_row("Risk Status", Text(self._last_risk_status, style=risk_style))
-
-        # Resolution stats
-        res_info = f"W: {self._session_wins}  L: {self._session_losses}  PnL: {self._session_resolution_pnl:+,.4f}"
-        if self._last_resolution:
-            r = self._last_resolution
-            res_info += f"  | Last: {r.slug} → {r.winner} (${r.btc_open:.0f}→${r.btc_close:.0f})"
-        grid.add_row("Resolutions", res_info)
-
-        # AI Costs + Pre-filter stats
-        ai_cost_info = (
-            f"Session: ${self._total_api_cost:.4f}  "
-            f"Last Cycle: ${self._last_cycle_api_cost:.4f}  "
-            f"Pre-filter: {self._prefilter.total_skipped}/{self._prefilter.total_checks} skipped "
-            f"({self._prefilter.skip_rate:.0%})"
-        )
-        grid.add_row("AI Costs", ai_cost_info)
-
-        # Pending orders
-        pending = self._orderbook.pending_orders
-        if pending:
-            orders_info = ", ".join(
-                f"{o.side.value} {o.size:.1f}@{o.limit_price:.4f}" for o in pending
-            )
-        else:
-            orders_info = "None"
-        grid.add_row("Pending Orders", orders_info)
-
-        return grid
-
-    async def _interruptible_sleep(self, seconds: float) -> None:
-        """Sleep that can be interrupted by shutdown signal."""
-        try:
-            end = time.monotonic() + seconds
-            while not self._shutdown and time.monotonic() < end:
-                await asyncio.sleep(min(0.5, end - time.monotonic()))
-        except asyncio.CancelledError:
-            pass
 
     async def _shutdown_components(self) -> None:
         logger.info("Shutting down components...")
