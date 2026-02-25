@@ -161,7 +161,7 @@ The decision prompt shows active observations as contextual hints with age and r
 
 The bot computes technical indicators controlled by `data/feature_config.json`. Reflection can enable, disable, or tune these indicators based on observed correlation with wins/losses.
 
-**Available indicators (23 total):**
+**Available indicators (24 total):**
 
 | Indicator | Category | What it measures |
 |-----------|----------|------------------|
@@ -186,6 +186,7 @@ The bot computes technical indicators controlled by `data/feature_config.json`. 
 | `volume_trend` | BTC Candle | Recent vs prior volume ratio for momentum confirmation |
 | `flat_market_edge` | BTC Candle | Detects flat BTC conditions where UP wins by default |
 | `chainlink_divergence` | Chainlink | Binance vs Chainlink price divergence (resolution risk) |
+| `market_trend` | BTC Candle | EMA20/EMA50 regime detection with counter-trend size reduction |
 | `session_streak` | Session | Current W/L record |
 | `confidence_calibration` | Session | Avg confidence on wins vs losses |
 

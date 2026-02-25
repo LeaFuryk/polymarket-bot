@@ -142,6 +142,71 @@ def format_indicators(results: list[IndicatorResult]) -> str:
 
 
 # ---------------------------------------------------------------------------
+# EMA helper
+# ---------------------------------------------------------------------------
+
+def _ema(values: list[float], period: int) -> float:
+    """Exponential moving average of the last `period` values."""
+    if len(values) < period:
+        return statistics.mean(values)
+    k = 2 / (period + 1)
+    ema = values[-period]  # seed with first value in window
+    for v in values[-period + 1:]:
+        ema = v * k + ema * (1 - k)
+    return ema
+
+
+# ---------------------------------------------------------------------------
+# Market trend indicator (EMA-based regime detection)
+# ---------------------------------------------------------------------------
+
+@register("market_trend")
+def _market_trend(
+    snap: MarketSnapshot, params: dict, _session: SessionContext | None,
+) -> IndicatorResult | None:
+    """EMA20/EMA50 regime detection on 5-min BTC candle closes."""
+    candles = snap.btc_candles
+    if len(candles) < 50:
+        return None
+
+    closes = [c.close for c in candles]
+    ema20 = _ema(closes, 20)
+    ema50 = _ema(closes, 50)
+    price = closes[-1]
+
+    # Score components (each -1 to +1)
+    ema_diff = ema20 - ema50
+    ema_signal = max(-1, min(1, ema_diff / 100))  # $100 = full signal
+
+    price_diff = price - ema50
+    price_signal = max(-1, min(1, price_diff / 150))
+
+    last_12 = candles[-12:]
+    up_ratio = sum(1 for c in last_12 if c.direction == "up") / len(last_12)
+    candle_signal = (up_ratio - 0.5) * 2  # 0..1 → -1..+1
+
+    score = 0.4 * ema_signal + 0.35 * price_signal + 0.25 * candle_signal
+    score = max(-1, min(1, score))
+
+    if score >= 0.5:
+        label_text = "STRONG BULLISH"
+    elif score >= 0.2:
+        label_text = "BULLISH"
+    elif score > -0.2:
+        label_text = "NEUTRAL"
+    elif score > -0.5:
+        label_text = "BEARISH"
+    else:
+        label_text = "STRONG BEARISH"
+
+    return IndicatorResult(
+        name="Market Trend",
+        value=score,
+        label=f"{score:+.2f} ({label_text}) | EMA20=${ema20:,.0f} EMA50=${ema50:,.0f}",
+    )
+
+
+# ---------------------------------------------------------------------------
 # Token midpoint indicators (use snapshot.price_history)
 # ---------------------------------------------------------------------------
 

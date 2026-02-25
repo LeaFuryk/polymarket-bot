@@ -131,6 +131,11 @@
       "name": "chainlink_divergence",
       "enabled": true,
       "params": {}
+    },
+    {
+      "name": "market_trend",
+      "enabled": true,
+      "params": {}
     }
   ]
 }

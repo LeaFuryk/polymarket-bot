@@ -18,6 +18,7 @@ from polybot.decision_engine.engine import DecisionEngine
 from polybot.exit_tracker import ExitTracker
 from polybot.indicators import (
     FeatureConfig,
+    IndicatorResult,
     SessionContext,
     compute_indicators,
     format_indicators,
@@ -520,7 +521,34 @@ class AIDecision:
                 elif btc_move < 60:
                     move_scale = 1.0
 
-            combined_scale = rr_scale * move_scale
+            # Counter-trend size scaling (trend-aware position reduction)
+            trend_result = next(
+                (r for r in indicator_results if r.name == "Market Trend"), None,
+            )
+            trend_scale = 1.0
+            if trend_result is not None:
+                trend_score = trend_result.value
+                is_counter = (
+                    (decision.token_side == TokenSide.DOWN and trend_score > 0.3)
+                    or (decision.token_side == TokenSide.UP and trend_score < -0.3)
+                )
+                if is_counter:
+                    abs_score = abs(trend_score)
+                    trend_scale = 0.50 if abs_score >= 0.7 else 0.70
+                    trend_label = (
+                        "STRONG BULLISH" if trend_score >= 0.5
+                        else "BULLISH" if trend_score >= 0.2
+                        else "NEUTRAL" if trend_score > -0.2
+                        else "BEARISH" if trend_score > -0.5
+                        else "STRONG BEARISH"
+                    )
+                    logger.info(
+                        "Counter-trend sizing: %s in %s trend (score=%.2f) → %.0f%%",
+                        decision.token_side.value, trend_label, trend_score,
+                        trend_scale * 100,
+                    )
+
+            combined_scale = rr_scale * move_scale * trend_scale
             if combined_scale < 1.0:
                 original_size = decision.size
                 scaled_size = round(decision.size * combined_scale, 1)

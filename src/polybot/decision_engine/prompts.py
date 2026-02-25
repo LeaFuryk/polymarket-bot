@@ -278,6 +278,47 @@ def format_feature_vector(
             net_move = candles[-1].close - candles[-3].open
             lines.append(f"- Last 15min net BTC move: ${net_move:+,.0f}")
 
+        # Market trend (EMA-based regime detection)
+        if len(candles) >= 50:
+            from polybot.indicators import _ema
+
+            closes_all = [c.close for c in candles]
+            ema20 = _ema(closes_all, 20)
+            ema50 = _ema(closes_all, 50)
+            price_now = closes_all[-1]
+            ema_cross = "BULLISH" if ema20 > ema50 else "BEARISH"
+            price_pos = f"${abs(price_now - ema50):,.0f} {'ABOVE' if price_now > ema50 else 'BELOW'}"
+
+            # Compute trend score (same logic as indicator)
+            ema_sig = max(-1, min(1, (ema20 - ema50) / 100))
+            price_sig = max(-1, min(1, (price_now - ema50) / 150))
+            last12 = candles[-12:]
+            up_r = sum(1 for c in last12 if c.direction == "up") / len(last12)
+            candle_sig = (up_r - 0.5) * 2
+            t_score = max(-1, min(1, 0.4 * ema_sig + 0.35 * price_sig + 0.25 * candle_sig))
+
+            if t_score >= 0.5:
+                t_label = "STRONG BULLISH"
+            elif t_score >= 0.2:
+                t_label = "BULLISH"
+            elif t_score > -0.2:
+                t_label = "NEUTRAL"
+            elif t_score > -0.5:
+                t_label = "BEARISH"
+            else:
+                t_label = "STRONG BEARISH"
+
+            lines.extend(["", "## Market Trend"])
+            lines.append(f"- EMA20: ${ema20:,.0f} vs EMA50: ${ema50:,.0f} → {ema_cross}")
+            lines.append(f"- Price: ${price_now:,.0f} ({price_pos} EMA50)")
+            lines.append(f"- Trend Score: {t_score:+.2f} ({t_label})")
+            if abs(t_score) >= 0.3:
+                weak_side = "DOWN" if t_score > 0 else "UP"
+                reduce_pct = "50%" if abs(t_score) >= 0.7 else "30%"
+                lines.append(
+                    f"- Counter-trend ({weak_side}) positions size-reduced by {reduce_pct}"
+                )
+
     # Positions (both tokens)
     lines.extend([
         "",
