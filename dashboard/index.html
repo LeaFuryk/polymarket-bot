@@ -1133,9 +1133,75 @@ body::after {
   color: var(--text-muted);
 }
 
+/* Changes from previous iteration */
+.iv-changes {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  padding: 0.85rem;
+  margin-bottom: 0.75rem;
+}
+.iv-changes-title {
+  font: 600 0.7rem/1 var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  margin-bottom: 0.6rem;
+  padding-bottom: 0.4rem;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.iv-changes-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 0.4rem;
+}
+.iv-change-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.4rem 0.55rem;
+  background: var(--bg-inset);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+}
+.iv-change-label {
+  font-size: 0.65rem;
+  color: var(--text-secondary);
+}
+.iv-change-vals {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-family: var(--display);
+}
+.iv-change-prev {
+  font-size: 0.62rem;
+  color: var(--text-muted);
+  text-decoration: line-through;
+}
+.iv-change-arrow {
+  font-size: 0.55rem;
+  color: var(--text-muted);
+}
+.iv-change-curr {
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+.iv-change-delta {
+  font-size: 0.58rem;
+  font-weight: 700;
+  padding: 0.1rem 0.3rem;
+  border-radius: 3px;
+  margin-left: 0.15rem;
+}
+.iv-change-delta.improved { background: var(--green-soft); color: var(--green); }
+.iv-change-delta.regressed { background: var(--red-soft); color: var(--red); }
+.iv-change-delta.neutral { background: rgba(139,92,246,0.12); color: var(--purple); }
+
 @media (max-width: 900px) {
   .iv-metrics { grid-template-columns: repeat(3, 1fr); }
   .iv-grid { grid-template-columns: 1fr; }
+  .iv-changes-grid { grid-template-columns: 1fr 1fr; }
 }
 
 /* ═══ ADAPTIVE ENTRY PANEL ═══ */
@@ -2075,6 +2141,11 @@ function renderIterationView(it, prev, next) {
     <div class="metric-sub">fees: ${fmt$(it.total_fees, 2)}</div></div>`;
   h += `</div>`;
 
+  // ── Changes from Previous Iteration ──
+  if (prev) {
+    h += buildChangesPanel(it, prev);
+  }
+
   // ── PnL Curve (full-width) ──
   if (ra.cumulative_pnl?.length > 1) {
     h += `<div class="iv-section iv-full" style="margin-bottom:0.75rem">
@@ -2227,6 +2298,86 @@ function renderIterationView(it, prev, next) {
   h += `</div>`; // close iv-grid
 
   return h;
+}
+
+function buildChangesPanel(it, prev) {
+  const ta = it.trade_analysis || {};
+  const pta = prev.trade_analysis || {};
+  const ra = it.resolution_analysis || {};
+  const pra = prev.resolution_analysis || {};
+  const cal = it.calibration || {};
+  const pcal = prev.calibration || {};
+  const ex = it.exit_analysis || {};
+  const pex = prev.exit_analysis || {};
+
+  // Define all metrics to compare: [label, current, previous, format, higherIsBetter]
+  const metrics = [
+    ['Win Rate', it.win_rate, prev.win_rate, v => (v*100).toFixed(0) + '%', true],
+    ['Net Result', it.net_result, prev.net_result, v => (v>=0?'+':'-') + '$' + Math.abs(v).toFixed(2), true],
+    ['Total PnL', it.total_pnl, prev.total_pnl, v => (v>=0?'+':'-') + '$' + Math.abs(v).toFixed(2), true],
+    ['Avg Win', ra.avg_win_pnl, pra.avg_win_pnl, v => '$' + Math.abs(v).toFixed(2), true],
+    ['Avg Loss', ra.avg_loss_pnl, pra.avg_loss_pnl, v => '-$' + Math.abs(v).toFixed(2), false],
+    ['Biggest Win', ra.biggest_win, pra.biggest_win, v => '+$' + v.toFixed(2), true],
+    ['Biggest Loss', ra.biggest_loss, pra.biggest_loss, v => '-$' + Math.abs(v).toFixed(2), false],
+    ['R/R Ratio', ra.avg_loss_pnl ? Math.abs(ra.avg_win_pnl/ra.avg_loss_pnl) : 0, pra.avg_loss_pnl ? Math.abs(pra.avg_win_pnl/pra.avg_loss_pnl) : 0, v => v.toFixed(2) + 'x', true],
+    ['Avg Fill', ta.avg_fill_price, pta.avg_fill_price, v => '$' + v.toFixed(3), false],
+    ['Hold Rate', ta.hold_rate, pta.hold_rate, v => (v*100).toFixed(0) + '%', true],
+    ['AI Cost', it.ai_cost, prev.ai_cost, v => '$' + v.toFixed(2), false],
+    ['Fees', it.total_fees, prev.total_fees, v => '$' + v.toFixed(2), false],
+    ['Candles', it.total_candles, prev.total_candles, v => v, null],
+    ['Trades', it.total_trades, prev.total_trades, v => v, null],
+    ['Avg BTC Move', ra.avg_btc_move, pra.avg_btc_move, v => '$' + v, null],
+    ['Shadow Acc', cal.shadow_accuracy, pcal.shadow_accuracy, v => v != null ? (v*100).toFixed(0) + '%' : '--', true],
+    ['Good Exits', ex.good_exit_rate, pex.good_exit_rate, v => (v*100).toFixed(0) + '%', true],
+    ['Exit Saved', ex.total_saved, pex.total_saved, v => '$' + v.toFixed(2), true],
+  ];
+
+  let items = '';
+  for (const [label, curr, prev, fmt, hib] of metrics) {
+    if (curr == null && prev == null) continue;
+    const c = curr ?? 0;
+    const p = prev ?? 0;
+    const delta = c - p;
+    const absDelta = Math.abs(delta);
+
+    // Determine if improved, regressed, or neutral
+    let cls = 'neutral';
+    if (hib === true && delta > 0.0001) cls = 'improved';
+    else if (hib === true && delta < -0.0001) cls = 'regressed';
+    else if (hib === false && delta < -0.0001) cls = 'improved';
+    else if (hib === false && delta > 0.0001) cls = 'regressed';
+
+    // Format delta
+    let deltaStr = '';
+    if (absDelta > 0.0001) {
+      const sign = delta >= 0 ? '+' : '-';
+      // Use matching format for deltas
+      if (label.includes('Rate') || label.includes('Win Rate') || label === 'Shadow Acc' || label === 'Good Exits') {
+        deltaStr = sign + (Math.abs(delta)*100).toFixed(1) + 'pp';
+      } else if (label === 'R/R Ratio') {
+        deltaStr = sign + absDelta.toFixed(2) + 'x';
+      } else if (label === 'Candles' || label === 'Trades') {
+        deltaStr = sign + Math.abs(Math.round(delta));
+      } else {
+        deltaStr = sign + '$' + absDelta.toFixed(2);
+      }
+    }
+
+    items += `<div class="iv-change-item">
+      <span class="iv-change-label">${label}</span>
+      <div class="iv-change-vals">
+        <span class="iv-change-prev">${fmt(p)}</span>
+        <span class="iv-change-arrow">&rarr;</span>
+        <span class="iv-change-curr">${fmt(c)}</span>
+        ${deltaStr ? `<span class="iv-change-delta ${cls}">${deltaStr}</span>` : ''}
+      </div>
+    </div>`;
+  }
+
+  return `<div class="iv-changes">
+    <div class="iv-changes-title">Changes from ${esc(prev.label)}</div>
+    <div class="iv-changes-grid">${items}</div>
+  </div>`;
 }
 
 function buildLargePnlChart(pnls) {
