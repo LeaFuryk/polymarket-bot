@@ -50,6 +50,8 @@ monitor:
   stop_loss_pct: -0.60
   take_profit_pct: 0.80
   btc_price_cache_ttl: 2.0
+  adaptive_entry_enabled: true
+  adaptive_entry_window: 5
 
 logging:
   log_dir: "logs"
