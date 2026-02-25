@@ -2093,6 +2093,17 @@ function render(d) {
         <div class="ae-status ${regime}">${regimeLabel}</div>
         <div class="ae-sub">${histLabel}</div>
       </div>`;
+      // Market trend badge (if available)
+      if (ae.market_trend != null) {
+        const ts = ae.market_trend;
+        const tl = ae.market_trend_label || (ts >= 0.5 ? 'STRONG BULL' : ts >= 0.2 ? 'BULL' : ts > -0.2 ? 'NEUTRAL' : ts > -0.5 ? 'BEAR' : 'STRONG BEAR');
+        const tc = ts >= 0.2 ? 'var(--green)' : ts <= -0.2 ? 'var(--red)' : 'var(--amber)';
+        aeInner += `<div style="margin-top:0.4rem;padding:0.3rem 0.6rem;border-radius:6px;background:color-mix(in srgb,${tc} 15%,transparent);border:1px solid color-mix(in srgb,${tc} 40%,transparent);display:inline-flex;align-items:center;gap:0.4rem;font-size:0.75rem">
+          <span style="color:var(--text-muted)">Trend</span>
+          <span style="color:${tc};font-weight:600">${tl}</span>
+          <span style="color:var(--text-muted)">(${ts >= 0 ? '+' : ''}${ts.toFixed(2)})</span>
+        </div>`;
+      }
     }
 
     cg += `<div class="panel" data-tip="Adaptive entry thresholds learned from rolling candle history. BTC threshold and max entry price adjust based on recent market regime.">

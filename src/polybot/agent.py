@@ -682,6 +682,40 @@ class TradingAgent:
 
     # --- Dashboard Data Writer ---
 
+    def _compute_market_trend(self, snapshot) -> dict:
+        """Compute market trend data for dashboard. Returns empty dict if not enough data."""
+        if snapshot is None or len(snapshot.btc_candles) < 50:
+            return {}
+        from polybot.indicators import _ema
+
+        closes = [c.close for c in snapshot.btc_candles]
+        ema20 = _ema(closes, 20)
+        ema50 = _ema(closes, 50)
+        price = closes[-1]
+
+        ema_sig = max(-1, min(1, (ema20 - ema50) / 100))
+        price_sig = max(-1, min(1, (price - ema50) / 150))
+        last12 = snapshot.btc_candles[-12:]
+        up_r = sum(1 for c in last12 if c.direction == "up") / len(last12)
+        candle_sig = (up_r - 0.5) * 2
+        score = max(-1, min(1, 0.4 * ema_sig + 0.35 * price_sig + 0.25 * candle_sig))
+
+        if score >= 0.5:
+            label = "STRONG BULL"
+        elif score >= 0.2:
+            label = "BULL"
+        elif score > -0.2:
+            label = "NEUTRAL"
+        elif score > -0.5:
+            label = "BEAR"
+        else:
+            label = "STRONG BEAR"
+
+        return {
+            "market_trend": round(score, 3),
+            "market_trend_label": label,
+        }
+
     def _write_dashboard_json(self, cycle: int, snapshot) -> None:
         """Write dashboard_data.json for the web dashboard."""
         from datetime import datetime, timezone
@@ -879,6 +913,7 @@ class TradingAgent:
                     "has_enough_history": self._adaptive_entry.has_enough_history,
                     "window_size": self._adaptive_entry._window,
                     "history_count": len(self._adaptive_entry._history),
+                    **self._compute_market_trend(snapshot),
                 },
                 "iterations": self._iteration_summaries,
             }
