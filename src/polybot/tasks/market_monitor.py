@@ -11,6 +11,7 @@ import json
 import logging
 import time
 
+from polybot.adaptive_entry import AdaptiveEntryTracker
 from polybot.config import AppConfig
 from polybot.indicators import (
     FeatureConfig,
@@ -40,6 +41,7 @@ class MarketMonitor:
         datastore: "DataStore | None" = None,
         feature_config: "FeatureConfig | None" = None,
         market_history: "MarketHistoryStore | None" = None,
+        adaptive_entry: AdaptiveEntryTracker | None = None,
     ) -> None:
         self._config = config
         self._shared = shared
@@ -50,9 +52,11 @@ class MarketMonitor:
         self._datastore = datastore
         self._feature_config = feature_config
         self._market_history = market_history
+        self._adaptive_entry = adaptive_entry
         self._interval = config.monitor.market_monitor_interval
         self._rr_threshold = config.monitor.rr_trigger_threshold
         self._cooldown = config.monitor.ai_cooldown_seconds
+        self._adaptive_enabled = config.monitor.adaptive_entry_enabled
 
     async def run(self) -> None:
         """Main loop — runs until shutdown."""
@@ -159,11 +163,23 @@ class MarketMonitor:
         # Decide whether to trigger AI (entry only — exits come from PositionMonitor's queue)
         best_rr = max(rr_up, rr_down)
         prefilter_passed = not pf_result.should_skip
+        min_ask = min(up_ask, down_ask)
 
-        should_trigger = (
-            prefilter_passed
-            and best_rr >= self._rr_threshold
-        )
+        # Adaptive trigger: uses rolling reversal rate to set BTC threshold + max entry
+        if self._adaptive_enabled and self._adaptive_entry is not None:
+            should_trigger = (
+                prefilter_passed
+                and self._adaptive_entry.should_trigger(
+                    abs_btc_move=abs(btc_move),
+                    min_ask=min_ask,
+                )
+            )
+        else:
+            # Fallback: static R/R threshold
+            should_trigger = (
+                prefilter_passed
+                and best_rr >= self._rr_threshold
+            )
 
         if should_trigger and not self._shared.ai_trigger_event.is_set():
             # Check cooldown
@@ -171,11 +187,19 @@ class MarketMonitor:
             elapsed = now - self._shared.ai_last_call_time
             if elapsed >= self._cooldown:
                 best_side = "up" if rr_up >= rr_down else "down"
-                self._shared.ai_trigger_reason = (
-                    f"R/R={best_rr:.2f} ({best_side}), "
-                    f"prefilter={'PASS' if prefilter_passed else 'SKIP'}, "
-                    f"btc_move=${btc_move:+.0f}"
-                )
+                if self._adaptive_enabled and self._adaptive_entry is not None:
+                    self._shared.ai_trigger_reason = (
+                        f"adaptive btc_thresh=${self._adaptive_entry.btc_threshold:.0f}, "
+                        f"max_entry=${self._adaptive_entry.max_entry_price:.2f}, "
+                        f"min_ask=${min_ask:.2f} ({best_side}), "
+                        f"btc_move=${btc_move:+.0f}"
+                    )
+                else:
+                    self._shared.ai_trigger_reason = (
+                        f"R/R={best_rr:.2f} ({best_side}), "
+                        f"prefilter={'PASS' if prefilter_passed else 'SKIP'}, "
+                        f"btc_move=${btc_move:+.0f}"
+                    )
                 self._shared.ai_trigger_event.set()
                 logger.info(
                     "AI triggered: %s (cooldown=%.0fs elapsed)",

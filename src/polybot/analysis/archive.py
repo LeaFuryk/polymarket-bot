@@ -112,10 +112,15 @@ def _ts_to_iso(ts: float | str) -> str:
 
 
 def _compute_summary(label: str, dest: Path) -> dict:
-    """Compute iteration summary from archived artifacts."""
+    """Compute iteration summary from archived artifacts.
+
+    Uses resolutions JSONL as the source of truth for PnL and win/loss
+    counts (never capped, unlike the in-memory dashboard list).
+    Trade records are used only for fees, AI cost, cycle counts, and
+    portfolio snapshots.
+    """
     log_dir = dest / "logs"
     records = _load_records(str(log_dir))
-    stats = _compute_stats(records)
     resolutions = _load_resolutions(log_dir)
 
     # Date range from trade records (timestamps may be epoch floats or ISO strings)
@@ -127,12 +132,29 @@ def _compute_summary(label: str, dest: Path) -> dict:
         date_start = None
         date_end = None
 
-    # Count wins/losses from resolutions
-    wins = sum(1 for r in resolutions if r.get("total_pnl", 0) > 0)
-    losses = sum(1 for r in resolutions if r.get("total_pnl", 0) < 0)
+    # PnL, wins, losses from resolutions (source of truth)
+    total_pnl = sum(r.get("total_pnl", 0) for r in resolutions)
+    wins = sum(1 for r in resolutions if r.get("total_pnl", 0) > 0.001)
+    losses = sum(1 for r in resolutions if r.get("total_pnl", 0) < -0.001)
+    total_wl = wins + losses
+    win_rate = wins / total_wl if total_wl > 0 else 0.0
 
-    # AI cost from trade records
+    # Fees and AI cost from trade records
+    total_fees = sum(r.get("fee_amount", 0) for r in records)
     ai_cost = sum(r.get("ai_cost", 0) for r in records)
+
+    # Trade counts
+    total_cycles = len(records)
+    total_trades = sum(
+        1 for r in records
+        if r.get("action") != "HOLD" and r.get("fill_size", 0) > 0
+    )
+
+    # Final portfolio state from last trade record
+    final_cash = records[-1].get("cash", 0) if records else 0
+    final_portfolio = records[-1].get("portfolio_value", 0) if records else 0
+
+    net_result = total_pnl - total_fees - ai_cost
 
     # Reflections count from observations
     observations_file = dest / "data" / "knowledge" / "observations.jsonl"
@@ -174,17 +196,17 @@ def _compute_summary(label: str, dest: Path) -> dict:
         "archived_at": datetime.now(timezone.utc).isoformat(),
         "date_range": {"start": date_start, "end": date_end},
         "total_candles": total_candles,
-        "total_trades": stats.get("total_trades", 0),
-        "total_cycles": stats.get("total_cycles", 0),
+        "total_trades": total_trades,
+        "total_cycles": total_cycles,
         "wins": wins,
         "losses": losses,
-        "win_rate": stats.get("win_rate", 0.0),
-        "total_pnl": stats.get("total_pnl", 0.0),
-        "total_fees": stats.get("total_fees", 0.0),
+        "win_rate": win_rate,
+        "total_pnl": total_pnl,
+        "total_fees": total_fees,
         "ai_cost": ai_cost,
-        "net_result": stats.get("total_pnl", 0.0) - stats.get("total_fees", 0.0) - ai_cost,
-        "final_cash": stats.get("final_cash", 0.0),
-        "final_portfolio_value": stats.get("final_portfolio_value", 0.0),
+        "net_result": net_result,
+        "final_cash": final_cash,
+        "final_portfolio_value": final_portfolio,
         "reflections_count": reflections,
         "enabled_indicators": enabled_indicators,
     }
