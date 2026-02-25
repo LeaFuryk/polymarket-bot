@@ -13,6 +13,7 @@ from rich.live import Live
 from rich.table import Table
 from rich.text import Text
 
+from polybot.adaptive_entry import AdaptiveEntryTracker
 from polybot.calibration import ConfidenceCalibrator
 from polybot.config import AppConfig
 from polybot.datastore import DataStore, MarketHistoryStore
@@ -154,6 +155,12 @@ class TradingAgent:
             data_dir=Path(config.logging.log_dir),
         )
 
+        # Adaptive entry threshold tracker
+        self._adaptive_entry = AdaptiveEntryTracker(
+            data_dir=Path(config.logging.log_dir),
+            window=config.monitor.adaptive_entry_window,
+        )
+
         # ML scorer
         self._ml_scorer = MLScorer(
             data_dir=Path(config.logging.log_dir),
@@ -162,7 +169,8 @@ class TradingAgent:
         # Knowledge / feedback learning
         self._knowledge_manager = KnowledgeManager(config.logging.knowledge_dir, config.ai)
         self._feature_config = FeatureConfig(Path(config.logging.knowledge_dir).parent / "feature_config.json")
-        self._recent_resolutions: list[ResolutionRecord] = []
+        self._recent_resolutions: list[ResolutionRecord] = []  # for reflection (capped at 20)
+        self._session_resolutions: list[ResolutionRecord] = []  # for dashboard (uncapped)
         self._recent_trades: list[TradeRecord] = []
         self._session_trades: list[TradeRecord] = []
         self._resolutions_since_reflection: int = 0
@@ -205,6 +213,9 @@ class TradingAgent:
             iteration=iteration_label,
         )
 
+        # Load archived iteration summaries for dashboard
+        self._iteration_summaries = self._load_iteration_summaries()
+
         # Shared state for concurrent tasks
         self._shared = SharedState()
 
@@ -245,6 +256,7 @@ class TradingAgent:
             datastore=self._datastore,
             feature_config=self._feature_config if self._datastore else None,
             market_history=self._market_history,
+            adaptive_entry=self._adaptive_entry,
         )
 
         self._ai_decision = AIDecision(
@@ -306,6 +318,129 @@ class TradingAgent:
             await asyncio.gather(*tasks, return_exceptions=True)
         finally:
             await self._shutdown_components()
+
+    def _load_iteration_summaries(self) -> list[dict]:
+        """Load archived iteration summaries enriched with analysis data."""
+        archive_dir = Path.cwd() / "archive"
+        summaries = []
+        if not archive_dir.exists():
+            return summaries
+        for summary_path in sorted(archive_dir.glob("*/summary.json")):
+            try:
+                data = json.loads(summary_path.read_text())
+                iter_dir = summary_path.parent
+                # Enrich with data from archived dashboard_data.json
+                dash_path = iter_dir / "logs" / "dashboard_data.json"
+                if dash_path.exists():
+                    dd = json.loads(dash_path.read_text())
+                    self._enrich_iteration_summary(data, dd, iter_dir)
+                summaries.append(data)
+            except Exception:
+                logger.debug("Could not load summary: %s", summary_path, exc_info=True)
+        if summaries:
+            logger.info("Loaded %d iteration summaries from archive", len(summaries))
+        return summaries
+
+    @staticmethod
+    def _enrich_iteration_summary(summary: dict, dd: dict, archive_dir: Path | None = None) -> None:
+        """Add calibration, exit, trade, and resolution analysis to a summary."""
+        # Calibration
+        cal = dd.get("calibration", {})
+        summary["calibration"] = {
+            "total_records": cal.get("total_records", 0),
+            "shadow_accuracy": cal.get("shadow_accuracy"),
+            "shadow_total": cal.get("shadow_total", 0),
+            "bins": cal.get("bins", []),
+        }
+
+        # Exit analysis
+        ex = dd.get("exit_analysis", {})
+        summary["exit_analysis"] = {
+            "total_exits": ex.get("total_exits", 0),
+            "good_exit_rate": ex.get("good_exit_rate", 0),
+            "good_exits": ex.get("good_exits", 0),
+            "total_saved": ex.get("total_saved", 0),
+            "total_missed": ex.get("total_missed", 0),
+        }
+
+        # ML model
+        ml = dd.get("ml_model", {})
+        summary["ml_model"] = {
+            "training_samples": ml.get("training_samples", 0),
+            "model_trained": ml.get("model_trained", False),
+        }
+
+        # Trade analysis
+        trades = dd.get("trades", [])
+        buys = [t for t in trades if t.get("action") == "BUY" and not t.get("risk_blocked")]
+        sells = [t for t in trades if t.get("action") == "SELL" and not t.get("risk_blocked")]
+        holds = [t for t in trades if t.get("action") == "HOLD"]
+        fills = [t["fill_price"] for t in buys if t.get("fill_price")]
+        confs = [t["confidence"] for t in buys if t.get("confidence")]
+
+        avg_fill = sum(fills) / len(fills) if fills else 0
+        avg_conf = sum(confs) / len(confs) if confs else 0
+
+        summary["trade_analysis"] = {
+            "total_buys": len(buys),
+            "total_sells": len(sells),
+            "total_holds": len(holds),
+            "avg_fill_price": round(avg_fill, 4),
+            "cheap_entries": len([f for f in fills if f < 0.40]),
+            "mid_entries": len([f for f in fills if 0.40 <= f < 0.60]),
+            "expensive_entries": len([f for f in fills if f >= 0.60]),
+            "avg_confidence": round(avg_conf, 4),
+            "hold_rate": round(len(holds) / len(trades), 3) if trades else 0,
+        }
+
+        # Resolution analysis
+        ress = dd.get("resolutions", [])
+        btc_moves = [abs(r.get("btc_move", 0)) for r in ress]
+        pnls = [r.get("pnl", 0) for r in ress]
+        win_pnls = [p for p in pnls if p > 0.001]
+        loss_pnls = [p for p in pnls if p < -0.001]
+
+        summary["resolution_analysis"] = {
+            "total": len(ress),
+            "avg_btc_move": round(sum(btc_moves) / len(btc_moves), 1) if btc_moves else 0,
+            "max_btc_move": round(max(btc_moves), 1) if btc_moves else 0,
+            "avg_win_pnl": round(sum(win_pnls) / len(win_pnls), 4) if win_pnls else 0,
+            "avg_loss_pnl": round(sum(loss_pnls) / len(loss_pnls), 4) if loss_pnls else 0,
+            "biggest_win": round(max(win_pnls), 4) if win_pnls else 0,
+            "biggest_loss": round(min(loss_pnls), 4) if loss_pnls else 0,
+            "cumulative_pnl": [round(sum(pnls[:i + 1]), 4) for i in range(len(pnls))],
+        }
+
+        # Per-resolution detail for table view
+        summary["resolutions_detail"] = [{
+            "slug": r.get("slug", ""),
+            "pnl": r.get("pnl", 0),
+            "btc_move": r.get("btc_move", 0),
+            "resolution": r.get("resolution", ""),
+        } for r in ress]
+
+        # Observations from knowledge base
+        if archive_dir:
+            obs_file = archive_dir / "data" / "knowledge" / "observations.jsonl"
+            if obs_file.exists():
+                observations = []
+                for line in obs_file.read_text().splitlines():
+                    if line.strip():
+                        try:
+                            rec = json.loads(line)
+                            observations.append({
+                                "category": rec.get("category", ""),
+                                "text": rec.get("text", ""),
+                                "timestamp": rec.get("timestamp", ""),
+                            })
+                        except json.JSONDecodeError:
+                            pass
+                summary["observations"] = observations
+
+            # Session history markdown
+            sh_file = archive_dir / "data" / "knowledge" / "session_history.md"
+            if sh_file.exists():
+                summary["session_history"] = sh_file.read_text()
 
     def _compute_iteration_label(self) -> str:
         """Determine current iteration label from archive count."""
@@ -449,6 +584,13 @@ class TradingAgent:
 
                 self._calibrator.record_outcome(resolution.slug, resolution.winner)
                 self._exit_tracker.record_outcome(resolution.slug, resolution.winner)
+                self._adaptive_entry.record_outcome(
+                    slug=resolution.slug,
+                    winner=resolution.winner,
+                    btc_open=resolution.btc_open,
+                    btc_close=resolution.btc_close,
+                    prefilter_history=list(self._shared.prefilter_history),
+                )
 
                 # Train ML model
                 ml_feats = self._pending_ml_features.pop(resolution.slug, None)
@@ -498,6 +640,7 @@ class TradingAgent:
                 )
 
                 self._recent_resolutions.append(resolution)
+                self._session_resolutions.append(resolution)  # uncapped — for dashboard
                 if len(self._recent_resolutions) > 20:
                     self._recent_resolutions = self._recent_resolutions[-20:]
 
@@ -622,9 +765,9 @@ class TradingAgent:
                 }
                 trades.append(trade_entry)
 
-            # Resolutions list
+            # Resolutions list (use uncapped session list, not the reflection window)
             resolutions = []
-            for r in self._recent_resolutions:
+            for r in self._session_resolutions:
                 resolutions.append({
                     "timestamp": datetime.fromtimestamp(r.timestamp, tz=timezone.utc).isoformat(),
                     "slug": r.slug,
@@ -720,9 +863,25 @@ class TradingAgent:
                     "ai_cooldown_remaining": max(0, self._config.monitor.ai_cooldown_seconds - (time.time() - self._shared.ai_last_call_time)),
                     "last_trigger_reason": self._shared.ai_trigger_reason,
                 },
+                "adaptive_entry": {
+                    "enabled": self._config.monitor.adaptive_entry_enabled,
+                    "btc_threshold": self._adaptive_entry.btc_threshold,
+                    "max_entry_price": round(self._adaptive_entry.max_entry_price, 4),
+                    "reversal_rate": round(self._adaptive_entry.rolling_reversal_rate, 4),
+                    "has_enough_history": self._adaptive_entry.has_enough_history,
+                    "window_size": self._adaptive_entry._window,
+                    "history_count": len(self._adaptive_entry._history),
+                },
+                "iterations": self._iteration_summaries,
             }
 
             dashboard_path.write_text(json.dumps(data, indent=2) + "\n")
+
+            # Write iterations sidecar for dashboard (separate file so it works
+            # even when the bot is running old code)
+            if self._iteration_summaries:
+                iter_path = dashboard_path.parent / "iterations.json"
+                iter_path.write_text(json.dumps(self._iteration_summaries, indent=2) + "\n")
         except Exception:
             logger.debug("Failed to write dashboard JSON", exc_info=True)
 
