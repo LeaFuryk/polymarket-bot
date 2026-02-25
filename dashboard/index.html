@@ -1649,30 +1649,54 @@ function selectView(v) {
 
 // ── Fetch ──
 async function fetchData() {
+  let data = null;
+
+  // Try loading live dashboard data
   try {
     const r = await fetch(DATA_URL + '?t=' + Date.now());
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    const data = await r.json();
+    if (r.ok) data = await r.json();
+  } catch (_) {}
 
-    // Load iteration sidecar once (or if bot provides iterations, use that)
-    if (!data.iterations || data.iterations.length === 0) {
-      if (!_iterationData) {
-        try {
-          const ir = await fetch(ITER_URL + '?t=' + Date.now());
-          if (ir.ok) _iterationData = await ir.json();
-        } catch (_) {}
-      }
-      if (_iterationData?.length) data.iterations = _iterationData;
+  // Always try loading iteration sidecar
+  if (!_iterationData) {
+    try {
+      const ir = await fetch(ITER_URL + '?t=' + Date.now());
+      if (ir.ok) _iterationData = await ir.json();
+    } catch (_) {}
+  }
+
+  // If no live data but iterations exist, build a minimal data shell
+  if (!data && _iterationData?.length) {
+    data = {
+      updated_at: null,
+      session: { wins: 0, losses: 0, win_rate: 0, total_pnl: 0, total_fees: 0,
+        total_ai_cost: 0, cash: 0, portfolio_value: 0, initial_cash: 0,
+        market_trading_pnl: 0, cycles_run: 0, prefilter_skip_rate: 0,
+        prefilter_skipped: 0, prefilter_checked: 0, calibration_records: 0 },
+      trades: [], resolutions: [], iterations: _iterationData,
+    };
+    lastData = data;
+    renderSidebar(data);
+    render(data);
+    updateStatus(false);
+  } else if (data) {
+    if ((!data.iterations || data.iterations.length === 0) && _iterationData?.length) {
+      data.iterations = _iterationData;
     }
-
     lastData = data;
     renderSidebar(data);
     render(data);
     updateStatus(true, data.updated_at);
-  } catch (e) {
-    console.warn('Fetch failed:', e);
-    updateStatus(false);
+  } else {
+    // Nothing available at all
+    if (_iterationData?.length) {
+      // Shouldn't reach here, but just in case
+      updateStatus(false);
+    } else {
+      updateStatus(false);
+    }
   }
+
   refreshCountdown = REFRESH_SEC;
 }
 
@@ -2078,6 +2102,24 @@ function render(d) {
   }
 
   // Iteration Analysis — now in dedicated sidebar view, removed from overview
+
+  // If no live data but iterations exist, show a prompt
+  if (!cg.trim() && d.iterations?.length > 0) {
+    cg = `<div class="panel panel-full" style="text-align:center;padding:3rem 1rem">
+      <div style="font-size:1.5rem;color:var(--text-muted);margin-bottom:0.8rem">Bot Offline</div>
+      <div style="color:var(--text-secondary);font-size:0.85rem;margin-bottom:1.2rem">
+        No live session data. Select an iteration from the sidebar to review past performance.
+      </div>
+      <div style="display:flex;gap:0.5rem;justify-content:center;flex-wrap:wrap">
+        ${d.iterations.slice().reverse().map(it => {
+          const net = it.net_result || 0;
+          return `<button class="iv-nav-btn" onclick="selectView('${esc(it.label)}')" style="padding:0.5rem 1rem;font-size:0.8rem">
+            ${esc(it.label)} <span class="${pnlCls(net)}" style="margin-left:0.3rem">${pnlSign(net)}$${Math.abs(net).toFixed(2)}</span>
+          </button>`;
+        }).join('')}
+      </div>
+    </div>`;
+  }
 
   $('contentGrid').innerHTML = cg;
 }
