@@ -2,6 +2,5 @@
 
 | Date | Summary |
 |------|---------|
-| 2026-02-24 18:25 | First batch: 88% win rate with strong early-cycle performance (0.77-0.84 entries), but one late-cycle momentum chase at 0.99 produced outsized loss that consumed profits from 6 winning trades |
-| 2026-02-24 19:15 | Win rate dipped slightly to 82% but average PnL surged +$3.32 through better trade selection, with one exceptional +$39 win and improved DOWN-side execution |
-| 2026-02-24 20:05 | extreme selectivity with 85% hold rate and only 3 trades taken, maintaining profitability at +$3.92 avg despite model producing predominantly low-confidence signals |
+| 2026-02-25 14:05 | 67% win rate across 9 trades in sustained BTC uptrend; losses came from counter-trend DOWN entries at extreme prices (0.93 and 0.42) that reversed quickly |
+| 2026-02-25 14:55 | win rate improved to 80% with +$7.89 better avg PnL by reducing hold rate and capturing a 4-trade winning streak during sustained uptrend |
