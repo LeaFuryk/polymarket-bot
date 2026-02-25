@@ -810,6 +810,395 @@ body::after {
   .live-row { grid-template-columns: 1fr; }
   .metrics-row { grid-template-columns: repeat(2, 1fr); }
 }
+
+/* ═══ ITERATION ANALYSIS ═══ */
+.iter-cards {
+  display: flex;
+  gap: 0.75rem;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-default) transparent;
+  padding-bottom: 0.3rem;
+}
+.iter-cards::-webkit-scrollbar { height: 3px; }
+.iter-cards::-webkit-scrollbar-thumb { background: var(--border-default); border-radius: 3px; }
+
+.iter-card {
+  min-width: 340px;
+  max-width: 420px;
+  flex: 1 0 340px;
+  background: var(--bg-inset);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  padding: 0.85rem;
+  transition: border-color 0.15s;
+}
+.iter-card:hover { border-color: var(--border-bright); }
+
+.iter-card-hdr {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.6rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.iter-card-label {
+  font: 700 1rem/1 var(--display);
+  color: var(--cyan);
+}
+.iter-card-date {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+}
+.iter-card-net {
+  font: 700 1.1rem/1 var(--display);
+}
+
+.iter-section {
+  margin-top: 0.5rem;
+}
+.iter-section-label {
+  font-size: 0.6rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  margin-bottom: 0.3rem;
+}
+
+.iter-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.35rem;
+}
+.iter-metric {
+  padding: 0.35rem 0.4rem;
+  background: var(--bg-surface);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+}
+.iter-metric-lbl {
+  font-size: 0.55rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+.iter-metric-val {
+  font: 600 0.85rem/1.2 var(--display);
+}
+
+.iter-delta {
+  font-size: 0.55rem;
+  margin-left: 0.2rem;
+  font-weight: 600;
+}
+.iter-delta.pos { color: var(--green); }
+.iter-delta.neg { color: var(--red); }
+
+/* Entry price distribution bar */
+.iter-entry-bar {
+  display: flex;
+  height: 8px;
+  border-radius: 4px;
+  overflow: hidden;
+  margin-top: 0.2rem;
+}
+.iter-entry-seg { transition: width 0.3s; }
+.iter-entry-seg.cheap { background: var(--green); }
+.iter-entry-seg.mid { background: var(--amber); }
+.iter-entry-seg.expensive { background: var(--red); }
+
+.iter-entry-legend {
+  display: flex;
+  gap: 0.5rem;
+  font-size: 0.55rem;
+  color: var(--text-muted);
+  margin-top: 0.2rem;
+}
+.iter-entry-legend span::before {
+  content: '';
+  display: inline-block;
+  width: 6px; height: 6px;
+  border-radius: 2px;
+  margin-right: 3px;
+  vertical-align: middle;
+}
+.iter-entry-legend .cheap::before { background: var(--green); }
+.iter-entry-legend .mid::before { background: var(--amber); }
+.iter-entry-legend .expensive::before { background: var(--red); }
+
+/* Mini PnL sparkline */
+.iter-spark {
+  width: 100%;
+  height: 32px;
+  margin-top: 0.25rem;
+}
+.iter-spark svg { width: 100%; height: 100%; }
+
+/* Calibration mini bins */
+.iter-cal-bins {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 28px;
+  margin-top: 0.2rem;
+}
+.iter-cal-bin {
+  flex: 1;
+  border-radius: 2px 2px 0 0;
+  min-width: 0;
+}
+
+/* ═══ ITERATION DETAIL VIEW ═══ */
+.iv-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.25rem;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  margin-bottom: 0.75rem;
+}
+.iv-header-left { display: flex; align-items: center; gap: 1rem; }
+.iv-label { font: 700 1.3rem/1 var(--display); color: var(--cyan); }
+.iv-date { font-size: 0.72rem; color: var(--text-muted); }
+.iv-net-badge {
+  font: 700 1.5rem/1 var(--display);
+  padding: 0.4rem 0.8rem;
+  border-radius: var(--radius-sm);
+}
+.iv-net-badge.pos { color: var(--green); background: var(--green-soft); }
+.iv-net-badge.neg { color: var(--red); background: var(--red-soft); }
+.iv-nav { display: flex; gap: 0.5rem; }
+.iv-nav-btn {
+  font: 500 0.72rem/1 var(--mono);
+  color: var(--text-secondary);
+  background: var(--bg-raised);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 0.35rem 0.6rem;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.iv-nav-btn:hover { background: var(--bg-surface-hover); border-color: var(--border-bright); color: var(--text-primary); }
+.iv-nav-btn:disabled { opacity: 0.3; cursor: default; }
+.iv-nav-btn:disabled:hover { background: var(--bg-raised); border-color: var(--border-subtle); color: var(--text-secondary); }
+
+.iv-metrics {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.iv-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+.iv-full { grid-column: 1 / -1; }
+
+.iv-section {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  padding: 0.85rem;
+}
+.iv-section-title {
+  font: 600 0.7rem/1 var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  margin-bottom: 0.6rem;
+  padding-bottom: 0.4rem;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.iv-pnl-chart { width: 100%; height: 120px; }
+.iv-pnl-chart svg { width: 100%; height: 100%; }
+
+.iv-stat-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.3rem 0;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 0.78rem;
+}
+.iv-stat-row:last-child { border-bottom: none; }
+.iv-stat-label { color: var(--text-secondary); }
+.iv-stat-val { font-weight: 600; font-family: var(--display); }
+
+.iv-obs-card {
+  padding: 0.55rem 0.65rem;
+  background: var(--bg-inset);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  margin-bottom: 0.4rem;
+}
+.iv-obs-card:last-child { margin-bottom: 0; }
+.iv-obs-top { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.25rem; }
+.iv-obs-badge {
+  font-size: 0.58rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 0.12rem 0.4rem;
+  border-radius: 3px;
+}
+.iv-obs-badge.edge { background: var(--green-soft); color: var(--green); }
+.iv-obs-badge.pattern { background: var(--blue-soft); color: var(--blue); }
+.iv-obs-badge.bias { background: var(--amber-soft); color: var(--amber); }
+.iv-obs-badge.other { background: rgba(139,92,246,0.12); color: var(--purple); }
+.iv-obs-ts { font-size: 0.6rem; color: var(--text-muted); }
+.iv-obs-text { font-size: 0.75rem; color: var(--text-secondary); line-height: 1.45; }
+
+.iv-res-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.72rem;
+}
+.iv-res-table th {
+  text-align: left;
+  font-weight: 600;
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  padding: 0.35rem 0.5rem;
+  border-bottom: 1px solid var(--border-default);
+}
+.iv-res-table td {
+  padding: 0.3rem 0.5rem;
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+}
+.iv-res-table tr.win { border-left: 2px solid var(--green); }
+.iv-res-table tr.loss { border-left: 2px solid var(--red); }
+.iv-res-table tr:hover td { background: var(--bg-surface-hover); }
+
+.iv-session-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.72rem;
+}
+.iv-session-table th {
+  text-align: left;
+  font-weight: 600;
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  padding: 0.35rem 0.5rem;
+  border-bottom: 1px solid var(--border-default);
+}
+.iv-session-table td {
+  padding: 0.35rem 0.5rem;
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  vertical-align: top;
+}
+
+.iv-cal-bins {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 50px;
+  margin-top: 0.3rem;
+}
+.iv-cal-bin {
+  flex: 1;
+  border-radius: 3px 3px 0 0;
+  min-width: 0;
+  position: relative;
+}
+.iv-cal-label {
+  position: absolute;
+  bottom: -14px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.5rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+/* Sidebar iteration items */
+.sb-item.sb-iter .sb-iter-net {
+  font: 600 0.72rem/1 var(--display);
+}
+.sb-item.sb-iter .sb-iter-wr {
+  font-size: 0.62rem;
+  color: var(--text-muted);
+}
+
+@media (max-width: 900px) {
+  .iv-metrics { grid-template-columns: repeat(3, 1fr); }
+  .iv-grid { grid-template-columns: 1fr; }
+}
+
+/* ═══ ADAPTIVE ENTRY PANEL ═══ */
+.ae-status {
+  grid-column: span 2;
+  text-align: center;
+  padding: 0.45rem;
+  border-radius: var(--radius-sm);
+  font: 700 0.8rem/1 var(--display);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.ae-status.calm { background: var(--green-soft); color: var(--green); border: 1px solid #22c55e18; }
+.ae-status.moderate { background: var(--amber-soft); color: var(--amber); border: 1px solid #f59e0b18; }
+.ae-status.choppy { background: var(--red-soft); color: var(--red); border: 1px solid #ef444418; }
+.ae-sub { font-size: 0.65rem; color: var(--text-muted); text-align: center; margin-top: 0.3rem; }
+.ae-disabled-overlay {
+  position: relative;
+  opacity: 0.4;
+  pointer-events: none;
+}
+.ae-disabled-badge {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  font: 700 1.1rem/1 var(--display);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  z-index: 2;
+}
+
+/* ═══ TIMELINE ENHANCEMENTS ═══ */
+.tl-regime-bar {
+  position: absolute;
+  top: 41px; left: 0; right: 0;
+  height: 3px;
+  border-radius: 1.5px;
+}
+.tl-regime-bar.calm { background: var(--green); opacity: 0.5; }
+.tl-regime-bar.moderate { background: var(--amber); opacity: 0.5; }
+.tl-regime-bar.choppy { background: var(--red); opacity: 0.5; }
+
+.tl-btc-label {
+  position: absolute;
+  top: 24px;
+  right: 14px;
+  font: 600 0.6rem/1 var(--mono);
+  z-index: 3;
+}
+.tl-entry-price {
+  position: absolute;
+  font: 400 0.55rem/1 var(--mono);
+  color: var(--text-secondary);
+  transform: translateX(-50%);
+  top: 52px;
+  z-index: 3;
+  white-space: nowrap;
+}
+
+/* Win/loss row tinting */
+.candle-row.row-win { border-left: 2px solid var(--green); }
+.candle-row.row-loss { border-left: 2px solid var(--red); }
 </style>
 </head>
 <body>
@@ -858,6 +1247,7 @@ body::after {
 
 <script>
 const DATA_URL = '../logs/dashboard_data.json';
+const ITER_URL = '../logs/iterations.json';
 const REFRESH_SEC = 30;
 const CANDLE_DUR = 300;
 const TIP_DELAY = 3000; // 3 seconds before tooltip shows
@@ -866,6 +1256,7 @@ let refreshCountdown = REFRESH_SEC;
 let lastData = null;
 let selectedView = 'overview';
 let _tipTimer = null;
+let _iterationData = null; // loaded once from sidecar file
 
 // Tooltip: show after 3 seconds of continuous hover
 document.addEventListener('mouseover', e => {
@@ -1162,6 +1553,26 @@ function renderSidebar(data) {
     h += '<div class="sb-divider"></div>';
   }
 
+  // Iterations section
+  if (data.iterations?.length > 0) {
+    h += '<div class="sb-section-label">Iterations</div>';
+    const iters = [...data.iterations].reverse();
+    for (const it of iters) {
+      const net = it.net_result || 0;
+      const wr = ((it.win_rate || 0) * 100).toFixed(0);
+      const ia = selectedView === it.label ? ' active' : '';
+      h += `<div class="sb-item sb-iter${ia}" onclick="selectView('${esc(it.label)}')">
+        <div class="sb-item-top">
+          <span class="sb-item-label">${esc(it.label)}</span>
+          <span class="sb-iter-wr">${wr}%</span>
+        </div>
+        <div class="sb-item-metrics">
+          <span class="sb-iter-net ${pnlCls(net)}">${pnlSign(net)}$${Math.abs(net).toFixed(2)}</span>
+        </div>
+      </div>`;
+    }
+  }
+
   $('sidebarNav').innerHTML = h;
 }
 
@@ -1176,6 +1587,18 @@ async function fetchData() {
     const r = await fetch(DATA_URL + '?t=' + Date.now());
     if (!r.ok) throw new Error('HTTP ' + r.status);
     const data = await r.json();
+
+    // Load iteration sidecar once (or if bot provides iterations, use that)
+    if (!data.iterations || data.iterations.length === 0) {
+      if (!_iterationData) {
+        try {
+          const ir = await fetch(ITER_URL + '?t=' + Date.now());
+          if (ir.ok) _iterationData = await ir.json();
+        } catch (_) {}
+      }
+      if (_iterationData?.length) data.iterations = _iterationData;
+    }
+
     lastData = data;
     renderSidebar(data);
     render(data);
@@ -1207,6 +1630,23 @@ function updateStatus(ok, at) {
 
 // ── Main render ──
 function render(d) {
+  // Iteration detail view
+  const iterMatch = selectedView.match(/^iter_(\d+)$/);
+  if (iterMatch && d.iterations?.length) {
+    const it = d.iterations.find(x => x.label === selectedView);
+    if (it) {
+      const idx = d.iterations.findIndex(x => x.label === selectedView);
+      const prev = idx > 0 ? d.iterations[idx - 1] : null;
+      const next = idx < d.iterations.length - 1 ? d.iterations[idx + 1] : null;
+      $('viewTitle').textContent = it.label;
+      $('viewSub').textContent = 'Iteration Analysis';
+      $('metricsRow').innerHTML = '';
+      $('liveRow').innerHTML = '';
+      $('contentGrid').innerHTML = renderIterationView(it, prev, next);
+      return;
+    }
+  }
+
   const isOv = selectedView === 'overview';
   const isToday = selectedView === today();
   const isSess = selectedView.startsWith('sess-');
@@ -1518,7 +1958,342 @@ function render(d) {
     cg += `</div>`; // close panel
   }
 
+  // Adaptive Entry panel (half-width, alongside Risk)
+  if (d.adaptive_entry) {
+    const ae = d.adaptive_entry;
+    const revPct = (ae.reversal_rate * 100).toFixed(0);
+    const regime = ae.btc_threshold <= 20 ? 'calm' : ae.btc_threshold >= 40 ? 'choppy' : 'moderate';
+    const regimeLabel = regime === 'calm' ? 'Calm Market' : regime === 'choppy' ? 'Choppy' : 'Moderate';
+    const threshColor = ae.btc_threshold <= 20 ? 'var(--green)' : ae.btc_threshold >= 40 ? 'var(--red)' : 'var(--amber)';
+    const entryColor = ae.max_entry_price <= 0.45 ? 'var(--green)' : ae.max_entry_price >= 0.60 ? 'var(--red)' : 'var(--amber)';
+    const revColor = ae.reversal_rate < 0.25 ? 'var(--green)' : ae.reversal_rate >= 0.45 ? 'var(--red)' : 'var(--amber)';
+    const histLabel = ae.has_enough_history
+      ? `${ae.history_count}/${ae.window_size} candles`
+      : `${Math.min(ae.history_count, ae.window_size)}/${ae.window_size} candles — using defaults`;
+
+    let aeInner = '';
+    if (!ae.enabled) {
+      aeInner = `<div class="ae-disabled-overlay">
+        <div class="ae-disabled-badge">DISABLED</div>
+        <div class="risk-grid">
+          <div class="risk-cell"><div class="risk-lbl">BTC Threshold</div><div class="risk-val">--</div></div>
+          <div class="risk-cell"><div class="risk-lbl">Max Entry</div><div class="risk-val">--</div></div>
+          <div class="risk-cell"><div class="risk-lbl">Reversal Rate</div><div class="risk-val">--</div></div>
+          <div class="risk-cell"><div class="risk-lbl">Status</div><div class="risk-val">--</div></div>
+        </div>
+      </div>`;
+    } else {
+      aeInner = `<div class="risk-grid">
+        <div class="risk-cell" data-tip="BTC must move this much from candle open before AI is triggered. Lower = more aggressive (trusts early signals).">
+          <div class="risk-lbl">BTC Threshold</div>
+          <div class="risk-val" style="color:${threshColor}">$${ae.btc_threshold.toFixed(0)}</div>
+        </div>
+        <div class="risk-cell" data-tip="Maximum ask price for entry. Caps how expensive a token position can be.">
+          <div class="risk-lbl">Max Entry</div>
+          <div class="risk-val" style="color:${entryColor}">$${ae.max_entry_price.toFixed(2)}</div>
+        </div>
+        <div class="risk-cell" data-tip="Percentage of recent candles where the $20 BTC direction reversed before close. Lower = more reliable signals.">
+          <div class="risk-lbl">Reversal Rate</div>
+          <div class="risk-val" style="color:${revColor}">${revPct}%</div>
+        </div>
+        <div class="risk-cell" data-tip="Number of candles in the rolling analysis window for adaptive thresholds.">
+          <div class="risk-lbl">Window</div>
+          <div class="risk-val">${ae.history_count}/${ae.window_size}</div>
+        </div>
+        <div class="ae-status ${regime}">${regimeLabel}</div>
+        <div class="ae-sub">${histLabel}</div>
+      </div>`;
+    }
+
+    cg += `<div class="panel" data-tip="Adaptive entry thresholds learned from rolling candle history. BTC threshold and max entry price adjust based on recent market regime.">
+      <div class="panel-header">Adaptive Entry</div>
+      ${aeInner}
+    </div>`;
+  }
+
+  // Iteration Analysis panel (full-width)
+  if (d.iterations?.length > 0) {
+    cg += `<div class="panel panel-full" data-tip="Deep per-iteration analysis. Each card shows results, calibration, entry quality, and learnings.">
+      <div class="panel-header">Iteration Analysis</div>
+      <div class="iter-cards">${buildIterCards(d.iterations)}</div>
+    </div>`;
+  }
+
   $('contentGrid').innerHTML = cg;
+}
+
+// ═══ ITERATION DETAIL VIEW ═══
+function renderIterationView(it, prev, next) {
+  const net = it.net_result || 0;
+  const wr = (it.win_rate || 0) * 100;
+  const ta = it.trade_analysis || {};
+  const ra = it.resolution_analysis || {};
+  const cal = it.calibration || {};
+  const ex = it.exit_analysis || {};
+
+  // Date range / duration
+  const startDt = it.date_range?.start ? new Date(it.date_range.start) : null;
+  const endDt = it.date_range?.end ? new Date(it.date_range.end) : null;
+  const startStr = startDt ? startDt.toLocaleDateString(undefined, {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}) : '--';
+  const endStr = endDt ? endDt.toLocaleDateString(undefined, {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}) : '';
+  const dur = startDt && endDt ? ((endDt - startDt) / 3600000).toFixed(1) + 'h' : '--';
+
+  const fmtD = d => '$' + Math.abs(d).toFixed(2);
+  const fmtP = d => (d * 100).toFixed(1) + '%';
+
+  let h = '';
+
+  // ── Header ──
+  h += `<div class="iv-header">
+    <div class="iv-header-left">
+      <div>
+        <div class="iv-label">${esc(it.label)}</div>
+        <div class="iv-date">${startStr}${endStr ? ' – ' + endStr : ''} &nbsp; (${dur})</div>
+      </div>
+      <div class="iv-net-badge ${net >= 0 ? 'pos' : 'neg'}">${pnlSign(net)}$${Math.abs(net).toFixed(2)}</div>
+    </div>
+    <div class="iv-nav">
+      <button class="iv-nav-btn" ${prev ? `onclick="selectView('${esc(prev.label)}')"` : 'disabled'}>&larr; Previous</button>
+      <button class="iv-nav-btn" onclick="selectView('overview')">Overview</button>
+      <button class="iv-nav-btn" ${next ? `onclick="selectView('${esc(next.label)}')"` : 'disabled'}>Next &rarr;</button>
+    </div>
+  </div>`;
+
+  // ── Key Metrics Row ──
+  h += `<div class="iv-metrics">`;
+  h += `<div class="metric"><div class="metric-label">Win Rate</div>
+    <div class="metric-value ${wr >= 50 ? 'v-green' : 'v-red'}">${wr.toFixed(0)}%</div>
+    <div class="metric-sub">${it.wins||0}W / ${it.losses||0}L${iterDelta(it.win_rate, prev?.win_rate, fmtP)}</div></div>`;
+  h += `<div class="metric"><div class="metric-label">Total PnL</div>
+    <div class="metric-value ${signCls(it.total_pnl)}">${fmt$(it.total_pnl, 2)}</div>
+    <div class="metric-sub">${ra.total||0} resolutions${iterDelta(it.total_pnl, prev?.total_pnl, fmtD)}</div></div>`;
+  h += `<div class="metric"><div class="metric-label">Net Result</div>
+    <div class="metric-value ${signCls(net)}">${pnlSign(net)}$${Math.abs(net).toFixed(2)}</div>
+    <div class="metric-sub">after fees + AI${iterDelta(net, prev?.net_result, fmtD)}</div></div>`;
+  h += `<div class="metric"><div class="metric-label">Trades</div>
+    <div class="metric-value">${it.total_trades||0}</div>
+    <div class="metric-sub">hold rate: ${(ta.hold_rate*100).toFixed(0)}%</div></div>`;
+  h += `<div class="metric"><div class="metric-label">AI Cost</div>
+    <div class="metric-value v-amber">${fmt$(it.ai_cost, 2)}</div>
+    <div class="metric-sub">${iterDelta(it.ai_cost, prev?.ai_cost, fmtD, true) || 'spent'}</div></div>`;
+  h += `<div class="metric"><div class="metric-label">Candles</div>
+    <div class="metric-value">${it.total_candles||0}</div>
+    <div class="metric-sub">fees: ${fmt$(it.total_fees, 2)}</div></div>`;
+  h += `</div>`;
+
+  // ── PnL Curve (full-width) ──
+  if (ra.cumulative_pnl?.length > 1) {
+    h += `<div class="iv-section iv-full" style="margin-bottom:0.75rem">
+      <div class="iv-section-title">Cumulative PnL Curve</div>
+      <div class="iv-pnl-chart">${buildLargePnlChart(ra.cumulative_pnl)}</div>
+    </div>`;
+  }
+
+  h += `<div class="iv-grid">`;
+
+  // ── Trade Quality Panel ──
+  h += `<div class="iv-section">
+    <div class="iv-section-title">Trade Quality</div>`;
+  const totalFills = (ta.cheap_entries||0) + (ta.mid_entries||0) + (ta.expensive_entries||0);
+  if (totalFills > 0) {
+    const cheapPct = (ta.cheap_entries / totalFills * 100);
+    const midPct = (ta.mid_entries / totalFills * 100);
+    const expPct = (ta.expensive_entries / totalFills * 100);
+    h += `<div style="margin-bottom:0.5rem">
+      <div style="font-size:0.6rem;color:var(--text-muted);margin-bottom:0.15rem">Entry Price Distribution</div>
+      <div class="iter-entry-bar">
+        <div class="iter-entry-seg cheap" style="width:${cheapPct}%"></div>
+        <div class="iter-entry-seg mid" style="width:${midPct}%"></div>
+        <div class="iter-entry-seg expensive" style="width:${expPct}%"></div>
+      </div>
+      <div class="iter-entry-legend">
+        <span class="cheap">&lt;$0.40 (${ta.cheap_entries})</span>
+        <span class="mid">$0.40–0.60 (${ta.mid_entries})</span>
+        <span class="expensive">&gt;$0.60 (${ta.expensive_entries})</span>
+      </div>
+    </div>`;
+  }
+  h += `<div class="iv-stat-row"><span class="iv-stat-label">Avg Fill Price</span><span class="iv-stat-val ${ta.avg_fill_price < 0.50 ? 'v-green' : ta.avg_fill_price > 0.65 ? 'v-red' : 'v-amber'}">${fmt$(ta.avg_fill_price, 3)}</span></div>`;
+  h += `<div class="iv-stat-row"><span class="iv-stat-label">Avg Confidence</span><span class="iv-stat-val">${(ta.avg_confidence*100).toFixed(0)}%</span></div>`;
+  h += `<div class="iv-stat-row"><span class="iv-stat-label">Hold Rate</span><span class="iv-stat-val">${(ta.hold_rate*100).toFixed(0)}%</span></div>`;
+  h += `<div class="iv-stat-row"><span class="iv-stat-label">Total Buys</span><span class="iv-stat-val">${ta.total_buys||0}</span></div>`;
+  h += `<div class="iv-stat-row"><span class="iv-stat-label">Total Sells</span><span class="iv-stat-val">${ta.total_sells||0}</span></div>`;
+  h += `<div class="iv-stat-row"><span class="iv-stat-label">Total Holds</span><span class="iv-stat-val">${ta.total_holds||0}</span></div>`;
+  h += `</div>`;
+
+  // ── Resolution Stats Panel ──
+  h += `<div class="iv-section">
+    <div class="iv-section-title">Resolution Stats</div>`;
+  h += `<div class="iv-stat-row"><span class="iv-stat-label">Avg BTC Move</span><span class="iv-stat-val">$${ra.avg_btc_move||0}</span></div>`;
+  h += `<div class="iv-stat-row"><span class="iv-stat-label">Max BTC Move</span><span class="iv-stat-val">$${ra.max_btc_move||0}</span></div>`;
+  h += `<div class="iv-stat-row"><span class="iv-stat-label">Avg Win PnL</span><span class="iv-stat-val v-green">${fmt$(ra.avg_win_pnl, 3)}</span></div>`;
+  h += `<div class="iv-stat-row"><span class="iv-stat-label">Avg Loss PnL</span><span class="iv-stat-val v-red">${fmt$(ra.avg_loss_pnl, 3)}</span></div>`;
+  h += `<div class="iv-stat-row"><span class="iv-stat-label">Biggest Win</span><span class="iv-stat-val v-green">${fmt$(ra.biggest_win, 3)}</span></div>`;
+  h += `<div class="iv-stat-row"><span class="iv-stat-label">Biggest Loss</span><span class="iv-stat-val v-red">${fmt$(ra.biggest_loss, 3)}</span></div>`;
+  const rr = ra.avg_loss_pnl ? Math.abs(ra.avg_win_pnl / ra.avg_loss_pnl) : 0;
+  h += `<div class="iv-stat-row"><span class="iv-stat-label">Risk/Reward</span><span class="iv-stat-val ${rr >= 1 ? 'v-green' : 'v-red'}">${rr.toFixed(2)}</span></div>`;
+  h += `</div>`;
+
+  // ── Calibration & Intelligence Panel ──
+  const hasCal = cal.bins?.length > 0;
+  const hasExit = ex.total_exits > 0;
+  if (hasCal || hasExit) {
+    h += `<div class="iv-section">
+      <div class="iv-section-title">Calibration & Intelligence</div>`;
+    if (cal.shadow_accuracy != null) {
+      h += `<div class="iv-stat-row"><span class="iv-stat-label">Shadow Accuracy</span><span class="iv-stat-val ${cal.shadow_accuracy >= 0.7 ? 'v-green' : 'v-amber'}">${(cal.shadow_accuracy*100).toFixed(0)}%${iterDelta(cal.shadow_accuracy, prev?.calibration?.shadow_accuracy, fmtP)}</span></div>`;
+    }
+    if (hasExit) {
+      h += `<div class="iv-stat-row"><span class="iv-stat-label">Good Exit Rate</span><span class="iv-stat-val ${ex.good_exit_rate >= 0.5 ? 'v-green' : 'v-red'}">${(ex.good_exit_rate*100).toFixed(0)}%</span></div>`;
+      h += `<div class="iv-stat-row"><span class="iv-stat-label">Exit Value Saved</span><span class="iv-stat-val v-green">${fmt$(ex.total_saved, 2)}</span></div>`;
+      h += `<div class="iv-stat-row"><span class="iv-stat-label">Exit Value Missed</span><span class="iv-stat-val v-red">${fmt$(ex.total_missed, 2)}</span></div>`;
+    }
+    if (hasCal) {
+      const bins = cal.bins.filter(b => b.wins + b.losses > 0);
+      if (bins.length > 0) {
+        h += `<div style="margin-top:0.5rem;padding-top:0.4rem;border-top:1px solid var(--border-subtle)">
+          <div style="font-size:0.6rem;color:var(--text-muted);margin-bottom:0.3rem">Confidence Calibration</div>
+          <div class="iv-cal-bins">`;
+        for (const b of bins) {
+          const bwr = b.win_rate;
+          const barH = Math.max(5, bwr * 46);
+          const col = bwr >= 0.55 ? 'var(--green)' : bwr >= 0.45 ? 'var(--amber)' : 'var(--red)';
+          const op = b.reliable ? '1' : '0.45';
+          h += `<div class="iv-cal-bin" style="height:${barH}px;background:${col};opacity:${op}" title="${b.range}: ${(bwr*100).toFixed(0)}% (${b.wins}W/${b.losses}L)"></div>`;
+        }
+        h += `</div></div>`;
+      }
+    }
+    h += `</div>`;
+  }
+
+  // ── Cash & Portfolio Panel ──
+  if (it.final_cash != null) {
+    h += `<div class="iv-section">
+      <div class="iv-section-title">Account State</div>
+      <div class="iv-stat-row"><span class="iv-stat-label">Final Cash</span><span class="iv-stat-val" style="color:var(--cyan)">${fmt$(it.final_cash, 2)}</span></div>
+      <div class="iv-stat-row"><span class="iv-stat-label">Final Portfolio</span><span class="iv-stat-val" style="color:var(--blue)">${fmt$(it.final_portfolio_value, 2)}</span></div>
+      <div class="iv-stat-row"><span class="iv-stat-label">Trading Fees</span><span class="iv-stat-val v-red">${fmt$(it.total_fees, 2)}</span></div>
+      <div class="iv-stat-row"><span class="iv-stat-label">AI Cost</span><span class="iv-stat-val v-amber">${fmt$(it.ai_cost, 2)}</span></div>
+    </div>`;
+  }
+
+  // ── AI Observations (full-width) ──
+  const obs = it.observations || [];
+  if (obs.length > 0) {
+    h += `<div class="iv-section iv-full">
+      <div class="iv-section-title">AI Observations (${obs.length})</div>`;
+    for (const o of obs) {
+      const cat = (o.category || 'other').toLowerCase();
+      const badgeCls = ['edge','pattern','bias'].includes(cat) ? cat : 'other';
+      const ts = o.timestamp ? new Date(o.timestamp).toLocaleString(undefined, {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}) : '';
+      h += `<div class="iv-obs-card">
+        <div class="iv-obs-top">
+          <span class="iv-obs-badge ${badgeCls}">${esc(o.category || 'note')}</span>
+          ${ts ? `<span class="iv-obs-ts">${ts}</span>` : ''}
+        </div>
+        <div class="iv-obs-text">${esc(o.text || '')}</div>
+      </div>`;
+    }
+    h += `</div>`;
+  }
+
+  // ── Session History (full-width) ──
+  const sh = it.session_history || '';
+  if (sh.trim()) {
+    h += `<div class="iv-section iv-full">
+      <div class="iv-section-title">Session History</div>
+      ${renderSessionHistoryMd(sh)}
+    </div>`;
+  }
+
+  // ── Resolutions Table (full-width) ──
+  const rd = it.resolutions_detail || [];
+  if (rd.length > 0) {
+    h += `<div class="iv-section iv-full">
+      <div class="iv-section-title">Resolution Outcomes (${rd.length})</div>
+      <div style="max-height:300px;overflow-y:auto">
+      <table class="iv-res-table">
+        <thead><tr><th>Candle</th><th>Resolution</th><th>BTC Move</th><th>PnL</th></tr></thead>
+        <tbody>`;
+    for (const r of rd) {
+      const slug = r.slug.length > 30 ? '...' + r.slug.slice(-27) : r.slug;
+      const pnl = r.pnl || 0;
+      const cls = pnl > 0.001 ? 'win' : pnl < -0.001 ? 'loss' : '';
+      h += `<tr class="${cls}">
+        <td title="${esc(r.slug)}">${esc(slug)}</td>
+        <td>${esc(r.resolution || '--')}</td>
+        <td>${r.btc_move >= 0 ? '+' : ''}$${Math.abs(r.btc_move).toFixed(1)}</td>
+        <td class="${signCls(pnl)}" style="font-weight:600">${pnlSign(pnl)}$${Math.abs(pnl).toFixed(4)}</td>
+      </tr>`;
+    }
+    h += `</tbody></table></div></div>`;
+  }
+
+  h += `</div>`; // close iv-grid
+
+  return h;
+}
+
+function buildLargePnlChart(pnls) {
+  if (!pnls || pnls.length < 2) return '';
+  const W = 800, H = 120, pad = { t: 10, r: 50, b: 18, l: 10 };
+  const pW = W - pad.l - pad.r, pH = H - pad.t - pad.b;
+  const mn = Math.min(0, ...pnls), mx = Math.max(0, ...pnls);
+  const rng = mx - mn || 1;
+  const x = i => pad.l + (i / (pnls.length - 1)) * pW;
+  const y = v => pad.t + pH - ((v - mn) / rng) * pH;
+  const pts = pnls.map((v, i) => x(i).toFixed(1) + ',' + y(v).toFixed(1)).join(' ');
+  const zy = y(0);
+  const lastV = pnls[pnls.length - 1];
+  const col = lastV >= 0 ? 'var(--green)' : 'var(--red)';
+  const aPts = pts + ` ${x(pnls.length-1).toFixed(1)},${zy.toFixed(1)} ${x(0).toFixed(1)},${zy.toFixed(1)}`;
+
+  let lbls = `<text class="chart-lbl" x="${W-pad.r+5}" y="${pad.t+4}" text-anchor="start" fill="var(--text-muted)" font-size="10">${mx.toFixed(2)}</text>`;
+  lbls += `<text class="chart-lbl" x="${W-pad.r+5}" y="${H-pad.b}" text-anchor="start" fill="var(--text-muted)" font-size="10">${mn.toFixed(2)}</text>`;
+  if (mn < 0 && mx > 0) lbls += `<text class="chart-lbl" x="${W-pad.r+5}" y="${zy+4}" text-anchor="start" fill="var(--text-muted)" font-size="10">0</text>`;
+  lbls += `<text x="${x(pnls.length-1).toFixed(1)}" y="${(y(lastV) - 6).toFixed(1)}" text-anchor="end" fill="${col}" font-size="11" font-weight="600">${lastV >= 0 ? '+' : ''}${lastV.toFixed(2)}</text>`;
+
+  const circles = pnls.map((v,i) => {
+    if (i === 0 || i === pnls.length - 1 || (pnls.length > 10 && i % Math.ceil(pnls.length / 12) !== 0)) {
+      if (i !== 0 && i !== pnls.length - 1) return '';
+    }
+    return `<circle cx="${x(i).toFixed(1)}" cy="${y(v).toFixed(1)}" r="3" fill="${col}" stroke="var(--bg-surface)" stroke-width="1.5"/>`;
+  }).join('');
+
+  return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+    <line x1="${pad.l}" y1="${zy}" x2="${W-pad.r}" y2="${zy}" stroke="var(--text-muted)" stroke-width="0.5" stroke-dasharray="3 3"/>
+    <polygon points="${aPts}" fill="${col}" opacity="0.12"/>
+    <polyline points="${pts}" fill="none" stroke="${col}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    ${circles}${lbls}
+  </svg>`;
+}
+
+function renderSessionHistoryMd(md) {
+  // Parse markdown table into HTML table
+  const lines = md.trim().split('\n').filter(l => l.trim());
+  if (lines.length < 3) return `<div style="font-size:0.75rem;color:var(--text-secondary);white-space:pre-wrap">${esc(md)}</div>`;
+
+  // Check if it's a markdown table (has | separators)
+  if (!lines[0].includes('|')) {
+    return `<div style="font-size:0.75rem;color:var(--text-secondary);white-space:pre-wrap">${esc(md)}</div>`;
+  }
+
+  const parseRow = line => line.split('|').map(c => c.trim()).filter(c => c);
+  const headers = parseRow(lines[0]);
+  // Skip separator line (line[1])
+  const rows = lines.slice(2).map(parseRow);
+
+  let h = `<table class="iv-session-table"><thead><tr>`;
+  for (const hdr of headers) h += `<th>${esc(hdr)}</th>`;
+  h += `</tr></thead><tbody>`;
+  for (const row of rows) {
+    h += `<tr>`;
+    for (const cell of row) h += `<td>${esc(cell)}</td>`;
+    h += `</tr>`;
+  }
+  h += `</tbody></table>`;
+  return h;
 }
 
 // ═══ CANDLE TIMELINES ═══
@@ -1582,7 +2357,30 @@ function buildCandleTimelines(trades, resolutions, currentMarket) {
     let endCls = 'pending';
     if (res) endCls = res.winner;
 
-    // Dots
+    // Row tinting class (win/loss left border)
+    let rowTint = '';
+    if (res && res.pnl > 0.001) rowTint = ' row-win';
+    else if (res && res.pnl < -0.001) rowTint = ' row-loss';
+
+    // BTC move label at endpoint
+    let btcLabel = '';
+    if (res && res.btc_move != null) {
+      const mv = res.btc_move;
+      const mvSign = mv >= 0 ? '+' : '';
+      const mvCol = mv >= 0 ? 'var(--green)' : 'var(--red)';
+      btcLabel = `<span class="tl-btc-label" style="color:${mvCol}">${mvSign}$${Math.abs(mv).toFixed(0)}</span>`;
+    }
+
+    // Regime color bar
+    let regimeBar = '';
+    if (lastData?.adaptive_entry) {
+      const thresh = lastData.adaptive_entry.btc_threshold;
+      const rClass = thresh <= 20 ? 'calm' : thresh >= 40 ? 'choppy' : 'moderate';
+      regimeBar = `<div class="tl-regime-bar ${rClass}"></div>`;
+    }
+
+    // Dots + entry price labels
+    let entryLabels = '';
     const dots = data.trades.map((t, i) => {
       const tr = t.time_remaining_at_trade || 0;
       const pct = Math.min(100, Math.max(0, ((CANDLE_DUR - tr) / CANDLE_DUR) * 100));
@@ -1592,6 +2390,10 @@ function buildCandleTimelines(trades, resolutions, currentMarket) {
       else if (t.action === 'SELL') { cls = 'sell'; lbl = 'S'; }
       else { cls = 'hold'; lbl = 'H'; }
       const did = `dot-${ci}-${i}`;
+      // Entry price label below BUY dots
+      if (t.action === 'BUY' && !t.risk_blocked && t.fill_price != null) {
+        entryLabels += `<span class="tl-entry-price" style="left:${pct.toFixed(1)}%">$${t.fill_price.toFixed(2)}</span>`;
+      }
       return `<div class="tl-dot ${cls}" style="left:${pct.toFixed(1)}%" data-did="${did}" onclick="toggleDetail(this,event)">${lbl}</div>`;
     }).join('');
 
@@ -1620,7 +2422,7 @@ function buildCandleTimelines(trades, resolutions, currentMarket) {
       </div>`;
     }).join('');
 
-    return `<div class="candle-row${collapsed ? ' collapsed' : ''}">
+    return `<div class="candle-row${collapsed ? ' collapsed' : ''}${rowTint}">
       <div class="candle-hdr" onclick="toggleCandle(this.parentElement,event)">
         <span class="candle-chevron">&#9660;</span>
         <span class="candle-slug"><a href="${esc(polyUrl)}" target="_blank" onclick="event.stopPropagation()">${esc(truncSlug(slug, 32))}</a></span>
@@ -1631,10 +2433,13 @@ function buildCandleTimelines(trades, resolutions, currentMarket) {
       <div class="candle-body">
         <div class="tl-wrap">
           <div class="tl-line"></div>
+          ${regimeBar}
           <div class="tl-end start"></div>
           <div class="tl-end finish ${endCls}"></div>
+          ${btcLabel}
           <div class="tl-labels"><span>0:00</span><span>5:00</span></div>
           ${dots}
+          ${entryLabels}
         </div>
         ${details}
       </div>
@@ -1701,6 +2506,228 @@ function buildChart(resolutions) {
     <polygon class="chart-area" points="${aPts}" fill="${col}"/>
     <polyline class="chart-line" points="${pts}" stroke="${col}"/>
     ${circles}${lbls}</svg>`;
+}
+
+// ═══ ITERATION ANALYSIS CARDS ═══
+function iterDelta(val, prevVal, fmt, invert) {
+  if (prevVal == null) return '';
+  const d = val - prevVal;
+  let cls = d >= 0 ? 'pos' : 'neg';
+  if (invert) cls = d >= 0 ? 'neg' : 'pos';
+  const sign = d >= 0 ? '+' : '';
+  return `<span class="iter-delta ${cls}">${sign}${fmt(d)}</span>`;
+}
+
+function buildMiniSparkline(pnls) {
+  if (!pnls || pnls.length < 2) return '';
+  const W = 200, H = 32, pad = 2;
+  const mn = Math.min(0, ...pnls), mx = Math.max(0, ...pnls);
+  const rng = mx - mn || 1;
+  const x = i => pad + (i / (pnls.length - 1)) * (W - 2*pad);
+  const y = v => pad + (H - 2*pad) - ((v - mn) / rng) * (H - 2*pad);
+  const pts = pnls.map((v, i) => x(i).toFixed(1) + ',' + y(v).toFixed(1)).join(' ');
+  const zy = y(0);
+  const lastV = pnls[pnls.length - 1];
+  const col = lastV >= 0 ? 'var(--green)' : 'var(--red)';
+  const aPts = pts + ` ${x(pnls.length-1).toFixed(1)},${zy.toFixed(1)} ${x(0).toFixed(1)},${zy.toFixed(1)}`;
+  return `<div class="iter-spark"><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+    <line x1="${pad}" y1="${zy}" x2="${W-pad}" y2="${zy}" stroke="var(--text-muted)" stroke-width="0.5" stroke-dasharray="2 2"/>
+    <polygon points="${aPts}" fill="${col}" opacity="0.15"/>
+    <polyline points="${pts}" fill="none" stroke="${col}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </svg></div>`;
+}
+
+function buildCalBins(bins) {
+  if (!bins || !bins.length) return '<div style="font-size:0.6rem;color:var(--text-muted)">No data</div>';
+  let h = '<div class="iter-cal-bins">';
+  for (const b of bins) {
+    const wr = b.win_rate;
+    const barH = Math.max(3, wr * 26);
+    const col = wr >= 0.55 ? 'var(--green)' : wr >= 0.45 ? 'var(--amber)' : 'var(--red)';
+    const op = b.reliable ? '1' : '0.5';
+    h += `<div class="iter-cal-bin" style="height:${barH}px;background:${col};opacity:${op}" title="${b.range}: ${(wr*100).toFixed(0)}% (${b.wins}W/${b.losses}L)"></div>`;
+  }
+  h += '</div>';
+  return h;
+}
+
+function buildIterCards(iterations) {
+  return iterations.map((it, i) => {
+    const prev = i > 0 ? iterations[i - 1] : null;
+    const wr = (it.win_rate * 100);
+    const net = it.net_result || 0;
+    const ta = it.trade_analysis || {};
+    const ra = it.resolution_analysis || {};
+    const cal = it.calibration || {};
+    const ex = it.exit_analysis || {};
+
+    // Date range
+    const start = it.date_range?.start ? new Date(it.date_range.start).toLocaleDateString(undefined, {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}) : '--';
+    const end = it.date_range?.end ? new Date(it.date_range.end).toLocaleDateString(undefined, {hour:'2-digit',minute:'2-digit'}) : '';
+    const dur = it.date_range?.start && it.date_range?.end
+      ? ((new Date(it.date_range.end) - new Date(it.date_range.start)) / 3600000).toFixed(1) + 'h'
+      : '--';
+
+    // Entry price distribution
+    const totalFills = (ta.cheap_entries||0) + (ta.mid_entries||0) + (ta.expensive_entries||0);
+    const cheapPct = totalFills > 0 ? (ta.cheap_entries / totalFills * 100) : 0;
+    const midPct = totalFills > 0 ? (ta.mid_entries / totalFills * 100) : 0;
+    const expPct = totalFills > 0 ? (ta.expensive_entries / totalFills * 100) : 0;
+
+    const fmtD = d => '$' + Math.abs(d).toFixed(2);
+    const fmtP = d => (d * 100).toFixed(1) + '%';
+
+    let card = `<div class="iter-card">`;
+
+    // Header: label + net result
+    card += `<div class="iter-card-hdr">
+      <div>
+        <div class="iter-card-label">${esc(it.label)}</div>
+        <div class="iter-card-date">${start}${end ? ' – ' + end : ''} (${dur})</div>
+      </div>
+      <div class="iter-card-net ${net >= 0 ? 'v-green' : 'v-red'}">${net >= 0 ? '+' : ''}$${net.toFixed(2)}
+        <div style="font-size:0.55rem;color:var(--text-muted);font-weight:400;text-align:right">net result</div>
+      </div>
+    </div>`;
+
+    // Row 1: Core performance metrics
+    card += `<div class="iter-section">
+      <div class="iter-section-label">Performance</div>
+      <div class="iter-metrics">
+        <div class="iter-metric">
+          <div class="iter-metric-lbl">Win Rate</div>
+          <div class="iter-metric-val ${wr >= 50 ? 'v-green' : 'v-red'}">${wr.toFixed(0)}%${iterDelta(it.win_rate, prev?.win_rate, fmtP)}</div>
+        </div>
+        <div class="iter-metric">
+          <div class="iter-metric-lbl">PnL</div>
+          <div class="iter-metric-val ${it.total_pnl >= 0 ? 'v-green' : 'v-red'}">${fmt$(it.total_pnl, 2)}${iterDelta(it.total_pnl, prev?.total_pnl, fmtD)}</div>
+        </div>
+        <div class="iter-metric">
+          <div class="iter-metric-lbl">W / L</div>
+          <div class="iter-metric-val">${it.wins || 0}<span style="color:var(--green)">W</span> / ${it.losses || 0}<span style="color:var(--red)">L</span></div>
+        </div>
+        <div class="iter-metric">
+          <div class="iter-metric-lbl">AI Cost</div>
+          <div class="iter-metric-val v-amber">${fmt$(it.ai_cost, 2)}${iterDelta(it.ai_cost, prev?.ai_cost, fmtD, true)}</div>
+        </div>
+        <div class="iter-metric">
+          <div class="iter-metric-lbl">Fees</div>
+          <div class="iter-metric-val">${fmt$(it.total_fees, 2)}</div>
+        </div>
+        <div class="iter-metric">
+          <div class="iter-metric-lbl">Candles</div>
+          <div class="iter-metric-val">${it.total_candles || 0}</div>
+        </div>
+      </div>
+      ${it.final_cash != null ? `<div style="margin-top:0.3rem;display:flex;gap:0.6rem;font-size:0.7rem">
+        <span style="color:var(--text-muted)">Final cash:</span> <span style="color:var(--cyan)">${fmt$(it.final_cash, 2)}</span>
+        <span style="color:var(--text-muted)">Portfolio:</span> <span style="color:var(--blue)">${fmt$(it.final_portfolio_value, 2)}</span>
+      </div>` : ''}
+    </div>`;
+
+    // PnL sparkline
+    if (ra.cumulative_pnl?.length > 1) {
+      card += `<div class="iter-section">
+        <div class="iter-section-label">PnL Curve</div>
+        ${buildMiniSparkline(ra.cumulative_pnl)}
+      </div>`;
+    }
+
+    // Row 2: Trade quality
+    if (ta.total_buys > 0) {
+      card += `<div class="iter-section">
+        <div class="iter-section-label">Trade Quality</div>
+        <div class="iter-metrics">
+          <div class="iter-metric">
+            <div class="iter-metric-lbl">Avg Entry</div>
+            <div class="iter-metric-val ${ta.avg_fill_price < 0.50 ? 'v-green' : ta.avg_fill_price > 0.65 ? 'v-red' : 'v-amber'}">${fmt$(ta.avg_fill_price, 3)}${iterDelta(ta.avg_fill_price, prev?.trade_analysis?.avg_fill_price, fmtD, true)}</div>
+          </div>
+          <div class="iter-metric">
+            <div class="iter-metric-lbl">Avg Conf</div>
+            <div class="iter-metric-val">${(ta.avg_confidence * 100).toFixed(0)}%</div>
+          </div>
+          <div class="iter-metric">
+            <div class="iter-metric-lbl">Hold Rate</div>
+            <div class="iter-metric-val">${(ta.hold_rate * 100).toFixed(0)}%</div>
+          </div>
+        </div>`;
+      // Entry price distribution bar
+      if (totalFills > 0) {
+        card += `<div style="margin-top:0.35rem">
+          <div style="font-size:0.55rem;color:var(--text-muted);margin-bottom:0.15rem">Entry Price Distribution</div>
+          <div class="iter-entry-bar">
+            <div class="iter-entry-seg cheap" style="width:${cheapPct}%"></div>
+            <div class="iter-entry-seg mid" style="width:${midPct}%"></div>
+            <div class="iter-entry-seg expensive" style="width:${expPct}%"></div>
+          </div>
+          <div class="iter-entry-legend">
+            <span class="cheap">&lt;$0.40 (${ta.cheap_entries})</span>
+            <span class="mid">$0.40–0.60 (${ta.mid_entries})</span>
+            <span class="expensive">&gt;$0.60 (${ta.expensive_entries})</span>
+          </div>
+        </div>`;
+      }
+      card += `</div>`;
+    }
+
+    // Row 3: Resolution analysis
+    if (ra.total > 0) {
+      card += `<div class="iter-section">
+        <div class="iter-section-label">Resolution Stats</div>
+        <div class="iter-metrics">
+          <div class="iter-metric">
+            <div class="iter-metric-lbl">Avg BTC Move</div>
+            <div class="iter-metric-val">$${ra.avg_btc_move}</div>
+          </div>
+          <div class="iter-metric">
+            <div class="iter-metric-lbl">Avg Win</div>
+            <div class="iter-metric-val v-green">${fmt$(ra.avg_win_pnl, 3)}</div>
+          </div>
+          <div class="iter-metric">
+            <div class="iter-metric-lbl">Avg Loss</div>
+            <div class="iter-metric-val v-red">${fmt$(ra.avg_loss_pnl, 3)}</div>
+          </div>
+        </div>
+      </div>`;
+    }
+
+    // Row 4: Intelligence — calibration + exits
+    const hasCal = cal.bins?.length > 0;
+    const hasExit = ex.total_exits > 0;
+    if (hasCal || hasExit) {
+      card += `<div class="iter-section">
+        <div class="iter-section-label">Intelligence</div>
+        <div class="iter-metrics">`;
+      if (cal.shadow_accuracy != null) {
+        card += `<div class="iter-metric">
+          <div class="iter-metric-lbl">Shadow Acc</div>
+          <div class="iter-metric-val ${cal.shadow_accuracy >= 0.7 ? 'v-green' : 'v-amber'}">${(cal.shadow_accuracy * 100).toFixed(0)}%${iterDelta(cal.shadow_accuracy, prev?.calibration?.shadow_accuracy, fmtP)}</div>
+        </div>`;
+      }
+      if (hasExit) {
+        card += `<div class="iter-metric">
+          <div class="iter-metric-lbl">Good Exits</div>
+          <div class="iter-metric-val ${ex.good_exit_rate >= 0.5 ? 'v-green' : 'v-red'}">${(ex.good_exit_rate * 100).toFixed(0)}%</div>
+        </div>`;
+        card += `<div class="iter-metric">
+          <div class="iter-metric-lbl">Exit Saved</div>
+          <div class="iter-metric-val v-green">${fmt$(ex.total_saved, 1)}</div>
+        </div>`;
+      }
+      card += `</div>`;
+      // Mini calibration bins
+      if (hasCal) {
+        card += `<div style="margin-top:0.3rem">
+          <div style="font-size:0.55rem;color:var(--text-muted);margin-bottom:0.1rem">Calibration Curve</div>
+          ${buildCalBins(cal.bins)}
+        </div>`;
+      }
+      card += `</div>`;
+    }
+
+    card += `</div>`; // close iter-card
+    return card;
+  }).join('');
 }
 
 // ═══ COUNTDOWN ═══

@@ -89,7 +89,7 @@ All tasks are `asyncio.Task` in the same event loop (no OS threads). Safe for sh
 2. **Run prefilter** — Checks 1-5: time remaining, spread width, book depth, choppy market, entry setup
 3. **Record PreFilterSnapshot** — Per-second market state stored in a 300-entry deque (~5 min history)
 4. **Compute R/R** — Calculate risk/reward ratio for both UP and DOWN tokens
-5. **Trigger AI** — Sets `ai_trigger_event` when R/R >= 1.0, prefilter passes, and AI cooldown (60s) has elapsed
+5. **Trigger AI** — Uses adaptive entry thresholds (learned from rolling candle history) to decide when to call AI. The `AdaptiveEntryTracker` sets a BTC move threshold ($20/$30/$40) based on rolling reversal rate and caps entry price based on recent winner ask prices. Falls back to static R/R threshold when adaptive is disabled. AI cooldown (60s) still applies
 
 ### AIDecision (event-driven)
 
@@ -242,7 +242,7 @@ python -m http.server 8080
 # Then open http://localhost:8080/dashboard/
 ```
 
-The dashboard auto-refreshes every 60 seconds and shows: stats cards (win rate, PnL, open trade PnL, cash, portfolio value, AI cost, trading fees, avg confidence), current market with live countdown, BTC price with Chainlink on-chain price and divergence warning, positions, scrollable trade timeline with expandable reasoning, resolutions table, cumulative PnL chart, risk panel, and an intelligence panel with ML model status, confidence calibration curve (bar chart of stated confidence vs actual win rate), and exit analysis stats (good-exit rate, money saved vs missed). Cash and Portfolio metrics are scoped to the selected view — overview shows all-time values, while individual sessions show start-to-current deltas for that session. The full accounting formula is: `cash = initial_cash + resolution_pnl + open_trade_pnl - fees - ai_cost`.
+The dashboard auto-refreshes every 30 seconds and shows: stats cards (win rate, PnL, open trade PnL, cash, portfolio value, AI cost, trading fees, avg confidence), current market with live countdown, BTC price with Chainlink on-chain price and divergence warning, positions, scrollable trade timeline with expandable reasoning, resolutions table, cumulative PnL chart, risk panel, intelligence panel (ML model status, confidence calibration curve, exit analysis stats), **adaptive entry panel** (live BTC threshold, max entry price, reversal rate, regime badge — CALM/MODERATE/CHOPPY), and **iteration history panel** (side-by-side comparison cards of all archived iterations with color-coded deltas). The sidebar includes an **Iterations** section listing all archived iterations — clicking one opens a **dedicated analysis page** with full-width PnL curve, trade quality breakdown (entry price distribution, fill price, confidence, hold rate), resolution stats (avg BTC move, win/loss PnL, risk/reward ratio), calibration & intelligence (shadow accuracy, exit analysis, confidence calibration chart), AI observations (categorized learnings), session history table, and a scrollable per-candle resolutions detail table. Candle timelines include regime color bars, BTC move labels at endpoints, entry price labels on BUY dots, and win/loss row tinting. Cash and Portfolio metrics are scoped to the selected view — overview shows all-time values, while individual sessions show start-to-current deltas for that session. The full accounting formula is: `cash = initial_cash + resolution_pnl + open_trade_pnl - fees - ai_cost`.
 
 ### Optional: Plain mode (no terminal dashboard)
 
@@ -276,6 +276,7 @@ polymarket-bot/
 │   ├── resolutions_20260218.jsonl     # One ResolutionRecord per candle close
 │   ├── dashboard_data.json            # Live dashboard state (updated each cycle)
 │   ├── agent_state.json               # Persisted agent state (survives restarts)
+│   ├── adaptive_entry.jsonl           # Adaptive entry tracker: rolling candle outcomes for threshold learning
 │   └── polybot.db                     # SQLite analytics (per-second snapshots, decisions, candle outcomes)
 │
 ├── data/
@@ -461,7 +462,9 @@ This means the *input data* to decisions evolves over time, not just the decisio
 The most direct levers are in `config/default.yaml`:
 
 - **`monitor.ai_cooldown_seconds`** — Minimum time between AI calls (default 60s). Lower = more responsive but higher API costs
-- **`monitor.rr_trigger_threshold`** — R/R ratio needed to trigger AI (default 1.0, entry <= $0.50)
+- **`monitor.rr_trigger_threshold`** — R/R ratio needed to trigger AI when adaptive entry is disabled (default 1.0, entry <= $0.50)
+- **`monitor.adaptive_entry_enabled`** — Use adaptive BTC threshold + max entry price learned from rolling candle history (default true)
+- **`monitor.adaptive_entry_window`** — Number of candles in the rolling window for adaptive stats (default 5)
 - **`monitor.stop_loss_pct`** / **`monitor.take_profit_pct`** — Position exit thresholds (default -60%/+80%)
 - **`initial_cash`** — Affects position sizing through risk percentages
 - **`temperature`** — Currently 0.0 (deterministic); slight increase (0.1-0.3) may help exploration
@@ -546,6 +549,10 @@ TradingAgent (agent.py) — orchestrator, launches 6 concurrent tasks
  ├── DashboardLoop — 2s loop (in agent.py)
  │   Writes dashboard JSON from shared state
  │
+ ├── AdaptiveEntryTracker (adaptive_entry.py)
+ │   Rolling reversal rate → adaptive BTC threshold ($20/$30/$40) + max entry price
+ │   Persisted to logs/adaptive_entry.jsonl
+ │
  ├── MarketDiscovery ─── Gamma API
  │   Finds current BTC 5-min candle market by slug pattern
  │
@@ -613,6 +620,7 @@ polymarket-bot/
 │   ├── __main__.py               # Entry point
 │   ├── agent.py                  # TradingAgent — orchestrator (launches 5 async tasks)
 │   ├── shared_state.py           # SharedState + PreFilterSnapshot — task coordination
+│   ├── adaptive_entry.py         # Adaptive entry thresholds from rolling candle history
 │   ├── config.py                 # AppConfig + MonitorConfig + YAML + env loading
 │   ├── datastore.py              # SQLite analytics — per-second snapshots + decisions + candles
 │   ├── indicators.py             # Indicator registry + 13 built-in indicators

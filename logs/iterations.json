@@ -1,0 +1,593 @@
+[
+  {
+    "label": "iter_001",
+    "archived_at": "2026-02-24T17:35:09.995590+00:00",
+    "date_range": {
+      "start": "2026-02-24T13:02:51.052331+00:00",
+      "end": "2026-02-24T15:38:37.518128+00:00"
+    },
+    "total_candles": 32,
+    "total_trades": 117,
+    "total_cycles": 357,
+    "wins": 18,
+    "losses": 12,
+    "win_rate": 0.6,
+    "total_pnl": 3.039975221758522,
+    "total_fees": 1.967404986542801,
+    "ai_cost": 9.331245999999995,
+    "net_result": -8.258675764784273,
+    "final_cash": 996.1733484540149,
+    "final_portfolio_value": 996.1733484540149,
+    "reflections_count": 7,
+    "enabled_indicators": [
+      "token_momentum",
+      "token_volatility",
+      "token_mean_reversion",
+      "orderbook_imbalance",
+      "spread_trend",
+      "token_price_divergence",
+      "btc_momentum",
+      "btc_volatility",
+      "btc_candle_momentum",
+      "session_streak",
+      "confidence_calibration",
+      "consecutive_streak",
+      "streak_magnitude",
+      "btc_vs_candle_open",
+      "volatility_30m",
+      "volume_trend",
+      "down_orderbook_imbalance",
+      "cross_book_flow",
+      "best_entry_analysis",
+      "chainlink_divergence"
+    ],
+    "calibration": {
+      "total_records": 30,
+      "shadow_accuracy": 0.806,
+      "shadow_total": 31,
+      "bins": [
+        {
+          "range": "60%-65%",
+          "wins": 4,
+          "losses": 3,
+          "win_rate": 0.571,
+          "reliable": false
+        },
+        {
+          "range": "65%-70%",
+          "wins": 10,
+          "losses": 3,
+          "win_rate": 0.769,
+          "reliable": false
+        },
+        {
+          "range": "70%-75%",
+          "wins": 6,
+          "losses": 3,
+          "win_rate": 0.667,
+          "reliable": false
+        },
+        {
+          "range": "80%-85%",
+          "wins": 1,
+          "losses": 0,
+          "win_rate": 1.0,
+          "reliable": false
+        }
+      ]
+    },
+    "exit_analysis": {
+      "total_exits": 48,
+      "good_exit_rate": 0.396,
+      "good_exits": 19,
+      "total_saved": 166.5732,
+      "total_missed": 108.2876
+    },
+    "ml_model": {
+      "training_samples": 31,
+      "model_trained": true
+    },
+    "trade_analysis": {
+      "total_buys": 69,
+      "total_sells": 49,
+      "total_holds": 239,
+      "avg_fill_price": 0.6938,
+      "cheap_entries": 1,
+      "mid_entries": 12,
+      "expensive_entries": 55,
+      "avg_confidence": 0.6862,
+      "hold_rate": 0.669
+    },
+    "resolution_analysis": {
+      "total": 20,
+      "avg_btc_move": 115.8,
+      "max_btc_move": 346.0,
+      "avg_win_pnl": 4.8817,
+      "avg_loss_pnl": -7.8335,
+      "biggest_win": 12.7353,
+      "biggest_loss": -20.746,
+      "cumulative_pnl": [
+        0.0,
+        -2.4684,
+        -2.1214,
+        -6.3733,
+        6.0079,
+        7.986,
+        10.1762,
+        22.9115,
+        24.0893,
+        28.7411,
+        26.3898,
+        31.9737,
+        43.1498,
+        43.2838,
+        22.5378,
+        23.3155,
+        28.7626,
+        26.4376,
+        10.0827,
+        3.7459
+      ]
+    },
+    "resolutions_detail": [
+      {
+        "slug": "btc-updown-5m-1771941300",
+        "pnl": 0.0,
+        "btc_move": -106.80000000000291,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1771941600",
+        "pnl": -2.4684006406318972,
+        "btc_move": -77.59999999999854,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1771941900",
+        "pnl": 0.3470446802607552,
+        "btc_move": 110.59000000000378,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1771942200",
+        "pnl": -4.2519385761352915,
+        "btc_move": 62.26000000000204,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1771942500",
+        "pnl": 12.381192805347197,
+        "btc_move": -127.05999999999767,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1771942800",
+        "pnl": 1.9781161798589801,
+        "btc_move": 52.79000000000087,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1771943100",
+        "pnl": 2.1902022564646972,
+        "btc_move": 47.93000000000029,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1771943400",
+        "pnl": 12.735283719198474,
+        "btc_move": -154.02000000000407,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1771943700",
+        "pnl": 1.1777645215293857,
+        "btc_move": 346.00999999999476,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1771944000",
+        "pnl": 4.65186585932372,
+        "btc_move": 184.12999999999738,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1771944300",
+        "pnl": -2.35137230692428,
+        "btc_move": 222.34999999999854,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1771944600",
+        "pnl": 5.583967205980041,
+        "btc_move": 104.61000000000058,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1771944900",
+        "pnl": 11.176072418640844,
+        "btc_move": -225.59999999999854,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1771945200",
+        "pnl": 0.13398594533795416,
+        "btc_move": -11.220000000001164,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1771945500",
+        "pnl": -20.746023897879734,
+        "btc_move": 80.47000000000116,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1771945800",
+        "pnl": 0.7777041846171842,
+        "btc_move": 9.799999999995634,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1771946100",
+        "pnl": 5.447135681141237,
+        "btc_move": 217.26000000000204,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1771946400",
+        "pnl": -2.3249546332421716,
+        "btc_move": 71.55000000000291,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1771946700",
+        "pnl": -16.35493264488482,
+        "btc_move": 98.34999999999854,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1771947000",
+        "pnl": -6.336765339819709,
+        "btc_move": -5.4099999999962165,
+        "resolution": ""
+      }
+    ],
+    "observations": [
+      {
+        "category": "edge",
+        "text": "large directional moves (>$120 from open) captured in the final third of candles produced two exceptional wins (+$12.38 and +$12.74) when entered at favorable prices, both on down moves with fills around 0.67-0.78",
+        "timestamp": "2026-02-24T14:40:19.705069+00:00"
+      },
+      {
+        "category": "pattern",
+        "text": "the bot's stop-loss mechanism triggered on 3 occasions (cycles 199, 213, and implied in earlier losses), with two occurring on up-direction trades that reversed after initial momentum, suggesting up moves may be more prone to mid-candle reversals",
+        "timestamp": "2026-02-24T14:40:19.705710+00:00"
+      },
+      {
+        "category": "pattern",
+        "text": "small magnitude up moves (<$25 from open) that resolved up showed 3/3 wins but with modest returns ($0.12-$0.63), while small down moves (<$15) had mixed results including one large loss, suggesting asymmetry in small-move predictability by direction",
+        "timestamp": "2026-02-24T14:40:19.706326+00:00"
+      },
+      {
+        "category": "bias",
+        "text": "the two largest losses in this batch (-$20.75 and -$16.35) both occurred on up-direction trades at high price levels ($63541 and $63918 closes), with both positions stopped out despite correct directional calls, suggesting difficulty managing up trades in the $63500+ range",
+        "timestamp": "2026-02-24T15:30:20.100951+00:00"
+      },
+      {
+        "category": "edge",
+        "text": "down-direction trades continued strong performance with 3 large wins ($12.38, $12.74, $11.18) all on moves exceeding $100, with entry fills between 0.60-0.92, maintaining the pattern from previous observations of capturing large downward momentum",
+        "timestamp": "2026-02-24T15:30:20.101596+00:00"
+      },
+      {
+        "category": "pattern",
+        "text": "stop-losses triggered on 2 up-direction positions (cycles 333 and 342) within this batch, both after initial favorable momentum reversed, with the cycle 342 stop occurring despite BTC being up $31.84 at entry but reversing to trigger -15.6% loss",
+        "timestamp": "2026-02-24T15:30:20.101905+00:00"
+      },
+      {
+        "category": "bias",
+        "text": "average loss size increased from previous batches to -$7.33 while average win size decreased to +$4.88, creating a worse risk-reward profile despite maintaining 63% win rate, with the deterioration driven by two outlier up-direction losses",
+        "timestamp": "2026-02-24T15:30:20.102092+00:00"
+      }
+    ],
+    "session_history": "# Session History\n\n| Date | Summary |\n|------|---------|\n| 2026-02-24 13:50 | First batch: 60% win rate across 10 resolutions, with best performance on mid-candle momentum entries and challenges with early-candle small-move predictions |\n| 2026-02-24 14:40 | Win rate improved to 63% with significantly higher average PnL driven by two large wins on major down moves, though stop-losses on up trades and conservative holding after losses left some edge on the table |\n| 2026-02-24 15:30 | win rate held at 63% but average PnL dropped $0.85 due to two large up-direction stop-losses at high BTC price levels, while down-direction momentum captures remained strong |\n"
+  },
+  {
+    "label": "iter_002",
+    "archived_at": "2026-02-24T23:20:50.781493+00:00",
+    "date_range": {
+      "start": "2026-02-24T17:37:00.536967+00:00",
+      "end": "2026-02-24T20:20:56.159812+00:00"
+    },
+    "total_candles": 34,
+    "total_trades": 37,
+    "total_cycles": 289,
+    "wins": 19,
+    "losses": 4,
+    "win_rate": 0.8260869565217391,
+    "total_pnl": 58.33655855836436,
+    "total_fees": 0.7262625952120697,
+    "ai_cost": 5.942492000000001,
+    "net_result": 51.66780396315229,
+    "final_cash": 1051.4323989631505,
+    "final_portfolio_value": 1051.4323989631505,
+    "reflections_count": 6,
+    "enabled_indicators": [
+      "token_momentum",
+      "token_volatility",
+      "token_mean_reversion",
+      "orderbook_imbalance",
+      "spread_trend",
+      "token_price_divergence",
+      "btc_momentum",
+      "btc_volatility",
+      "btc_candle_momentum",
+      "session_streak",
+      "confidence_calibration",
+      "consecutive_streak",
+      "streak_magnitude",
+      "btc_vs_candle_open",
+      "volatility_30m",
+      "volume_trend",
+      "down_orderbook_imbalance",
+      "cross_book_flow",
+      "best_entry_analysis",
+      "chainlink_divergence"
+    ],
+    "calibration": {
+      "total_records": 23,
+      "shadow_accuracy": 0.96,
+      "shadow_total": 25,
+      "bins": [
+        {
+          "range": "55%-60%",
+          "wins": 10,
+          "losses": 0,
+          "win_rate": 1.0,
+          "reliable": false
+        },
+        {
+          "range": "60%-65%",
+          "wins": 6,
+          "losses": 0,
+          "win_rate": 1.0,
+          "reliable": false
+        },
+        {
+          "range": "65%-70%",
+          "wins": 2,
+          "losses": 0,
+          "win_rate": 1.0,
+          "reliable": false
+        },
+        {
+          "range": "70%-75%",
+          "wins": 1,
+          "losses": 1,
+          "win_rate": 0.5,
+          "reliable": false
+        },
+        {
+          "range": "75%-80%",
+          "wins": 2,
+          "losses": 0,
+          "win_rate": 1.0,
+          "reliable": false
+        },
+        {
+          "range": "80%-85%",
+          "wins": 1,
+          "losses": 0,
+          "win_rate": 1.0,
+          "reliable": false
+        }
+      ]
+    },
+    "exit_analysis": {
+      "total_exits": 10,
+      "good_exit_rate": 0.1,
+      "good_exits": 1,
+      "total_saved": 7.7267,
+      "total_missed": 68.6427
+    },
+    "ml_model": {
+      "training_samples": 33,
+      "model_trained": true
+    },
+    "trade_analysis": {
+      "total_buys": 27,
+      "total_sells": 10,
+      "total_holds": 251,
+      "avg_fill_price": 0.7725,
+      "cheap_entries": 1,
+      "mid_entries": 3,
+      "expensive_entries": 23,
+      "avg_confidence": 0.6337,
+      "hold_rate": 0.869
+    },
+    "resolution_analysis": {
+      "total": 20,
+      "avg_btc_move": 62.8,
+      "max_btc_move": 262.0,
+      "avg_win_pnl": 3.2985,
+      "avg_loss_pnl": -5.2583,
+      "biggest_win": 12.3978,
+      "biggest_loss": -7.5664,
+      "cumulative_pnl": [
+        4.0221,
+        4.0221,
+        9.1874,
+        6.2371,
+        8.9572,
+        21.355,
+        25.3668,
+        26.2138,
+        28.2787,
+        28.2787,
+        28.4762,
+        28.4762,
+        28.8335,
+        28.8335,
+        28.8335,
+        28.8335,
+        21.2671,
+        21.2671,
+        21.2671,
+        22.4688
+      ]
+    },
+    "resolutions_detail": [
+      {
+        "slug": "btc-updown-5m-1771958400",
+        "pnl": 4.022119792910564,
+        "btc_move": 31.979999999995925,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1771958700",
+        "pnl": 0.0,
+        "btc_move": 80.59000000000378,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1771959000",
+        "pnl": 5.1652395816894305,
+        "btc_move": -10.060000000004948,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1771959300",
+        "pnl": -2.95027984474925,
+        "btc_move": -32.50999999999476,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1771959600",
+        "pnl": 2.7201268464414667,
+        "btc_move": 92.19000000000233,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1771959900",
+        "pnl": 12.397793361309699,
+        "btc_move": 59.62000000000262,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1771960200",
+        "pnl": 4.011827998111245,
+        "btc_move": -262.0199999999968,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1771960500",
+        "pnl": 0.8470060116588272,
+        "btc_move": -34.529999999998836,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1771960800",
+        "pnl": 2.0648284528887837,
+        "btc_move": 96.25,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1771961100",
+        "pnl": 0.0,
+        "btc_move": -46.66000000000349,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1771961400",
+        "pnl": 0.19750065273806294,
+        "btc_move": 73.48999999999796,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1771961700",
+        "pnl": 0.0,
+        "btc_move": 39.43000000000029,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1771962000",
+        "pnl": 0.3573336346881204,
+        "btc_move": 37.49000000000524,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1771962300",
+        "pnl": 0.0,
+        "btc_move": -14.070000000006985,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1771962600",
+        "pnl": 0.0,
+        "btc_move": -58.359999999993306,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1771962900",
+        "pnl": 0.0,
+        "btc_move": 20.110000000000582,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1771963200",
+        "pnl": -7.566351089247199,
+        "btc_move": 13.389999999999418,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1771963500",
+        "pnl": 0.0,
+        "btc_move": -151.4800000000032,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1771963800",
+        "pnl": 0.0,
+        "btc_move": 66.23999999999796,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1771964100",
+        "pnl": 1.2016910083965868,
+        "btc_move": 36.05000000000291,
+        "resolution": ""
+      }
+    ],
+    "observations": [
+      {
+        "category": "edge",
+        "text": "the massive +$39.05 win on btc-updown-5m-1771958100 occurred during a +$49 BTC move, suggesting exceptional entry timing or fill price captured significant value",
+        "timestamp": "2026-02-24T19:15:21.890840+00:00"
+      },
+      {
+        "category": "bias",
+        "text": "average PnL increased dramatically from +$0.28 to +$3.60 while taking fewer trades (11 to 7), indicating improved selectivity captured higher-quality setups",
+        "timestamp": "2026-02-24T19:15:21.891263+00:00"
+      },
+      {
+        "category": "bias",
+        "text": "the bot held 17 of 20 resolutions (85%) with confidence locked at 0.50 or 0.58, suggesting the model is producing very few high-confidence signals in the current market conditions",
+        "timestamp": "2026-02-24T20:05:15.701267+00:00"
+      },
+      {
+        "category": "edge",
+        "text": "the single DOWN trade at cycle 303 with 0.72 confidence and 0.9008 fill price during a -$28 move lost -$7.57, contrasting sharply with the previous observation about DOWN trades in large moves being profitable",
+        "timestamp": "2026-02-24T20:05:15.701653+00:00"
+      },
+      {
+        "category": "pattern",
+        "text": "all three trades taken in this batch occurred in cycles 303-306, clustering in the final 4 resolutions after 16 consecutive holds, indicating the model may have encountered a regime shift or specific market condition trigger",
+        "timestamp": "2026-02-24T20:05:15.701814+00:00"
+      },
+      {
+        "category": "bias",
+        "text": "win rate remained stable at 79% while trade volume dropped from 7 to 3 and hold rate doubled to 30%, yet average PnL increased by $0.32, suggesting the increased selectivity is preserving profitability despite fewer opportunities",
+        "timestamp": "2026-02-24T20:05:15.701931+00:00"
+      }
+    ],
+    "session_history": "# Session History\n\n| Date | Summary |\n|------|---------|\n| 2026-02-24 18:25 | First batch: 88% win rate with strong early-cycle performance (0.77-0.84 entries), but one late-cycle momentum chase at 0.99 produced outsized loss that consumed profits from 6 winning trades |\n| 2026-02-24 19:15 | Win rate dipped slightly to 82% but average PnL surged +$3.32 through better trade selection, with one exceptional +$39 win and improved DOWN-side execution |\n| 2026-02-24 20:05 | extreme selectivity with 85% hold rate and only 3 trades taken, maintaining profitability at +$3.92 avg despite model producing predominantly low-confidence signals |\n"
+  }
+]
