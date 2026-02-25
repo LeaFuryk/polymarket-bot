@@ -778,9 +778,17 @@ class TradingAgent:
                     "pnl": r.total_pnl,
                 })
 
-            # Merge historical + current session data
+            # Merge historical + current session data (dedup resolutions by slug)
             all_trades = self._historical_trades + trades
-            all_resolutions = self._historical_resolutions + resolutions
+            seen_slugs: set[str] = set()
+            all_resolutions: list[dict] = []
+            for r in self._historical_resolutions + resolutions:
+                slug = r.get("slug", "")
+                if slug and slug not in seen_slugs:
+                    seen_slugs.add(slug)
+                    all_resolutions.append(r)
+                elif not slug:
+                    all_resolutions.append(r)
 
             all_time_pnl = sum(r.get("pnl", 0) for r in all_resolutions)
             all_time_wins = sum(1 for r in all_resolutions if r.get("pnl", 0) > 0.001)

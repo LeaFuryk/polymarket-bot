@@ -9,6 +9,12 @@ All notable changes to this project will be documented in this file.
 - **Sidebar: Iterations section** — New "Iterations" section at the bottom of the sidebar listing all archived iterations (newest first) with net result and win rate. Click to navigate to the iteration's dedicated analysis page.
 - **Backend: Enriched iteration data** — `_enrich_iteration_summary()` now includes `observations` (AI learnings from observations.jsonl), `session_history` (markdown session summaries), and `resolutions_detail` (per-candle resolution outcomes with slug, PnL, BTC move, and resolution direction).
 
+### Fixed
+- **PENDING candle bug** — Early candle resolutions were missing from dashboard data because `_session_resolutions` was previously capped at 20. The fix (uncapped list) was already in place but the stale `dashboard_data.json` on disk still had the gap. Added slug-based deduplication when merging historical + session resolutions as a safety net against future data gaps.
+
+### Removed
+- **Iteration Analysis panel from Overview** — The horizontal scrolling iteration cards at the bottom of the Overview are replaced by the dedicated iteration analysis view in the sidebar.
+
 - **Dashboard: Iteration History panel** — Full-width comparison table showing all archived iterations side-by-side. Displays label, date range, candles, win rate, PnL, fees, AI cost, and net result with color-coded deltas from the previous iteration (green = improvement, red = regression). Only appears when `archive/*/summary.json` files exist.
 - **Dashboard: Adaptive Entry panel** — Half-width panel showing live adaptive threshold state: BTC move threshold ($20/$30/$40), max entry price, reversal rate, and rolling window size. Color-coded regime badge (CALM/MODERATE/CHOPPY) based on current reversal rate. Shows "using defaults" when insufficient history. Entire panel dims with DISABLED overlay when adaptive entry is turned off.
 - **Dashboard: Enhanced candle timelines** — Four visual additions to each candle timeline row: (1) Regime color bar — thin 3px bar below the timeline showing current BTC threshold regime (green/amber/red). (2) BTC move label — shows `+$47` or `-$23` at the endpoint dot, colored by direction. (3) Entry price labels — BUY dots show fill price (`$0.42`) below the dot stem. (4) Win/loss row tinting — subtle green/red left border on resolved candle rows for scannable results.

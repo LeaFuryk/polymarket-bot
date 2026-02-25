@@ -2011,13 +2011,7 @@ function render(d) {
     </div>`;
   }
 
-  // Iteration Analysis panel (full-width)
-  if (d.iterations?.length > 0) {
-    cg += `<div class="panel panel-full" data-tip="Deep per-iteration analysis. Each card shows results, calibration, entry quality, and learnings.">
-      <div class="panel-header">Iteration Analysis</div>
-      <div class="iter-cards">${buildIterCards(d.iterations)}</div>
-    </div>`;
-  }
+  // Iteration Analysis — now in dedicated sidebar view, removed from overview
 
   $('contentGrid').innerHTML = cg;
 }
