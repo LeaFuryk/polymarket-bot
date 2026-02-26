@@ -1896,8 +1896,13 @@ function render(d) {
     const clPrice = b.chainlink_price ? '$' + Number(b.chainlink_price).toLocaleString(undefined, {maximumFractionDigits:0}) : null;
     const divAbs = b.price_divergence != null ? Math.abs(b.price_divergence) : null;
     const divWarn = divAbs != null && divAbs > 50;
-    lh += `<div class="panel" data-tip="Current BTC/USD spot price from Binance. The bot uses BTC price movement to predict UP/DOWN candle outcomes.">
-      <div class="panel-header">BTC Price</div>
+    const priceSrc = b.price_source || 'binance';
+    const srcIsChainlink = priceSrc === 'chainlink_ws';
+    const srcBadgeColor = srcIsChainlink ? 'var(--green)' : 'var(--amber)';
+    const srcBadgeBg = srcIsChainlink ? 'var(--green-soft)' : 'var(--amber-soft)';
+    const srcLabel = srcIsChainlink ? 'CHAINLINK WS' : priceSrc.toUpperCase();
+    lh += `<div class="panel" data-tip="Current BTC/USD price. Source: ${srcLabel}. When Chainlink WS is active, the bot uses the exact Polymarket resolution price.">
+      <div class="panel-header">BTC Price <span style="font-size:0.6rem;padding:0.12rem 0.4rem;border-radius:3px;background:${srcBadgeBg};color:${srcBadgeColor};margin-left:0.4rem;font-weight:600;letter-spacing:0.03em">${srcLabel}</span></div>
       <div class="btc-price">${b.price_usd ? '$' + Number(b.price_usd).toLocaleString(undefined, {maximumFractionDigits:0}) : '--'}</div>
       <span class="btc-badge ${chCls}">${chSign}${fmtNum(b.change_24h_pct, 2)}% 24h</span>
       <div class="btc-candle-dir">Last candle: ${(b.last_candle_direction || '--').toUpperCase()}</div>

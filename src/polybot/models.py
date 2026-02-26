@@ -63,6 +63,7 @@ class BtcPrice(BaseModel):
     change_24h_pct: float = 0.0
     chainlink_price: float | None = None  # On-chain Chainlink BTC/USD (resolution source)
     price_divergence: float | None = None  # Binance - Chainlink divergence ($)
+    price_source: str = "binance"  # "binance" | "chainlink_ws" | "coingecko"
 
 
 class BtcCandle(BaseModel):

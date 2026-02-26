@@ -29,6 +29,7 @@ from polybot.knowledge import KnowledgeManager
 from polybot.ml_scorer import MLScorer
 from polybot.prefilter import PreFilter
 from polybot.logging.trade_log import TradeLog
+from polybot.market_data.chainlink_ws import ChainlinkWSFeed
 from polybot.market_data.discovery import MarketDiscovery
 from polybot.market_data.provider import MarketDataProvider
 from polybot.models import (
@@ -127,8 +128,9 @@ class TradingAgent:
         self._config = config
 
         # Sub-components
+        self._chainlink_ws = ChainlinkWSFeed(config.api.polymarket_rtds_url)
         self._discovery = MarketDiscovery(config)
-        self._market_data = MarketDataProvider(config)
+        self._market_data = MarketDataProvider(config, chainlink_ws=self._chainlink_ws)
         self._decision_engine = DecisionEngine(config.ai)
         self._execution_sim = ExecutionSimulator(config.simulator)
         self._orderbook = SimulatedOrderBook(config.simulator)
@@ -238,6 +240,9 @@ class TradingAgent:
 
         # Open persistent market history store
         self._market_history.open()
+
+        # Start Chainlink WebSocket feed (primary BTC price — matches resolution)
+        await self._chainlink_ws.start()
 
         # Load BTC 5-min candle history
         await self._market_data.btc_feed.load_candle_history(200)
@@ -757,6 +762,7 @@ class TradingAgent:
                     ),
                     "chainlink_price": snapshot.btc_price.chainlink_price,
                     "price_divergence": snapshot.btc_price.price_divergence,
+                    "price_source": snapshot.btc_price.price_source,
                 }
 
             # Positions
@@ -1107,6 +1113,7 @@ class TradingAgent:
 
     async def _shutdown_components(self) -> None:
         logger.info("Shutting down components...")
+        await self._chainlink_ws.stop()
         if self._datastore is not None:
             await self._datastore.close()
         await self._market_history.close()

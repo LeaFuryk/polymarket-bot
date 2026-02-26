@@ -5,10 +5,22 @@ All notable changes to this project will be documented in this file.
 ## [v0.2.0] — 2026-02-26
 
 ### Added
+- **Hybrid Chainlink RTDS WebSocket + Binance BTC price feed** — The bot now connects to Polymarket's RTDS WebSocket (`wss://ws-live-data.polymarket.com`, topic `crypto_prices_chainlink`, symbol `btc/usd`) to receive the exact Chainlink BTC/USD price used for candle resolution. When the WebSocket is active, this becomes the primary price source — eliminating the Binance-vs-Chainlink divergence that caused ~$82/iteration in losses from correct predictions resolving against the bot. Binance remains the fallback (auto-switches within seconds if the WebSocket disconnects or goes stale >30s). Binance klines still used for 5-min candle history (EMA indicators — only relative movement matters). No authentication required.
+- **`ChainlinkWSFeed`** class (`src/polybot/market_data/chainlink_ws.py`) — Async WebSocket client with auto-reconnect (5s retry), keepalive pings (5s), 30s staleness check, and clean start/stop lifecycle. Properties: `price` (None if stale), `is_active` (connected + fresh data), `last_update` timestamp.
+- **`BtcPrice.price_source`** field — Tracks which source provided the current price: `"chainlink_ws"`, `"binance"`, or `"coingecko"`. Flows through to indicators and dashboard.
+- **`ApiConfig.polymarket_rtds_url`** — Configurable RTDS WebSocket URL (default `wss://ws-live-data.polymarket.com`).
+- **Dashboard: Price source badge** — Green "CHAINLINK WS" or amber "BINANCE" badge next to BTC Price panel header showing the active price source.
 - **Anti-flip guard** — Blocks buying the opposite side after a SELL on the same candle. Prevents the whipsaw pattern where the bot sells a correct position mid-candle, flips to the opposite side, and loses on both. Same-side re-entry (adding back) is still allowed. In iter_004, two whipsaw candles cost -$104.45 combined; both would have been profitable (+$36.80) if the bot held the first trade. Estimated impact: +$80/iteration.
+
+### Changed
+- **`BtcPriceFeed.get_price()` hybrid priority** — Chainlink WS (if active) → Binance → CoinGecko → stale cache. When on Chainlink WS, the expensive Ethereum RPC call to read the on-chain Chainlink aggregator is skipped entirely. Cross-reference divergence is still computed but is informational only (Binance vs Chainlink WS).
+- **Chainlink divergence indicator** — When `price_source == "chainlink_ws"`, the indicator shows "ALIGNED — using Chainlink WS" with no resolution risk warning. Divergence value still computed (Binance vs Chainlink) for monitoring. When on Binance, existing behavior preserved (resolution risk warnings).
+- **Agent lifecycle** — `ChainlinkWSFeed` is started before the main task loop and stopped during shutdown. WebSocket runs as a background asyncio task alongside the existing 6 tasks.
 
 ### Fixed
 - **Block mid-position AI calls via prefilter** — Previously, the prefilter bypassed all checks when the bot had an open position (`has_open_position → always pass`), allowing MarketMonitor to trigger Claude every 60s while positioned. Claude would then invent its own exit rules (e.g., "down >15% with <90s = EXIT NOW") and sell at much tighter thresholds than the system's -60% stop-loss. This caused premature exits on positions that ultimately won — the iter_004 weird loss on candle 1772049300 (-$11.69) was a DOWN buy where DOWN won, but Claude panic-sold at $0.46 mid-candle. Fix: prefilter now **skips** AI when positioned, letting PositionMonitor handle all exits at the configured -60%/-80% thresholds. Estimated impact: +$20-30/iteration from avoided premature exits.
+
+## [v0.1.0] — 2026-02-26
 
 ### Added
 - **Dashboard: Deep Analysis Section** — Each iteration detail view now includes a full deep analysis panel when data is available. Shows: profit factor + summary stats banner, loss classifications with horizontal bars (Multi-Trade Candle, Chainlink Divergence, Counter-Trend, Reversal), entry price ROI buckets (cheap entries vs expensive with ROI%), confidence calibration with actual win rates and UNDERCONFIDENT/OVERCONFIDENT/CALIBRATED labels, UP vs DOWN side performance comparison, entry timing buckets, investigated "weird losses" (correct predictions that lost money with root cause analysis), and ranked actionable improvements with impact estimates and LOSS FIX/WIN BOOST badges.
