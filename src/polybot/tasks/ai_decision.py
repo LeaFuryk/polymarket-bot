@@ -299,6 +299,7 @@ class AIDecision:
         await self._run_ai_decision(
             cycle, snapshot, market, time_remaining, portfolio_value,
             extra_context=exit_context,
+            forced_exit_side=token_side_str,
         )
 
     async def _run_ai_decision(
@@ -309,6 +310,7 @@ class AIDecision:
         time_remaining: float,
         portfolio_value: float,
         extra_context: str = "",
+        forced_exit_side: str | None = None,
     ) -> None:
         """Core AI decision logic — shared between entry and exit triggers."""
         up_ob = snapshot.orderbook
@@ -415,6 +417,27 @@ class AIDecision:
         self._total_api_cost += api_cost
         self._last_cycle_api_cost = api_cost
         logger.info("API cost: $%.4f (session total: $%.4f)", api_cost, self._total_api_cost)
+
+        # Force token_side on exit triggers: don't trust AI's token_side for SELLs
+        # This prevents the anti-flip guard from tracking the wrong side
+        if forced_exit_side and decision.action == Action.SELL:
+            correct_side = TokenSide(forced_exit_side.lower())
+            if decision.token_side != correct_side:
+                logger.warning(
+                    "Forcing exit token_side: AI said %s but exit trigger is %s",
+                    decision.token_side.value, correct_side.value,
+                )
+                decision = TradingDecision(
+                    action=decision.action,
+                    order_type=decision.order_type,
+                    size=decision.size,
+                    confidence=decision.confidence,
+                    reasoning=decision.reasoning,
+                    market_view=decision.market_view,
+                    token_side=correct_side,
+                    hypothetical_direction=decision.hypothetical_direction,
+                    confidence_drivers=decision.confidence_drivers,
+                )
 
         # Hard confidence gate (BUY only)
         min_conf = self._config.agent.min_confidence
@@ -594,16 +617,18 @@ class AIDecision:
                         btc_move, move_scale * 100,
                     )
 
-            # Enforce minimum position size of 40 shares
-            if decision.size < 40:
+            # Enforce minimum position size (lower floor for counter-trend)
+            min_shares = 20 if trend_scale < 1.0 else 40
+            if decision.size < min_shares:
                 logger.info(
-                    "Min size floor: %.1f → 40 shares",
-                    decision.size,
+                    "Min size floor: %.1f → %d shares%s",
+                    decision.size, min_shares,
+                    " (counter-trend)" if trend_scale < 1.0 else "",
                 )
                 decision = TradingDecision(
                     action=decision.action,
                     order_type=decision.order_type,
-                    size=40,
+                    size=min_shares,
                     confidence=decision.confidence,
                     reasoning=decision.reasoning,
                     market_view=decision.market_view,

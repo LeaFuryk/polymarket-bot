@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v0.3.0] — 2026-02-26
+
+### Fixed
+- **Chainlink WS message parsing** — The RTDS sends batches in `payload.data[]` format with per-second `{timestamp, value}` ticks. The original parser looked for `data.value` / `data.price` (wrong nesting), so zero ticks were ever extracted. Fixed to parse the actual format and process all ticks in each batch for accurate candle OHLC. Also handles empty keepalive frames and logs first messages per connection for debugging.
+- **Force token_side on exit SELL decisions** — The AI could return the wrong `token_side` in its SELL response for exit triggers (e.g., exit signal says "sell DOWN" but AI responds with `token_side: "up"`). This caused `sold_sides` to track the wrong side, letting the anti-flip guard miss the side-flip on candle 1772124000 (-$49.03). Fix: force `token_side` from the exit signal, never trust the AI output for exits.
+- **Counter-trend min size floor** — The 40-share minimum position floor was completely negating counter-trend sizing reductions. In iter_005, counter-trend scaling reduced sizes to 5-24 shares but the floor put them all back to 40. Fix: use 20-share floor for counter-trend trades so the size reduction actually takes effect (50% of normal floor).
+
 ## [v0.2.0] — 2026-02-26
 
 ### Added
