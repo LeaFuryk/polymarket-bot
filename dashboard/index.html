@@ -1031,6 +1031,10 @@ body::after {
 .iv-stat-label { color: var(--text-secondary); }
 .iv-stat-val { font-weight: 600; font-family: var(--display); }
 
+.da-stat { display: flex; flex-direction: column; gap: 0.1rem; }
+.da-stat-label { font-size: 0.55rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.da-stat-val { font-size: 0.85rem; font-weight: 700; font-family: var(--display); }
+
 .iv-obs-card {
   padding: 0.55rem 0.65rem;
   background: var(--bg-inset);
@@ -2207,6 +2211,12 @@ function renderIterationView(it, prev, next) {
     </div>`;
   }
 
+  // ── Deep Analysis Section ──
+  const da = it.deep_analysis;
+  if (da) {
+    h += buildDeepAnalysisSection(da);
+  }
+
   h += `<div class="iv-grid">`;
 
   // ── Trade Quality Panel ──
@@ -2349,6 +2359,170 @@ function renderIterationView(it, prev, next) {
   }
 
   h += `</div>`; // close iv-grid
+
+  return h;
+}
+
+function buildDeepAnalysisSection(da) {
+  let h = '';
+
+  // ── Summary Banner ──
+  h += `<div class="iv-section iv-full" style="margin-bottom:0.75rem">
+    <div class="iv-section-title">Deep Analysis</div>
+    <div style="display:flex;gap:1.2rem;flex-wrap:wrap;margin-bottom:0.75rem">
+      <div class="da-stat"><span class="da-stat-label">Profit Factor</span><span class="da-stat-val v-green">${da.summary.profit_factor}x</span></div>
+      <div class="da-stat"><span class="da-stat-label">Winner PnL</span><span class="da-stat-val v-green">+$${da.summary.total_winner_pnl.toFixed(0)}</span></div>
+      <div class="da-stat"><span class="da-stat-label">Loser PnL</span><span class="da-stat-val v-red">-$${Math.abs(da.summary.total_loser_pnl).toFixed(0)}</span></div>
+      <div class="da-stat"><span class="da-stat-label">Avg Win</span><span class="da-stat-val v-green">+$${da.summary.avg_winning_trade.toFixed(2)}</span></div>
+      <div class="da-stat"><span class="da-stat-label">Avg Loss</span><span class="da-stat-val v-red">-$${Math.abs(da.summary.avg_losing_trade).toFixed(2)}</span></div>
+      <div class="da-stat"><span class="da-stat-label">Best Trade</span><span class="da-stat-val v-green">+$${da.summary.best_trade.toFixed(2)}</span></div>
+      <div class="da-stat"><span class="da-stat-label">Worst Trade</span><span class="da-stat-val v-red">-$${Math.abs(da.summary.worst_trade).toFixed(2)}</span></div>
+    </div>
+  </div>`;
+
+  h += `<div class="iv-grid">`;
+
+  // ── Loss Classifications ──
+  if (da.loss_classifications?.length) {
+    h += `<div class="iv-section">
+      <div class="iv-section-title">Loss Classifications</div>`;
+    for (const lc of da.loss_classifications) {
+      const barW = Math.min(100, Math.abs(lc.total_pnl) / 1.0);
+      h += `<div style="margin-bottom:0.6rem">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.15rem">
+          <span style="font-size:0.7rem;color:var(--text-primary);font-weight:500">${esc(lc.type)} <span style="color:var(--text-tertiary)">(${lc.count})</span></span>
+          <span style="font-size:0.7rem;color:var(--red);font-weight:600">-$${Math.abs(lc.total_pnl).toFixed(0)}</span>
+        </div>
+        <div style="height:4px;background:var(--bg-inset);border-radius:2px;overflow:hidden">
+          <div style="height:100%;width:${barW}%;background:var(--red);border-radius:2px"></div>
+        </div>
+        <div style="font-size:0.55rem;color:var(--text-muted);margin-top:0.1rem">${esc(lc.description)}</div>
+      </div>`;
+    }
+    h += `</div>`;
+  }
+
+  // ── Entry Price ROI ──
+  if (da.entry_price_buckets?.length) {
+    h += `<div class="iv-section">
+      <div class="iv-section-title">Entry Price vs ROI</div>`;
+    for (const ep of da.entry_price_buckets) {
+      const roiBarW = Math.min(100, ep.roi_pct / 1.1);
+      const roiColor = ep.roi_pct > 50 ? 'var(--green)' : ep.roi_pct > 15 ? 'var(--amber)' : 'var(--text-tertiary)';
+      h += `<div style="margin-bottom:0.5rem">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.15rem">
+          <span style="font-size:0.7rem;color:var(--text-primary)">${esc(ep.bucket)} <span style="color:var(--text-tertiary)">(${ep.count} trades)</span></span>
+          <span style="font-size:0.7rem;color:${roiColor};font-weight:600">${ep.roi_pct.toFixed(0)}% ROI</span>
+        </div>
+        <div style="height:4px;background:var(--bg-inset);border-radius:2px;overflow:hidden">
+          <div style="height:100%;width:${roiBarW}%;background:${roiColor};border-radius:2px"></div>
+        </div>
+        <div style="font-size:0.55rem;color:var(--text-muted);margin-top:0.1rem">Total: +$${ep.total_pnl.toFixed(0)} | Avg: +$${ep.avg_pnl.toFixed(2)}</div>
+      </div>`;
+    }
+    h += `</div>`;
+  }
+
+  // ── Confidence Calibration Deep ──
+  if (da.confidence_calibration?.length) {
+    h += `<div class="iv-section">
+      <div class="iv-section-title">Confidence Calibration (Actual)</div>`;
+    for (const cc of da.confidence_calibration) {
+      const statedMid = parseFloat(cc.range.split('-')[0]) / 100;
+      const gap = cc.actual_wr - statedMid;
+      const gapLabel = gap > 0.05 ? 'UNDERCONFIDENT' : gap < -0.05 ? 'OVERCONFIDENT' : 'CALIBRATED';
+      const gapColor = gap > 0.05 ? 'var(--green)' : gap < -0.05 ? 'var(--red)' : 'var(--text-tertiary)';
+      h += `<div class="iv-stat-row" style="margin-bottom:0.3rem">
+        <span class="iv-stat-label">${esc(cc.range)} conf</span>
+        <span class="iv-stat-val">
+          <span style="color:${gapColor}">${(cc.actual_wr*100).toFixed(0)}% actual</span>
+          <span style="font-size:0.55rem;color:var(--text-muted)"> (${cc.wins}W/${cc.buys - cc.wins}L)</span>
+        </span>
+      </div>
+      <div style="display:flex;align-items:center;gap:0.3rem;margin-bottom:0.4rem;padding-left:0.3rem">
+        <div style="height:3px;flex:1;background:var(--bg-inset);border-radius:2px;overflow:hidden">
+          <div style="height:100%;width:${cc.actual_wr*100}%;background:${gapColor};border-radius:2px"></div>
+        </div>
+        <span style="font-size:0.5rem;color:${gapColor};white-space:nowrap">${gapLabel}</span>
+      </div>`;
+    }
+    h += `<div style="font-size:0.55rem;color:var(--text-muted);margin-top:0.3rem;padding-top:0.3rem;border-top:1px solid var(--border-subtle)">Total PnL from 0.68 conf: <span style="color:var(--green)">$211</span> (best bucket)</div>`;
+    h += `</div>`;
+  }
+
+  // ── Side Analysis ──
+  if (da.side_analysis) {
+    const sa = da.side_analysis;
+    h += `<div class="iv-section">
+      <div class="iv-section-title">UP vs DOWN Performance</div>
+      <div style="display:flex;gap:0.5rem;margin-bottom:0.5rem">
+        <div style="flex:1;background:var(--green-soft);border:1px solid var(--green);border-radius:var(--radius-sm);padding:0.4rem;text-align:center">
+          <div style="font-size:0.6rem;color:var(--green)">UP</div>
+          <div style="font-size:0.85rem;font-weight:600;color:var(--text-primary)">${sa.up.wins}W / ${sa.up.all_trades - sa.up.wins}L</div>
+          <div style="font-size:0.6rem;color:var(--green)">+$${sa.up.total_pnl.toFixed(0)} | ${(sa.up.win_rate*100).toFixed(0)}%</div>
+        </div>
+        <div style="flex:1;background:var(--red-soft);border:1px solid var(--red);border-radius:var(--radius-sm);padding:0.4rem;text-align:center">
+          <div style="font-size:0.6rem;color:var(--red)">DOWN</div>
+          <div style="font-size:0.85rem;font-weight:600;color:var(--text-primary)">${sa.down.wins}W / ${sa.down.all_trades - sa.down.wins}L</div>
+          <div style="font-size:0.6rem;color:var(--red)">+$${sa.down.total_pnl.toFixed(0)} | ${(sa.down.win_rate*100).toFixed(0)}%</div>
+        </div>
+      </div>`;
+    // Timing buckets
+    if (da.timing_buckets?.length) {
+      h += `<div style="margin-top:0.4rem;padding-top:0.4rem;border-top:1px solid var(--border-subtle)">
+        <div style="font-size:0.6rem;color:var(--text-muted);margin-bottom:0.3rem">Entry Timing</div>`;
+      for (const tb of da.timing_buckets) {
+        h += `<div class="iv-stat-row"><span class="iv-stat-label">${esc(tb.range)}</span>
+          <span class="iv-stat-val">${tb.winners}W | $${tb.avg_pnl.toFixed(1)} avg | ${(tb.all_wr*100).toFixed(0)}% WR</span></div>`;
+      }
+      h += `</div>`;
+    }
+    h += `</div>`;
+  }
+
+  h += `</div>`; // close iv-grid
+
+  // ── Weird Losses (full-width) ──
+  if (da.weird_losses?.length) {
+    h += `<div class="iv-section iv-full" style="margin-top:0.75rem">
+      <div class="iv-section-title" style="color:var(--amber)">Investigated: Correct Predictions That Lost Money</div>`;
+    for (const wl of da.weird_losses) {
+      h += `<div style="background:var(--bg-inset);border:1px solid var(--border-subtle);border-radius:var(--radius-sm);padding:0.5rem;margin-bottom:0.4rem">
+        <div style="display:flex;justify-content:space-between;margin-bottom:0.2rem">
+          <span style="font-size:0.7rem;font-weight:600;color:var(--text-primary)">Candle ...${wl.candle.slice(-8)}</span>
+          <span style="font-size:0.7rem;color:var(--red);font-weight:600">PnL: -$${Math.abs(wl.pnl).toFixed(2)}</span>
+        </div>
+        <div style="font-size:0.6rem;color:var(--text-secondary);margin-bottom:0.2rem">Winner: ${wl.winner} (BTC ${wl.btc_move})</div>
+        <div style="font-size:0.6rem;color:var(--text-secondary)">${esc(wl.root_cause)}</div>
+        ${wl.what_if_hold !== 'N/A — initial DOWN position was wrong' ?
+          `<div style="font-size:0.55rem;color:var(--amber);margin-top:0.15rem">If held: ${esc(wl.what_if_hold)}</div>` : ''}
+      </div>`;
+    }
+    h += `</div>`;
+  }
+
+  // ── Actionable Fixes (full-width) ──
+  if (da.actionable_fixes?.length) {
+    h += `<div class="iv-section iv-full" style="margin-top:0.75rem">
+      <div class="iv-section-title">Actionable Improvements (ranked by impact)</div>
+      <div style="display:flex;flex-direction:column;gap:0.35rem">`;
+    for (let i = 0; i < da.actionable_fixes.length; i++) {
+      const af = da.actionable_fixes[i];
+      const catColor = af.category === 'loss_reduction' ? 'var(--red)' : 'var(--green)';
+      const catLabel = af.category === 'loss_reduction' ? 'LOSS FIX' : 'WIN BOOST';
+      h += `<div style="display:flex;align-items:center;gap:0.5rem;padding:0.35rem 0.5rem;background:var(--bg-inset);border-radius:var(--radius-sm);border-left:3px solid ${catColor}">
+        <span style="font-size:0.65rem;font-weight:700;color:var(--text-primary);min-width:1.2rem">#${i+1}</span>
+        <span style="flex:1;font-size:0.65rem;color:var(--text-secondary)">${esc(af.fix)}</span>
+        <span style="font-size:0.55rem;color:${catColor};font-weight:600;white-space:nowrap;padding:0.1rem 0.3rem;background:${catColor}18;border-radius:3px">${catLabel}</span>
+        <span style="font-size:0.65rem;color:var(--text-primary);font-weight:600;white-space:nowrap">${esc(af.impact)}</span>
+      </div>`;
+    }
+    h += `</div>
+      <div style="margin-top:0.4rem;padding-top:0.3rem;border-top:1px solid var(--border-subtle);font-size:0.65rem;color:var(--amber);font-weight:600">
+        Total potential improvement: ~$${da.total_potential_improvement}/iter
+      </div>
+    </div>`;
+  }
 
   return h;
 }
