@@ -74,8 +74,8 @@ class PreFilter:
     ) -> PreFilterResult:
         """Run all pre-filter checks. Returns result with should_skip flag.
 
-        If the bot has an open position, the filter is more permissive
-        (we may need AI to decide on exits).
+        If the bot has an open position, the filter skips AI — exits are
+        handled by PositionMonitor at configured thresholds (-60%/+80%).
         """
         self.total_checks += 1
 
@@ -94,8 +94,13 @@ class PreFilter:
             best_entry_price=best_entry,
         )
 
-        # If we have open positions, always call AI (need exit decisions)
+        # If we have open positions, skip AI — PositionMonitor handles exits
+        # at -60%/+80% thresholds via exit_trigger_queue
         if has_open_position:
+            result.should_skip = True
+            result.reason = "Position open — exits handled by PositionMonitor"
+            self.total_skipped += 1
+            logger.debug("Pre-filter SKIP: %s", result.reason)
             return result
 
         # Check 1: Time remaining too low for new entries

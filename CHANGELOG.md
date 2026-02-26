@@ -2,7 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [v0.2.0] — 2026-02-26
+
+### Fixed
+- **Block mid-position AI calls via prefilter** — Previously, the prefilter bypassed all checks when the bot had an open position (`has_open_position → always pass`), allowing MarketMonitor to trigger Claude every 60s while positioned. Claude would then invent its own exit rules (e.g., "down >15% with <90s = EXIT NOW") and sell at much tighter thresholds than the system's -60% stop-loss. This caused premature exits on positions that ultimately won — the iter_004 weird loss on candle 1772049300 (-$11.69) was a DOWN buy where DOWN won, but Claude panic-sold at $0.46 mid-candle. Fix: prefilter now **skips** AI when positioned, letting PositionMonitor handle all exits at the configured -60%/-80% thresholds. Estimated impact: +$20-30/iteration from avoided premature exits.
 
 ### Added
 - **Dashboard: Deep Analysis Section** — Each iteration detail view now includes a full deep analysis panel when data is available. Shows: profit factor + summary stats banner, loss classifications with horizontal bars (Multi-Trade Candle, Chainlink Divergence, Counter-Trend, Reversal), entry price ROI buckets (cheap entries vs expensive with ROI%), confidence calibration with actual win rates and UNDERCONFIDENT/OVERCONFIDENT/CALIBRATED labels, UP vs DOWN side performance comparison, entry timing buckets, investigated "weird losses" (correct predictions that lost money with root cause analysis), and ranked actionable improvements with impact estimates and LOSS FIX/WIN BOOST badges.
