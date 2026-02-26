@@ -31,6 +31,7 @@ LOG_GLOBS = [
     "exit_analysis.jsonl",
     "ml_model.json",
     "dashboard_data.json",
+    "adaptive_entry.jsonl",
 ]
 
 # AI-written knowledge files (not the read-only base files)
@@ -213,6 +214,38 @@ def _compute_summary(label: str, dest: Path) -> dict:
     return summary
 
 
+def _rebuild_iterations_json() -> int:
+    """Rebuild logs/iterations.json from all archive summaries.
+
+    This ensures the dashboard always reflects the latest archived iterations,
+    even when the bot isn't running. Uses the same enrichment logic as the agent.
+    """
+    from polybot.agent import TradingAgent
+
+    summaries: list[dict] = []
+    if not ARCHIVE_DIR.exists():
+        return 0
+
+    for summary_path in sorted(ARCHIVE_DIR.glob("*/summary.json")):
+        try:
+            data = json.loads(summary_path.read_text())
+            iter_dir = summary_path.parent
+            dash_path = iter_dir / "logs" / "dashboard_data.json"
+            if dash_path.exists():
+                dd = json.loads(dash_path.read_text())
+                TradingAgent._enrich_iteration_summary(data, dd, iter_dir)
+            summaries.append(data)
+        except Exception:
+            pass
+
+    if summaries:
+        iter_path = LOG_DIR / "iterations.json"
+        LOG_DIR.mkdir(parents=True, exist_ok=True)
+        iter_path.write_text(json.dumps(summaries, indent=2) + "\n")
+
+    return len(summaries)
+
+
 def _clean_working_dirs() -> None:
     """Remove generated artifacts from working directories.
 
@@ -294,6 +327,10 @@ def main() -> None:
         console.print("[green]Working directories cleaned.[/green]")
     else:
         console.print("[yellow]Skipped cleaning (--no-clean).[/yellow]")
+
+    # Rebuild iterations.json so the dashboard shows all iterations
+    iter_count = _rebuild_iterations_json()
+    console.print(f"[green]Rebuilt iterations.json with {iter_count} iterations.[/green]")
 
 
 if __name__ == "__main__":

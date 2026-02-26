@@ -921,6 +921,7 @@ class TradingAgent:
                     "btc_threshold": self._adaptive_entry.btc_threshold,
                     "max_entry_price": round(self._adaptive_entry.max_entry_price, 4),
                     "reversal_rate": round(self._adaptive_entry.rolling_reversal_rate, 4),
+                    "regime": self._adaptive_entry.regime,
                     "has_enough_history": self._adaptive_entry.has_enough_history,
                     "window_size": self._adaptive_entry._window,
                     "history_count": len(self._adaptive_entry._history),

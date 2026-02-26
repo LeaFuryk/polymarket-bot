@@ -1,11 +1,11 @@
 """Adaptive entry threshold tracker — learns optimal BTC move threshold and max entry price.
 
 Tracks rolling candle outcomes to calibrate:
-- BTC move threshold ($20/$30/$40) based on rolling reversal rate
+- BTC move threshold ($20–$50, continuous) based on rolling reversal rate
 - Max entry price cap based on recent winner ask prices
 
-When reversal rate is low (calm market), trusts earlier $20 signals.
-When reversal rate is high (choppy market), waits for $40 confirmation.
+Continuous formula: threshold = 20 + reversal_rate * 50, clamped to [20, 50].
+At 0% reversals → $20 (calm). At 40% → $40. At 60%+ → $50 cap (choppy).
 
 Data is persisted to JSONL for cross-session continuity.
 """
@@ -40,7 +40,7 @@ class CandleOutcome:
 class AdaptiveEntryTracker:
     """Learns optimal entry thresholds from rolling candle history."""
 
-    def __init__(self, data_dir: str | Path, window: int = 5) -> None:
+    def __init__(self, data_dir: str | Path, window: int = 10) -> None:
         self._data_dir = Path(data_dir)
         self._data_dir.mkdir(parents=True, exist_ok=True)
         self._data_path = self._data_dir / "adaptive_entry.jsonl"
@@ -125,13 +125,9 @@ class AdaptiveEntryTracker:
         reversals = sum(1 for c in window if c.reversed)
         reversal_rate = reversals / len(window)
 
-        # Adaptive BTC threshold
-        if reversal_rate < 0.25:
-            self.btc_threshold = 20.0  # calm market, trust early signals
-        elif reversal_rate < 0.45:
-            self.btc_threshold = 30.0  # moderate, need more confirmation
-        else:
-            self.btc_threshold = 40.0  # choppy, wait for strong signal
+        # Continuous BTC threshold: $20 at 0% reversal → $50 at 60%+ reversal
+        # Formula: 20 + (reversal_rate * 50), clamped to [20, 50]
+        self.btc_threshold = min(50.0, 20.0 + reversal_rate * 50.0)
 
         # Adaptive max entry price: avg winner ask + $0.10, capped at $0.65
         winner_asks = [c.winner_ask_at_20 for c in window if c.winner_ask_at_20 > 0]
@@ -232,6 +228,17 @@ class AdaptiveEntryTracker:
             "winner_ask@$20=$%.3f",
             slug, winner, direction_at_20, reversed_flag, winner_ask_at_20,
         )
+
+    @property
+    def regime(self) -> str:
+        """Market regime label derived from continuous reversal rate."""
+        rate = self.rolling_reversal_rate
+        if rate < 0.20:
+            return "CALM"
+        elif rate < 0.40:
+            return "MODERATE"
+        else:
+            return "CHOPPY"
 
     @property
     def rolling_reversal_rate(self) -> float:
