@@ -90,7 +90,7 @@ All tasks are `asyncio.Task` in the same event loop (no OS threads). Safe for sh
 2. **Run prefilter** — Skips AI when positioned (exits handled by PositionMonitor). For entries: checks time remaining, spread width, book depth, choppy market, entry setup
 3. **Record PreFilterSnapshot** — Per-second market state stored in a 300-entry deque (~5 min history)
 4. **Compute R/R** — Calculate risk/reward ratio for both UP and DOWN tokens
-5. **Trigger AI** — Uses adaptive entry thresholds (learned from rolling candle history) to decide when to call AI. The `AdaptiveEntryTracker` sets a BTC move threshold ($20/$30/$40) based on rolling reversal rate and caps entry price based on recent winner ask prices. Falls back to static R/R threshold when adaptive is disabled. AI cooldown (60s) still applies
+5. **Trigger AI** — Uses adaptive entry thresholds (learned from rolling candle history) to decide when to call AI. The `AdaptiveEntryTracker` computes a continuous BTC move threshold ($20–$50) from the rolling reversal rate over a 10-candle window: `threshold = 20 + reversal_rate × 50` (clamped). Also caps entry price based on recent winner ask prices. Falls back to static R/R threshold when adaptive is disabled. AI cooldown (60s) still applies
 
 ### AIDecision (event-driven)
 

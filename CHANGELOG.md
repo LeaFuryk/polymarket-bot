@@ -15,6 +15,7 @@ All notable changes to this project will be documented in this file.
 - **`ApiConfig.polymarket_rtds_url`** — Configurable RTDS WebSocket URL (default `wss://ws-live-data.polymarket.com`).
 - **Dashboard: Price source badge** — Green "CHAINLINK WS" or amber "BINANCE" badge next to BTC Price panel header showing the active price source.
 - **Anti-flip guard** — Blocks buying the opposite side after a SELL on the same candle. Prevents the whipsaw pattern where the bot sells a correct position mid-candle, flips to the opposite side, and loses on both. Same-side re-entry (adding back) is still allowed. In iter_004, two whipsaw candles cost -$104.45 combined; both would have been profitable (+$36.80) if the bot held the first trade. Estimated impact: +$80/iteration.
+- **Archive: auto-rebuild iterations.json** — The archive CLI now regenerates `logs/iterations.json` after archiving, ensuring the dashboard immediately shows the new iteration without needing to restart the bot. Previously, iterations.json was only written by the running agent, so newly archived iterations wouldn't appear until next bot startup.
 
 ### Changed
 - **All indicators now use resolution-source data** — Streak counts, candle momentum, EMA crossovers, and the AI prompt all reflect Chainlink candle direction when available, eliminating the $20-30 divergence that could flip candle direction between Binance and Chainlink.
@@ -23,6 +24,10 @@ All notable changes to this project will be documented in this file.
 - **Agent lifecycle** — `ChainlinkWSFeed` is started before the main task loop and stopped during shutdown. WebSocket runs as a background asyncio task alongside the existing 6 tasks.
 
 ### Fixed
+- **Adaptive entry: window 5→10** — Window of 5 only had 6 discrete reversal rates (0/20/40/60/80/100%), making CALM trigger with just 1 non-reversal candle. In iter_005's 43% reversal market, window=5 showed CALM 29% of the time (wrong). Window=10 gives 11 discrete levels (0%/10%/20%/…/100%) — smooth enough to avoid wild regime jumps while still adapting to recent conditions.
+- **Adaptive entry: continuous threshold** — Replaced discrete $20/$30/$40 jumps with continuous formula: `threshold = 20 + reversal_rate × 50`, clamped to [$20, $50]. Eliminates unstable regime flipping at sharp cutoff boundaries. At 40% reversals → $40 threshold (same as before), but now smoothly adapts between values.
+- **Adaptive entry: archive + clean on iteration reset** — `adaptive_entry.jsonl` is now included in the archive file list and cleaned after archiving, ensuring each new iteration starts fresh without stale market regime data.
+- **Dashboard: regime labels from continuous rate** — CALM (<20%), MODERATE (20–40%), CHOPPY (≥40%) now derived from reversal rate directly. Dashboard shows server-computed regime label with matching color thresholds.
 - **Block mid-position AI calls via prefilter** — Previously, the prefilter bypassed all checks when the bot had an open position (`has_open_position → always pass`), allowing MarketMonitor to trigger Claude every 60s while positioned. Claude would then invent its own exit rules (e.g., "down >15% with <90s = EXIT NOW") and sell at much tighter thresholds than the system's -60% stop-loss. This caused premature exits on positions that ultimately won — the iter_004 weird loss on candle 1772049300 (-$11.69) was a DOWN buy where DOWN won, but Claude panic-sold at $0.46 mid-candle. Fix: prefilter now **skips** AI when positioned, letting PositionMonitor handle all exits at the configured -60%/-80% thresholds. Estimated impact: +$20-30/iteration from avoided premature exits.
 
 ## [v0.1.0] — 2026-02-26

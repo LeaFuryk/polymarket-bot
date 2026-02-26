@@ -2062,11 +2062,11 @@ function render(d) {
   if (d.adaptive_entry) {
     const ae = d.adaptive_entry;
     const revPct = (ae.reversal_rate * 100).toFixed(0);
-    const regime = ae.btc_threshold <= 20 ? 'calm' : ae.btc_threshold >= 40 ? 'choppy' : 'moderate';
-    const regimeLabel = regime === 'calm' ? 'Calm Market' : regime === 'choppy' ? 'Choppy' : 'Moderate';
-    const threshColor = ae.btc_threshold <= 20 ? 'var(--green)' : ae.btc_threshold >= 40 ? 'var(--red)' : 'var(--amber)';
+    const regime = ae.regime || (ae.reversal_rate < 0.20 ? 'calm' : ae.reversal_rate < 0.40 ? 'moderate' : 'choppy');
+    const regimeLabel = regime === 'CALM' || regime === 'calm' ? 'Calm Market' : regime === 'CHOPPY' || regime === 'choppy' ? 'Choppy' : 'Moderate';
+    const threshColor = ae.btc_threshold <= 25 ? 'var(--green)' : ae.btc_threshold >= 40 ? 'var(--red)' : 'var(--amber)';
     const entryColor = ae.max_entry_price <= 0.45 ? 'var(--green)' : ae.max_entry_price >= 0.60 ? 'var(--red)' : 'var(--amber)';
-    const revColor = ae.reversal_rate < 0.25 ? 'var(--green)' : ae.reversal_rate >= 0.45 ? 'var(--red)' : 'var(--amber)';
+    const revColor = ae.reversal_rate < 0.20 ? 'var(--green)' : ae.reversal_rate >= 0.40 ? 'var(--red)' : 'var(--amber)';
     const histLabel = ae.has_enough_history
       ? `${ae.history_count}/${ae.window_size} candles`
       : `${Math.min(ae.history_count, ae.window_size)}/${ae.window_size} candles — using defaults`;
@@ -2086,7 +2086,7 @@ function render(d) {
       aeInner = `<div class="risk-grid">
         <div class="risk-cell" data-tip="BTC must move this much from candle open before AI is triggered. Lower = more aggressive (trusts early signals).">
           <div class="risk-lbl">BTC Threshold</div>
-          <div class="risk-val" style="color:${threshColor}">$${ae.btc_threshold.toFixed(0)}</div>
+          <div class="risk-val" style="color:${threshColor}">$${ae.btc_threshold.toFixed(0)}${ae.btc_threshold % 1 !== 0 ? ' (' + ae.btc_threshold.toFixed(1) + ')' : ''}</div>
         </div>
         <div class="risk-cell" data-tip="Maximum ask price for entry. Caps how expensive a token position can be.">
           <div class="risk-lbl">Max Entry</div>

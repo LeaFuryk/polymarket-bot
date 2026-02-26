@@ -73,7 +73,7 @@ class MonitorConfig(BaseModel):
     take_profit_pct: float = 0.50            # +50% triggers exit evaluation
     btc_price_cache_ttl: float = 2.0         # seconds (was 30s)
     adaptive_entry_enabled: bool = True      # use adaptive BTC threshold + max entry
-    adaptive_entry_window: int = 5           # rolling candle window for adaptive stats
+    adaptive_entry_window: int = 10          # rolling candle window for adaptive stats
 
 
 class LoggingConfig(BaseModel):
