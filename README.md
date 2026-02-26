@@ -12,7 +12,7 @@ An AI-powered paper trading agent that trades Polymarket BTC 5-minute candle pre
 |-----------|------------|
 | Language | Python 3.11+ |
 | AI Brain | Claude (Anthropic API) with structured JSON output |
-| Market Data | Chainlink RTDS WebSocket (primary — matches resolution), Binance BTC/USDT spot (fallback), CoinGecko (24h change), Binance 5-min OHLCV |
+| Market Data | Chainlink RTDS WebSocket (primary price + 5-min candle builder), Binance BTC/USDT spot (fallback), CoinGecko (24h change), Binance 5-min OHLCV (startup backfill) |
 | Data Models | Pydantic v2 |
 | Config | YAML + `.env` overrides |
 | Dashboard | Rich live terminal UI + standalone web dashboard |
@@ -41,7 +41,7 @@ An AI-powered paper trading agent that trades Polymarket BTC 5-minute candle pre
 | Polymarket RTDS WebSocket | None (public) | **Primary BTC price** — Chainlink Data Streams price used for resolution |
 | Chainlink BTC/USD (on-chain) | None (public RPC) | Cross-reference BTC price (fallback when WebSocket inactive) |
 | CoinGecko | None | 24h change % (convenience metric only) |
-| Binance klines | None | 5-min OHLCV candle history for micro-trend analysis; historical price fallback |
+| Binance klines | None | 5-min OHLCV candle startup backfill (~200 candles); replaced by Chainlink WS candles as they accumulate |
 | Ethereum RPC | None | Read Chainlink price feed aggregator contract |
 
 ---

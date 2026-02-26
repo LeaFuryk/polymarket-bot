@@ -61,9 +61,48 @@ class BtcPriceFeed:
 
     @property
     def candles(self) -> list[BtcCandle]:
-        """Return only completed candles (close_time in the past)."""
+        """Merged candles: Chainlink WS (preferred) + Binance backfill (older).
+
+        When a Chainlink candle exists for the same time bucket as a Binance
+        candle, the Chainlink version wins (it matches resolution source).
+        """
         now = time.time()
-        return [c for c in self._candles if c.close_time < now]
+
+        # Get Chainlink WS candles (if available)
+        chainlink_candles: list[BtcCandle] = []
+        if self._chainlink_ws is not None:
+            chainlink_candles = self._chainlink_ws.completed_candles
+
+        if not chainlink_candles:
+            # No Chainlink candles yet — pure Binance backfill
+            return [c for c in self._candles if c.close_time < now]
+
+        # Build lookup of Chainlink candles by open_time
+        cl_by_time = {c.open_time: c for c in chainlink_candles}
+
+        # Merge: for each time slot, prefer Chainlink over Binance
+        merged: list[BtcCandle] = []
+        seen_times: set[float] = set()
+
+        # Start with Binance backfill, replacing with Chainlink where available
+        for c in self._candles:
+            if c.close_time >= now:
+                continue
+            if c.open_time in cl_by_time:
+                merged.append(cl_by_time[c.open_time])
+            else:
+                merged.append(c)
+            seen_times.add(c.open_time)
+
+        # Add any Chainlink candles not in Binance history
+        for c in chainlink_candles:
+            if c.open_time not in seen_times and c.close_time < now:
+                merged.append(c)
+
+        # Sort by open_time
+        merged.sort(key=lambda c: c.open_time)
+
+        return merged[-200:]
 
     # --- 5-min candle history (Binance — for trend analysis only) ---
 
