@@ -184,6 +184,12 @@ class TradingAgent:
         # Current candle market
         self._current_market: CandleMarket | None = None
 
+        # Outage tracking
+        self._discovery_failures: int = 0
+        self._outage_start: float | None = None  # epoch when outage began
+        self._outage_recovered: float | None = None  # epoch when recovered (shown briefly)
+        self._last_outage_duration: float = 0.0  # seconds of last outage
+
         # Dashboard state
         self._last_action = "—"
         self._last_reasoning = ""
@@ -505,22 +511,62 @@ class TradingAgent:
         self._last_cycle_api_cost = self._ai_decision.last_cycle_api_cost
 
     async def _discover_market(self) -> CandleMarket | None:
-        """Discover the current candle market, handling rotation."""
+        """Discover the current candle market, handling rotation and outages."""
         new_market = await self._discovery.get_current_market()
         if new_market is None:
             new_market = await self._discovery.get_next_market()
 
         if new_market is None:
-            logger.warning("Could not discover any candle market")
+            self._discovery_failures += 1
+            if self._discovery_failures >= 3 and self._outage_start is None:
+                self._outage_start = time.time()
+                logger.warning(
+                    "Polymarket outage detected: %d consecutive discovery failures",
+                    self._discovery_failures,
+                )
+            elif self._outage_start is not None:
+                elapsed = time.time() - self._outage_start
+                if self._discovery_failures % 12 == 0:  # every ~60s
+                    logger.warning(
+                        "Polymarket outage ongoing: %.0fs elapsed (%d failures)",
+                        elapsed, self._discovery_failures,
+                    )
             return self._current_market
+
+        # Market found — clear outage state
+        recovering_from_outage = self._outage_start is not None
+        if recovering_from_outage:
+            duration = time.time() - self._outage_start
+            self._last_outage_duration = duration
+            self._outage_recovered = time.time()
+            logger.info(
+                "Polymarket outage recovered after %.0fs (%d failures)",
+                duration, self._discovery_failures,
+            )
+        self._discovery_failures = 0
+        self._outage_start = None
+        # Clear recovery banner after 60s
+        if self._outage_recovered and time.time() - self._outage_recovered > 60:
+            self._outage_recovered = None
 
         # Check if market has rotated
         if self._current_market and new_market.condition_id != self._current_market.condition_id:
-            logger.info(
-                "Market rotation: %s → %s",
-                self._current_market.slug, new_market.slug,
-            )
-            await self._handle_market_transition()
+            if recovering_from_outage:
+                # After outage: skip resolution of missed candles — just jump to new market
+                logger.info(
+                    "Post-outage recovery: skipping resolution of %s, jumping to %s",
+                    self._current_market.slug, new_market.slug,
+                )
+                # Cancel any stale orders from the pre-outage market
+                cancelled = self._orderbook.cancel_all()
+                if cancelled:
+                    logger.info("Cancelled %d stale orders from pre-outage market", cancelled)
+            else:
+                logger.info(
+                    "Market rotation: %s → %s",
+                    self._current_market.slug, new_market.slug,
+                )
+                await self._handle_market_transition()
 
         if self._current_market is None or new_market.condition_id != self._current_market.condition_id:
             self._current_market = new_market
@@ -926,6 +972,14 @@ class TradingAgent:
                     "window_size": self._adaptive_entry._window,
                     "history_count": len(self._adaptive_entry._history),
                     **self._compute_market_trend(snapshot),
+                },
+                "outage": {
+                    "is_down": self._outage_start is not None,
+                    "since": self._outage_start,
+                    "duration": (time.time() - self._outage_start) if self._outage_start else 0,
+                    "failures": self._discovery_failures,
+                    "recovered": self._outage_recovered is not None,
+                    "last_outage_duration": self._last_outage_duration,
                 },
                 "iterations": self._iteration_summaries,
             }

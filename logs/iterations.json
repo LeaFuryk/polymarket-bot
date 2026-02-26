@@ -1930,155 +1930,444 @@
         "timestamp": "2026-02-26T17:20:25.451504+00:00"
       }
     ],
-    "session_history": "# Session History\n\n| Date | Summary |\n|------|---------|\n| 2026-02-26 14:50 | First batch showed 89% win rate with strong DOWN continuation edge, capturing bearish momentum effectively with mid-candle entries |\n| 2026-02-26 15:40 | win rate declined 20% to 68% as trade volume doubled, with larger average losses and stop-loss exits at extreme prices contributing to performance degradation |\n| 2026-02-26 16:30 | win rate collapsed from 68% to 47% as loss size grew to 1.79x win size, with stop-losses triggering at -62% and increased holds at 0.50 confidence suggesting reduced directional conviction |\n| 2026-02-26 17:20 | win rate improved to 56% with better loss-to-win ratio (1.60x vs 1.79x) driven by successful large-move captures and increased hold discipline, though avg loss size grew to $24.30 |\n",
+    "session_history": "# Session History\n\n| Date | Summary |\n|------|---------|\n| 2026-02-26 14:50 | First batch showed 89% win rate with strong DOWN continuation edge, capturing bearish momentum effectively with mid-candle entries |\n| 2026-02-26 15:40 | win rate declined 20% to 68% as trade volume doubled, with larger average losses and stop-loss exits at extreme prices contributing to performance degradation |\n| 2026-02-26 16:30 | win rate collapsed from 68% to 47% as loss size grew to 1.79x win size, with stop-losses triggering at -62% and increased holds at 0.50 confidence suggesting reduced directional conviction |\n| 2026-02-26 17:20 | win rate improved to 56% with better loss-to-win ratio (1.60x vs 1.79x) driven by successful large-move captures and increased hold discipline, though avg loss size grew to $24.30 |\n"
+  },
+  {
+    "label": "iter_006",
+    "archived_at": "2026-02-26T22:16:28.902860+00:00",
+    "date_range": {
+      "start": "2026-02-26T19:28:50.045697+00:00",
+      "end": "2026-02-26T21:53:43.866219+00:00"
+    },
+    "total_candles": 31,
+    "total_trades": 29,
+    "total_cycles": 67,
+    "wins": 19,
+    "losses": 5,
+    "win_rate": 0.7916666666666666,
+    "total_pnl": 82.22713632287231,
+    "total_fees": 1.2397960129105632,
+    "ai_cost": 1.6884160000000001,
+    "net_result": 79.29892430996175,
+    "final_cash": 1079.2026747099615,
+    "final_portfolio_value": 1079.2026747099615,
+    "reflections_count": 8,
+    "enabled_indicators": [
+      "token_momentum",
+      "token_volatility",
+      "token_mean_reversion",
+      "orderbook_imbalance",
+      "spread_trend",
+      "token_price_divergence",
+      "btc_momentum",
+      "btc_volatility",
+      "btc_candle_momentum",
+      "session_streak",
+      "confidence_calibration",
+      "consecutive_streak",
+      "streak_magnitude",
+      "btc_vs_candle_open",
+      "volatility_30m",
+      "volume_trend",
+      "down_orderbook_imbalance",
+      "cross_book_flow",
+      "best_entry_analysis",
+      "chainlink_divergence",
+      "market_trend"
+    ],
     "deep_analysis": {
       "summary": {
-        "profit_factor": 1.01,
-        "avg_win": 14.36,
-        "avg_loss": -22.52,
-        "win_loss_ratio": 0.64,
-        "biggest_win": 61.13,
-        "biggest_loss": -49.03,
-        "max_drawdown": 158.03,
-        "candle_participation": "44/49 (90%)",
-        "prefilter_skip_rate": 0.719
+        "duration": "2h 25m",
+        "profit_factor": 1.92,
+        "avg_win": 9.04,
+        "avg_loss": -17.91,
+        "max_drawdown": 53.65,
+        "prefilter_skip_rate": 0.669,
+        "shadow_accuracy": 0.857,
+        "good_exit_rate": 1.0,
+        "exit_value_saved": 31.46,
+        "reversal_rate": 0.323,
+        "chainlink_candles": 2,
+        "binance_candles": 197
       },
       "loss_classifications": [
         {
-          "category": "Reversal (direction wrong)",
-          "count": 11,
-          "total_pnl": -226.83,
-          "description": "Bot picked wrong direction at entry - $20 BTC direction reversed before close"
-        },
-        {
-          "category": "Late-entry (high fill)",
-          "count": 3,
-          "total_pnl": -75.35,
-          "description": "Entries at 0.75-0.88 fill prices on wrong side"
-        },
-        {
-          "category": "Stop-loss exit (correct side)",
-          "count": 2,
-          "total_pnl": -31.71,
-          "description": "Bought correct side but stopped out early before recovery"
-        },
-        {
-          "category": "Side-flip (anti-flip failure)",
+          "type": "Chainlink Resolution Divergence",
           "count": 1,
-          "total_pnl": -49.03,
-          "description": "Sold DOWN then bought UP on same candle (1772124000) - anti-flip guard failed because AI returned wrong token_side in SELL response"
+          "total_pnl": -30.13,
+          "example": "1772140500: BTC +$194 on Binance but resolved DOWN via Chainlink"
+        },
+        {
+          "type": "Market Reversal",
+          "count": 3,
+          "total_pnl": -55.36,
+          "example": "1772135700, 1772136600, 1772139900: all position-monitored, saved $26.27"
+        },
+        {
+          "type": "Side Flip",
+          "count": 1,
+          "total_pnl": -4.08,
+          "example": "1772134200: sold DOWN, flipped to UP (correct decision, minimized loss)"
         }
       ],
-      "adaptive_entry_bug": {
-        "total_candles_observed": 125,
-        "actual_reversal_rate": 0.368,
-        "window5_calm_pct": 0.383,
-        "window5_calm_actual_reversal": 0.391,
-        "window10_calm_pct": 0.2,
-        "impact": "Window=5 classified 38% of candles as CALM despite 39% reversal rate within those candles. Window=10 reduces false-CALM by 50%."
-      },
-      "anti_flip_verification": {
-        "flips_detected": 1,
-        "flips_blocked": 0,
-        "anti_hedge_blocks": 2,
-        "root_cause": "AI returned wrong token_side in SELL response for exit trigger, causing sold_sides to track wrong side. Fix: force token_side from exit signal, don't trust AI output for exits.",
-        "impact_dollars": -49.03
-      },
-      "chainlink_ws_verification": {
-        "chainlink_candles": 0,
-        "binance_candles": 200,
-        "price_source": "binance",
-        "status": "NOT FUNCTIONAL - Chainlink WS feed produced zero candles, all data from Binance. Resolution divergences of $50-$336 observed."
-      },
-      "entry_price_buckets": [
-        {
-          "bucket": "<0.40",
-          "count": 4,
-          "win_rate": 0.25,
-          "note": "Poor - early entries on uncertain direction"
-        },
-        {
-          "bucket": "0.40-0.65",
-          "count": 18,
-          "win_rate": 0.61,
-          "note": "Sweet spot - decent win rate with favorable R/R"
-        },
-        {
-          "bucket": "0.65-0.80",
-          "count": 18,
-          "win_rate": 0.67,
-          "note": "Higher win rate but smaller profit per win"
-        },
-        {
-          "bucket": ">0.80",
-          "count": 10,
-          "win_rate": 0.78,
-          "note": "Highest win rate but net negative due to terrible R/R"
-        }
+      "what_went_well": [
+        "79.2% win rate (up from 61.4% in iter_005)",
+        "Monster $64.23 trade on $0.16 entry (76.5 shares, R/R 5.2x)",
+        "Position monitor perfect: 4/4 good exits, $31.46 saved",
+        "Counter-trend 20-share floor worked: worst DOWN loss only -$4.08",
+        "Highly selective: 29 trades on 31 candles vs iter_005's 66 on 50"
       ],
-      "confidence_calibration": [
-        {
-          "range": "60-65%",
-          "actual_win_rate": 0.6,
-          "gap": 0,
-          "assessment": "Calibrated (small sample)"
-        },
-        {
-          "range": "65-70%",
-          "actual_win_rate": 0.42,
-          "gap": -0.25,
-          "assessment": "SEVERELY OVERCONFIDENT"
-        },
-        {
-          "range": "70-75%",
-          "actual_win_rate": 0.75,
-          "gap": 0,
-          "assessment": "Well calibrated"
-        },
-        {
-          "range": "75-80%",
-          "actual_win_rate": 0.0,
-          "gap": -0.78,
-          "assessment": "Alarming (small sample)"
-        }
+      "what_went_wrong": [
+        "78% of PnL from single trade \u2014 without it, session is +$18",
+        "Chainlink WS still barely functional (2/199 candles)",
+        "Resolution divergence caused worst loss (-$30.13)",
+        "Overconfidence at 70-75% bucket (66.7% actual vs 100% at 60-65%)",
+        "Polymarket outage cost 3 trading candles (~13 min downtime)"
       ],
-      "actionable_improvements": [
+      "fixes_verified": {
+        "adaptive_entry_window_10": "Working \u2014 smooth regime detection, no wild CALM/CHOPPY jumps",
+        "continuous_threshold": "Working \u2014 threshold reached $50 at 60% reversal rate",
+        "forced_token_side": "Working \u2014 all exits had correct token_side",
+        "counter_trend_floor_20": "Working \u2014 DOWN trades capped at 20 shares, limited downside",
+        "anti_flip_guard": "Mostly working \u2014 1 flip occurred (1772134200) but was correct decision"
+      }
+    },
+    "calibration": {
+      "total_records": 24,
+      "shadow_accuracy": 0.857,
+      "shadow_total": 28,
+      "bins": [
         {
-          "priority": 1,
-          "fix": "Adaptive entry window 5\u219210 + continuous threshold",
-          "impact": "+$50 from preventing false-CALM entries",
-          "badge": "LOSS FIX",
-          "status": "DONE"
+          "range": "55%-60%",
+          "wins": 1,
+          "losses": 0,
+          "win_rate": 1.0,
+          "reliable": false
         },
         {
-          "priority": 2,
-          "fix": "Force token_side in exit trigger SELL decisions",
-          "impact": "+$49 from preventing side-flip on candle 1772124000",
-          "badge": "LOSS FIX",
-          "status": "TODO"
+          "range": "60%-65%",
+          "wins": 5,
+          "losses": 0,
+          "win_rate": 1.0,
+          "reliable": false
         },
         {
-          "priority": 3,
-          "fix": "Block counter-trend UP buys when trend < -0.60",
-          "impact": "+$100-150 from preventing 5-8 counter-trend losses",
-          "badge": "LOSS FIX",
-          "status": "TODO"
+          "range": "65%-70%",
+          "wins": 7,
+          "losses": 1,
+          "win_rate": 0.875,
+          "reliable": false
         },
         {
-          "priority": 4,
-          "fix": "Fix Chainlink WS feed connectivity",
-          "impact": "Eliminate $50-336 resolution divergences",
-          "badge": "WIN BOOST",
-          "status": "TODO"
+          "range": "70%-75%",
+          "wins": 6,
+          "losses": 3,
+          "win_rate": 0.667,
+          "reliable": false
         },
         {
-          "priority": 5,
-          "fix": "Recalibrate 65-70% confidence band or raise min confidence",
-          "impact": "Avoid 7 losses from overconfident 65-70% calls",
-          "badge": "LOSS FIX",
-          "status": "TODO"
+          "range": "75%-80%",
+          "wins": 1,
+          "losses": 0,
+          "win_rate": 1.0,
+          "reliable": false
         }
       ]
-    }
+    },
+    "exit_analysis": {
+      "total_exits": 4,
+      "good_exit_rate": 1.0,
+      "good_exits": 4,
+      "total_saved": 31.4626,
+      "total_missed": 0.0
+    },
+    "ml_model": {
+      "training_samples": 29,
+      "model_trained": true
+    },
+    "trade_analysis": {
+      "total_buys": 25,
+      "total_sells": 4,
+      "total_holds": 38,
+      "avg_fill_price": 0.7522,
+      "cheap_entries": 1,
+      "mid_entries": 0,
+      "expensive_entries": 24,
+      "avg_confidence": 0.6876,
+      "hold_rate": 0.567
+    },
+    "resolution_analysis": {
+      "total": 31,
+      "avg_btc_move": 75.5,
+      "max_btc_move": 248.9,
+      "avg_win_pnl": 9.0412,
+      "avg_loss_pnl": -17.9112,
+      "biggest_win": 64.2292,
+      "biggest_loss": -30.1291,
+      "cumulative_pnl": [
+        0.778,
+        -3.2994,
+        0.0847,
+        5.8719,
+        18.2355,
+        33.1256,
+        13.8798,
+        18.2258,
+        18.2258,
+        0.5682,
+        6.1179,
+        9.3017,
+        9.3017,
+        14.0879,
+        18.8737,
+        26.8263,
+        29.8069,
+        34.192,
+        46.1527,
+        110.3819,
+        91.9356,
+        61.8066,
+        68.9316,
+        68.9316,
+        71.5115,
+        73.4862,
+        73.4862,
+        82.2271,
+        82.2271,
+        82.2271,
+        82.2271
+      ]
+    },
+    "resolutions_detail": [
+      {
+        "slug": "btc-updown-5m-1772133900",
+        "pnl": 0.7779948816701463,
+        "btc_move": -97.30000000000291,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772134200",
+        "pnl": -4.077400892319634,
+        "btc_move": 116.08999999999651,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772134500",
+        "pnl": 3.384144491167227,
+        "btc_move": -164.92999999999302,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772134800",
+        "pnl": 5.7872015864999184,
+        "btc_move": -24.610000000000582,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772135100",
+        "pnl": 12.363517001752665,
+        "btc_move": 20.44000000000233,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772135400",
+        "pnl": 14.890182745846584,
+        "btc_move": 75.01999999998952,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772135700",
+        "pnl": -19.245793748044647,
+        "btc_move": -7.389999999999418,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772136000",
+        "pnl": 4.345929607442997,
+        "btc_move": 187.19000000000233,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772136300",
+        "pnl": 0.0,
+        "btc_move": -61.520000000004075,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772136600",
+        "pnl": -17.65757911288634,
+        "btc_move": -19.419999999998254,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772136900",
+        "pnl": 5.549675836371591,
+        "btc_move": 39.48999999999069,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772137200",
+        "pnl": 3.183784186402523,
+        "btc_move": -134.80999999999767,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772137500",
+        "pnl": 0.0,
+        "btc_move": -64.13000000000466,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772137800",
+        "pnl": 4.786250047836514,
+        "btc_move": -18.619999999995343,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772138100",
+        "pnl": 4.785841164048396,
+        "btc_move": -149.17999999999302,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772138400",
+        "pnl": 7.952539899061641,
+        "btc_move": 50.55000000000291,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772138700",
+        "pnl": 2.9806191066525436,
+        "btc_move": -18.210000000006403,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772139000",
+        "pnl": 4.385129870661954,
+        "btc_move": -56.18000000000757,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772139300",
+        "pnl": 11.960635917218418,
+        "btc_move": -15.989999999990687,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772139600",
+        "pnl": 64.22923312013256,
+        "btc_move": 110.25999999999476,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772139900",
+        "pnl": -18.44627029441228,
+        "btc_move": -248.89999999999418,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772140500",
+        "pnl": -30.129080151907925,
+        "btc_move": 194.1600000000035,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772140800",
+        "pnl": 7.1250570860093205,
+        "btc_move": 43.54000000000815,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772141100",
+        "pnl": 0.0,
+        "btc_move": 91.56999999999243,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772141400",
+        "pnl": 2.5798384136696164,
+        "btc_move": -25.330000000001746,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772141700",
+        "pnl": 1.9747441329414919,
+        "btc_move": -54.86999999999534,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772142000",
+        "pnl": 0.0,
+        "btc_move": 28.029999999998836,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772142300",
+        "pnl": 8.740941427057027,
+        "btc_move": 141.1913445113314,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772142600",
+        "pnl": 0.0,
+        "btc_move": -67.58000000000175,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772143500",
+        "pnl": 0.0,
+        "btc_move": 13.430000000007567,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772143800",
+        "pnl": 0.0,
+        "btc_move": 0.0,
+        "resolution": ""
+      }
+    ],
+    "observations": [
+      {
+        "category": "edge",
+        "text": "large BTC moves above $100 (cycles 27, 36, 39, 41, 45) produced 5/5 winning trades with average profit of +$18.56, including one exceptional +$64.23 win on a +$110 move entered at 0.1604 fill price",
+        "timestamp": "2026-02-26T21:05:19.704898+00:00"
+      },
+      {
+        "category": "pattern",
+        "text": "DOWN trades at fill prices below 0.77 (cycles 33, 35, 41) won 3/3 times with profits ranging from +$2.98 to +$4.79, while DOWN entries above 0.84 (cycles 29, 39) showed mixed results with one large loss of -$17.66",
+        "timestamp": "2026-02-26T21:05:19.705351+00:00"
+      },
+      {
+        "category": "edge",
+        "text": "UP trades entered at fill prices below 0.71 (cycles 37, 43, 45) won 3/3 times with profits of +$7.95, +$11.96, and +$64.23, contrasting with previous batch's poor UP performance at higher fill prices",
+        "timestamp": "2026-02-26T21:05:19.705614+00:00"
+      },
+      {
+        "category": "bias",
+        "text": "the two largest losses in this batch (cycles 50: -$18.45, 51: -$30.13) both occurred when BTC moved against the position direction after entry, with cycle 51 showing a -$194 reversal (opened $67156, closed $67350) despite entering DOWN",
+        "timestamp": "2026-02-26T22:07:04.004355+00:00"
+      },
+      {
+        "category": "edge",
+        "text": "the exceptional +$64.23 win (cycle 49) came from an UP entry at 0.1604 fill price on a +$110 BTC move, representing the lowest fill price in the batch and capturing a $249 total move from $67317 to $67427",
+        "timestamp": "2026-02-26T22:07:04.004835+00:00"
+      },
+      {
+        "category": "pattern",
+        "text": "hold rate increased from 10% to 25% (5 holds out of 20 resolutions), with 4 of the 5 holds occurring in cycles 56-59 and 64-65 when already holding positions, suggesting the anti-hedge logic is now more actively preventing new entries",
+        "timestamp": "2026-02-26T22:07:04.004975+00:00"
+      },
+      {
+        "category": "pattern",
+        "text": "small BTC moves under $30 (cycles 47: $19 down, 55: $26 down, 56: $28 up, 58: $43 up) produced 4/4 winning trades with modest profits averaging +$3.83, contrasting with the previous observation about small moves causing large losses",
+        "timestamp": "2026-02-26T22:07:04.005087+00:00"
+      },
+      {
+        "category": "edge",
+        "text": "DOWN trades in cycles 60 and 62 both entered at fill prices above 0.87 (0.8710 and 0.9013) and won with profits of +$2.58 and +$1.97, showing successful entries at higher fill prices when BTC momentum was strong (-$63 and -$57 moves)",
+        "timestamp": "2026-02-26T22:07:04.005192+00:00"
+      }
+    ],
+    "session_history": "# Session History\n\n| Date | Summary |\n|------|---------|\n| 2026-02-26 20:15 | First batch: 67% win rate but two large stop-losses on late UP entries eroded gains from successful early DOWN trades |\n| 2026-02-26 21:05 | win rate jumped to 83% with +$6.13 average PnL driven by better UP trade selection at lower fill prices and strong performance on large BTC moves above $100 |\n| 2026-02-26 22:07 | win rate improved to 87% with increased hold rate (25%) as anti-hedge logic activated more frequently, but average PnL declined due to two large reversal losses offsetting one exceptional +$64 win |\n"
   }
 ]

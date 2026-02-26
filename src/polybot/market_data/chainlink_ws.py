@@ -47,6 +47,7 @@ class ChainlinkWSFeed:
         self._completed_candles: list[BtcCandle] = []  # completed 5-min candles (max 200)
         self._current_bucket: dict | None = None  # in-progress candle accumulator
         self._msg_count: int = 0  # for debug logging first few messages
+        self._last_msg_time: float = 0.0  # for staleness watchdog
 
     @property
     def price(self) -> float | None:
@@ -122,12 +123,15 @@ class ChainlinkWSFeed:
             logger.info("Chainlink WS: subscribed to btc/usd")
             self._connected = True
             self._msg_count = 0  # reset to log first messages after reconnect
+            self._last_msg_time = time.time()
 
-            # Start keepalive ping loop
+            # Start keepalive ping loop and staleness watchdog
             ping_task = asyncio.create_task(self._ping_loop(ws))
+            watchdog_task = asyncio.create_task(self._staleness_watchdog(ws))
 
             try:
                 async for raw_msg in ws:
+                    self._last_msg_time = time.time()
                     if not raw_msg or not raw_msg.strip():
                         continue  # skip empty keepalive frames
                     try:
@@ -137,10 +141,12 @@ class ChainlinkWSFeed:
                         logger.debug("Chainlink WS: unparseable message: %s", str(raw_msg)[:200])
             finally:
                 ping_task.cancel()
-                try:
-                    await ping_task
-                except asyncio.CancelledError:
-                    pass
+                watchdog_task.cancel()
+                for t in (ping_task, watchdog_task):
+                    try:
+                        await t
+                    except asyncio.CancelledError:
+                        pass
 
     async def _ping_loop(self, ws) -> None:
         """Send PING frames every 5s to keep the connection alive."""
@@ -148,6 +154,27 @@ class ChainlinkWSFeed:
             while True:
                 await asyncio.sleep(_PING_INTERVAL)
                 await ws.ping()
+        except asyncio.CancelledError:
+            pass
+
+    async def _staleness_watchdog(self, ws) -> None:
+        """Force-close the WebSocket if no messages arrive for >30s.
+
+        The RTDS sends ticks every ~1s. If nothing arrives for 30s the
+        connection is silently dead — `async for raw_msg in ws` will hang
+        forever. This watchdog breaks the deadlock so the reconnect loop fires.
+        """
+        try:
+            while True:
+                await asyncio.sleep(10.0)
+                silence = time.time() - self._last_msg_time
+                if silence > _STALE_THRESHOLD:
+                    logger.warning(
+                        "Chainlink WS: no messages for %.0fs — forcing reconnect",
+                        silence,
+                    )
+                    await ws.close()
+                    return
         except asyncio.CancelledError:
             pass
 
