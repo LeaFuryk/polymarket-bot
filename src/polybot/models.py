@@ -67,7 +67,7 @@ class BtcPrice(BaseModel):
 
 
 class BtcCandle(BaseModel):
-    """A single 5-minute OHLCV candle from Binance."""
+    """A single 5-minute OHLCV candle."""
 
     open_time: float
     open: float
@@ -76,6 +76,7 @@ class BtcCandle(BaseModel):
     close: float
     volume: float
     close_time: float
+    source: str = "binance"  # "binance" | "chainlink_ws"
 
     @property
     def direction(self) -> str:

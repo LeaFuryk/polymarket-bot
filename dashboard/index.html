@@ -1906,6 +1906,7 @@ function render(d) {
       <div class="btc-price">${b.price_usd ? '$' + Number(b.price_usd).toLocaleString(undefined, {maximumFractionDigits:0}) : '--'}</div>
       <span class="btc-badge ${chCls}">${chSign}${fmtNum(b.change_24h_pct, 2)}% 24h</span>
       <div class="btc-candle-dir">Last candle: ${(b.last_candle_direction || '--').toUpperCase()}</div>
+      ${b.candle_sources ? `<div style="font-size:0.68rem;color:var(--text-muted);margin-top:0.15rem">Candles: <span style="color:var(--green)">${b.candle_sources.chainlink}</span> chainlink / <span style="color:var(--text-secondary)">${b.candle_sources.binance}</span> binance</div>` : ''}
       ${clPrice ? `<div style="margin-top:0.4rem;padding-top:0.35rem;border-top:1px solid var(--border-subtle);font-size:0.73rem">
         <span style="color:var(--text-muted)">Chainlink:</span> <span style="color:var(--text-secondary)">${clPrice}</span>
         ${divAbs != null ? `<span style="color:${divWarn ? 'var(--amber)' : 'var(--text-muted)'};margin-left:0.4rem" data-tip="Divergence between Binance and Chainlink prices. >$50 = resolution risk since Polymarket resolves via Chainlink.">${divWarn ? '⚠ ' : ''}$${fmtNum(divAbs, 0)} div</span>` : ''}
