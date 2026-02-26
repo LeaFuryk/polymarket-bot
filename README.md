@@ -127,6 +127,14 @@ When a 5-minute candle expires and a new one begins:
 - Every 10 resolutions → **reflection** is triggered
 - Resolution counter is persisted to `logs/agent_state.json` so it survives restarts
 
+### Outage Detection & Recovery
+
+The bot monitors Polymarket Gamma API availability and handles outages gracefully:
+- **Detection**: 3+ consecutive market discovery failures trigger outage state
+- **During outage**: Trading paused, structured warnings logged every 60s with duration, dashboard shows red outage banner with elapsed time
+- **Recovery**: When markets return, missed candles are skipped (no stale resolution), pre-outage orders cancelled, clean restart with next live market
+- **Dashboard**: Real-time outage/recovery banners with duration tracking
+
 ### Pending Bet Recovery on Startup
 
 If the bot crashes or is stopped mid-candle, trades may be logged without a matching resolution. On restart, the bot automatically detects and resolves these:

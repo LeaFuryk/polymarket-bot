@@ -316,6 +316,35 @@ body::after {
 .status-dot.live { background: var(--green); box-shadow: 0 0 6px var(--green-mid); animation: blink 2s ease-in-out infinite; }
 .status-dot.stale { background: var(--red); }
 
+/* ═══ OUTAGE BANNER ═══ */
+.outage-banner {
+  display: none;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.65rem 1rem;
+  margin-bottom: 1rem;
+  border-radius: var(--radius);
+  font-family: var(--mono);
+  font-size: 0.82rem;
+  animation: blink 1.5s ease-in-out infinite;
+}
+.outage-banner.active {
+  display: flex;
+  background: var(--red-soft);
+  border: 1px solid #ef444430;
+  color: var(--red);
+}
+.outage-banner.recovered {
+  display: flex;
+  background: var(--green-soft);
+  border: 1px solid #22c55e30;
+  color: var(--green);
+  animation: none;
+}
+.outage-banner .outage-icon { font-size: 1.1rem; }
+.outage-banner .outage-text { flex: 1; }
+.outage-banner .outage-duration { font-weight: 600; }
+
 /* ═══ METRICS ROW ═══ */
 .metrics-row {
   display: grid;
@@ -1304,6 +1333,13 @@ body::after {
       </div>
     </div>
 
+    <!-- Outage Banner -->
+    <div class="outage-banner" id="outageBanner">
+      <span class="outage-icon" id="outageIcon"></span>
+      <span class="outage-text" id="outageText"></span>
+      <span class="outage-duration" id="outageDuration"></span>
+    </div>
+
     <!-- Metrics Row -->
     <div class="metrics-row" id="metricsRow"></div>
 
@@ -1691,6 +1727,7 @@ async function fetchData() {
     renderSidebar(data);
     render(data);
     updateStatus(true, data.updated_at);
+    updateOutageBanner(data.outage);
   } else {
     // Nothing available at all
     if (_iterationData?.length) {
@@ -1722,6 +1759,30 @@ function updateStatus(ok, at) {
   }
 }
 
+function updateOutageBanner(outage) {
+  const banner = $('outageBanner');
+  if (!outage) { banner.className = 'outage-banner'; return; }
+
+  if (outage.is_down) {
+    banner.className = 'outage-banner active';
+    $('outageIcon').textContent = '\u26A0';
+    $('outageText').textContent = 'Polymarket markets unavailable — discovery failing';
+    const mins = Math.floor(outage.duration / 60);
+    const secs = Math.floor(outage.duration % 60);
+    $('outageDuration').textContent = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
+  } else if (outage.recovered) {
+    banner.className = 'outage-banner recovered';
+    $('outageIcon').textContent = '\u2713';
+    const dur = Math.floor(outage.last_outage_duration);
+    const mins = Math.floor(dur / 60);
+    const secs = dur % 60;
+    $('outageText').textContent = 'Markets recovered';
+    $('outageDuration').textContent = mins > 0 ? `after ${mins}m ${secs}s` : `after ${secs}s`;
+  } else {
+    banner.className = 'outage-banner';
+  }
+}
+
 // ── Main render ──
 function render(d) {
   // Iteration detail view
@@ -1736,7 +1797,15 @@ function render(d) {
       $('viewSub').textContent = 'Iteration Analysis';
       $('metricsRow').innerHTML = '';
       $('liveRow').innerHTML = '';
-      $('contentGrid').innerHTML = renderIterationView(it, prev, next);
+      try {
+        $('contentGrid').innerHTML = renderIterationView(it, prev, next);
+      } catch (e) {
+        console.error('Iteration render error:', e);
+        $('contentGrid').innerHTML = `<div class="panel panel-full" style="padding:2rem;text-align:center">
+          <div style="color:var(--red);font-size:0.9rem;margin-bottom:0.5rem">Render Error</div>
+          <div style="color:var(--text-secondary);font-size:0.75rem">${esc(e.message)}</div>
+        </div>`;
+      }
       return;
     }
   }
@@ -2370,20 +2439,47 @@ function renderIterationView(it, prev, next) {
 }
 
 function buildDeepAnalysisSection(da) {
+  try { return _buildDeepAnalysisInner(da); } catch (e) {
+    console.error('Deep analysis render error:', e);
+    return `<div class="iv-section iv-full"><div class="iv-section-title">Deep Analysis</div>
+      <div style="color:var(--text-secondary);font-size:0.8rem;padding:1rem">Analysis data format error. Check console.</div></div>`;
+  }
+}
+
+function _buildDeepAnalysisInner(da) {
+  const s = da.summary || {};
+  const f = (v, d=0) => v != null ? (typeof v === 'number' ? v.toFixed(d) : v) : '--';
   let h = '';
 
   // ── Summary Banner ──
   h += `<div class="iv-section iv-full" style="margin-bottom:0.75rem">
     <div class="iv-section-title">Deep Analysis</div>
     <div style="display:flex;gap:1.2rem;flex-wrap:wrap;margin-bottom:0.75rem">
-      <div class="da-stat"><span class="da-stat-label">Profit Factor</span><span class="da-stat-val v-green">${da.summary.profit_factor}x</span></div>
-      <div class="da-stat"><span class="da-stat-label">Winner PnL</span><span class="da-stat-val v-green">+$${da.summary.total_winner_pnl.toFixed(0)}</span></div>
-      <div class="da-stat"><span class="da-stat-label">Loser PnL</span><span class="da-stat-val v-red">-$${Math.abs(da.summary.total_loser_pnl).toFixed(0)}</span></div>
-      <div class="da-stat"><span class="da-stat-label">Avg Win</span><span class="da-stat-val v-green">+$${da.summary.avg_winning_trade.toFixed(2)}</span></div>
-      <div class="da-stat"><span class="da-stat-label">Avg Loss</span><span class="da-stat-val v-red">-$${Math.abs(da.summary.avg_losing_trade).toFixed(2)}</span></div>
-      <div class="da-stat"><span class="da-stat-label">Best Trade</span><span class="da-stat-val v-green">+$${da.summary.best_trade.toFixed(2)}</span></div>
-      <div class="da-stat"><span class="da-stat-label">Worst Trade</span><span class="da-stat-val v-red">-$${Math.abs(da.summary.worst_trade).toFixed(2)}</span></div>
-    </div>
+      <div class="da-stat"><span class="da-stat-label">Profit Factor</span><span class="da-stat-val v-green">${f(s.profit_factor, 2)}x</span></div>`;
+
+  // Support both field name conventions (iter_004 vs iter_006+)
+  const winPnl = s.total_winner_pnl ?? s.total_winner_pnl;
+  const losePnl = s.total_loser_pnl ?? s.total_loser_pnl;
+  const avgWin = s.avg_winning_trade ?? s.avg_win;
+  const avgLoss = s.avg_losing_trade ?? s.avg_loss;
+  const best = s.best_trade;
+  const worst = s.worst_trade;
+
+  if (winPnl != null) h += `<div class="da-stat"><span class="da-stat-label">Winner PnL</span><span class="da-stat-val v-green">+$${f(winPnl, 0)}</span></div>`;
+  if (losePnl != null) h += `<div class="da-stat"><span class="da-stat-label">Loser PnL</span><span class="da-stat-val v-red">-$${f(Math.abs(losePnl), 0)}</span></div>`;
+  if (avgWin != null) h += `<div class="da-stat"><span class="da-stat-label">Avg Win</span><span class="da-stat-val v-green">+$${f(avgWin, 2)}</span></div>`;
+  if (avgLoss != null) h += `<div class="da-stat"><span class="da-stat-label">Avg Loss</span><span class="da-stat-val v-red">-$${f(Math.abs(avgLoss), 2)}</span></div>`;
+  if (best != null) h += `<div class="da-stat"><span class="da-stat-label">Best Trade</span><span class="da-stat-val v-green">+$${f(best, 2)}</span></div>`;
+  if (worst != null) h += `<div class="da-stat"><span class="da-stat-label">Worst Trade</span><span class="da-stat-val v-red">-$${f(Math.abs(worst), 2)}</span></div>`;
+
+  // Iter_006+ style extra stats
+  if (s.shadow_accuracy != null) h += `<div class="da-stat"><span class="da-stat-label">Shadow Accuracy</span><span class="da-stat-val">${f(s.shadow_accuracy * 100, 1)}%</span></div>`;
+  if (s.good_exit_rate != null) h += `<div class="da-stat"><span class="da-stat-label">Good Exit Rate</span><span class="da-stat-val">${f(s.good_exit_rate * 100, 0)}%</span></div>`;
+  if (s.exit_value_saved != null) h += `<div class="da-stat"><span class="da-stat-label">Exit Value Saved</span><span class="da-stat-val v-green">+$${f(s.exit_value_saved, 2)}</span></div>`;
+  if (s.reversal_rate != null) h += `<div class="da-stat"><span class="da-stat-label">Reversal Rate</span><span class="da-stat-val v-amber">${f(s.reversal_rate * 100, 1)}%</span></div>`;
+  if (s.max_drawdown != null) h += `<div class="da-stat"><span class="da-stat-label">Max Drawdown</span><span class="da-stat-val v-red">$${f(s.max_drawdown, 2)}</span></div>`;
+
+  h += `</div>
   </div>`;
 
   h += `<div class="iv-grid">`;
@@ -2402,7 +2498,7 @@ function buildDeepAnalysisSection(da) {
         <div style="height:4px;background:var(--bg-inset);border-radius:2px;overflow:hidden">
           <div style="height:100%;width:${barW}%;background:var(--red);border-radius:2px"></div>
         </div>
-        <div style="font-size:0.55rem;color:var(--text-muted);margin-top:0.1rem">${esc(lc.description)}</div>
+        <div style="font-size:0.55rem;color:var(--text-muted);margin-top:0.1rem">${esc(lc.description || lc.example || '')}</div>
       </div>`;
     }
     h += `</div>`;
@@ -2505,6 +2601,45 @@ function buildDeepAnalysisSection(da) {
       </div>`;
     }
     h += `</div>`;
+  }
+
+  // ── What Went Well / Wrong (full-width, iter_006+ format) ──
+  if (da.what_went_well?.length || da.what_went_wrong?.length) {
+    h += `<div class="iv-section iv-full" style="margin-top:0.75rem">
+      <div class="iv-section-title">Key Findings</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">`;
+    if (da.what_went_well?.length) {
+      h += `<div>
+        <div style="font-size:0.65rem;font-weight:600;color:var(--green);margin-bottom:0.35rem">What Went Well</div>`;
+      for (const item of da.what_went_well) {
+        h += `<div style="font-size:0.65rem;color:var(--text-secondary);margin-bottom:0.25rem;padding-left:0.5rem;border-left:2px solid var(--green)">${esc(item)}</div>`;
+      }
+      h += `</div>`;
+    }
+    if (da.what_went_wrong?.length) {
+      h += `<div>
+        <div style="font-size:0.65rem;font-weight:600;color:var(--red);margin-bottom:0.35rem">What Went Wrong</div>`;
+      for (const item of da.what_went_wrong) {
+        h += `<div style="font-size:0.65rem;color:var(--text-secondary);margin-bottom:0.25rem;padding-left:0.5rem;border-left:2px solid var(--red)">${esc(item)}</div>`;
+      }
+      h += `</div>`;
+    }
+    h += `</div></div>`;
+  }
+
+  // ── Fixes Verified (full-width, iter_006+ format) ──
+  if (da.fixes_verified && Object.keys(da.fixes_verified).length) {
+    h += `<div class="iv-section iv-full" style="margin-top:0.75rem">
+      <div class="iv-section-title">Fixes Verified</div>
+      <div style="display:flex;flex-direction:column;gap:0.3rem">`;
+    for (const [fix, status] of Object.entries(da.fixes_verified)) {
+      const isOk = String(status).toLowerCase().startsWith('working');
+      h += `<div style="display:flex;align-items:center;gap:0.5rem;padding:0.3rem 0.5rem;background:var(--bg-inset);border-radius:var(--radius-sm);border-left:3px solid ${isOk ? 'var(--green)' : 'var(--amber)'}">
+        <span style="font-size:0.65rem;font-weight:600;color:var(--text-primary)">${esc(fix.replace(/_/g, ' '))}</span>
+        <span style="flex:1;font-size:0.6rem;color:var(--text-secondary)">${esc(String(status))}</span>
+      </div>`;
+    }
+    h += `</div></div>`;
   }
 
   // ── Actionable Fixes (full-width) ──

@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v0.4.0] — 2026-02-26
+
+### Added
+- **Polymarket outage detection and recovery** — The bot now detects when the Gamma API becomes unavailable (3+ consecutive discovery failures). During an outage: logs structured warnings with duration/failure count, pauses trading (no stale market data used), and reports outage status to the dashboard. On recovery: skips resolution of missed candles (stale token IDs would be wrong), cancels any pre-outage orders, and cleanly resumes with the next live market. In iter_006, the Polymarket API went down for ~13 minutes (129 failures) — the bot kept running but couldn't trade. This feature ensures it handles that gracefully.
+- **Dashboard outage banner** — A prominent banner appears at the top of the dashboard during outages (red, blinking) showing "Polymarket markets unavailable" with elapsed time. When markets recover, a green banner briefly shows "Markets recovered after Xm Ys". Auto-hides after 60 seconds.
+
+### Fixed
+- **Chainlink WS staleness watchdog** — The WebSocket connection would silently die without triggering the reconnect loop. In iter_006, this caused a 2-hour gap (16:49→18:49) where the WS hung on `async for raw_msg` with no data flowing, producing only 2 candles in 2.5 hours. Fix: a watchdog task checks every 10s if no message has arrived in 30s, and force-closes the connection so the reconnect loop fires immediately. Expected result: continuous Chainlink data instead of 2-hour dead zones.
+- **Dashboard iteration detail view crash** — The `buildDeepAnalysisSection` function crashed on iterations with different deep_analysis field names (e.g., `avg_win` vs `avg_winning_trade`), causing the entire iteration view to show "No trades yet". Fix: wrapped in try-catch with field name fallbacks, added support for iter_006+ analysis format (what_went_well/wrong, fixes_verified sections).
+
 ## [v0.3.0] — 2026-02-26
 
 ### Fixed
