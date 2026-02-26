@@ -98,6 +98,9 @@ class AIDecision:
         self._session_trades = session_trades
         self._pending_ml_features = pending_ml_features
 
+        # Track sold sides per candle to block side-flips (sell A → buy B)
+        self._sold_sides: dict[str, set[str]] = {}  # slug → {UP, DOWN}
+
         # Internal counters (synced to agent via shared references)
         self._cycle_count = 0
         self._total_api_cost: float = 0.0
@@ -488,6 +491,28 @@ class AIDecision:
                     confidence_drivers=decision.confidence_drivers,
                 )
 
+        # Anti-flip guard: block buying opposite side after selling on same candle
+        # Same-side re-entry (adding back) is still allowed
+        if decision.action == Action.BUY and market:
+            sold = self._sold_sides.get(market.slug, set())
+            opposite = "UP" if decision.token_side == TokenSide.DOWN else "DOWN"
+            if opposite in sold:
+                logger.info(
+                    "Anti-flip block: already sold %s on %s, blocking %s buy",
+                    opposite, market.slug, decision.token_side.value,
+                )
+                decision = TradingDecision(
+                    action=Action.HOLD,
+                    order_type=OrderType.MARKET,
+                    size=0.0,
+                    confidence=decision.confidence,
+                    reasoning=f"Anti-flip: sold {opposite} on this candle, blocked {decision.token_side.value} buy. Original: {decision.reasoning[:80]}",
+                    market_view=decision.market_view,
+                    token_side=decision.token_side,
+                    hypothetical_direction=decision.hypothetical_direction,
+                    confidence_drivers=decision.confidence_drivers,
+                )
+
         # Extended R/R position sizing (no hard block)
         if decision.action == Action.BUY:
             target_ob = down_ob if decision.token_side == TokenSide.DOWN else up_ob
@@ -650,6 +675,10 @@ class AIDecision:
                     exit_price=fill.fill_price,
                     exit_size=fill.size,
                     time_remaining=time_remaining,
+                )
+                # Track sold side to block side-flips on this candle
+                self._sold_sides.setdefault(market.slug, set()).add(
+                    decision.token_side.value,
                 )
 
         # Post-fill mark-to-market

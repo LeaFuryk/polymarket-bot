@@ -4,6 +4,9 @@ All notable changes to this project will be documented in this file.
 
 ## [v0.2.0] — 2026-02-26
 
+### Added
+- **Anti-flip guard** — Blocks buying the opposite side after a SELL on the same candle. Prevents the whipsaw pattern where the bot sells a correct position mid-candle, flips to the opposite side, and loses on both. Same-side re-entry (adding back) is still allowed. In iter_004, two whipsaw candles cost -$104.45 combined; both would have been profitable (+$36.80) if the bot held the first trade. Estimated impact: +$80/iteration.
+
 ### Fixed
 - **Block mid-position AI calls via prefilter** — Previously, the prefilter bypassed all checks when the bot had an open position (`has_open_position → always pass`), allowing MarketMonitor to trigger Claude every 60s while positioned. Claude would then invent its own exit rules (e.g., "down >15% with <90s = EXIT NOW") and sell at much tighter thresholds than the system's -60% stop-loss. This caused premature exits on positions that ultimately won — the iter_004 weird loss on candle 1772049300 (-$11.69) was a DOWN buy where DOWN won, but Claude panic-sold at $0.46 mid-candle. Fix: prefilter now **skips** AI when positioned, letting PositionMonitor handle all exits at the configured -60%/-80% thresholds. Estimated impact: +$20-30/iteration from avoided premature exits.
 
