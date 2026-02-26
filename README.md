@@ -102,6 +102,7 @@ Waits for entry triggers (from MarketMonitor) or exit triggers (from PositionMon
 5. **Confidence gate** — Override BUY to HOLD if confidence < 0.55
 6. **Calibration gate** — Override BUY to HOLD if calibrated win rate < break-even
 7. **Anti-hedge guard** — Blocks BUY if opposite side has shares
+7b. **Anti-flip guard** — Blocks buying the opposite side after a SELL on the same candle (prevents whipsaw). Same-side re-entry allowed
 8. **Position sizing** — Flattened R/R scale: 100% at R/R >= 2.0, 80% at 1.0, 55% at 0.5, 20% minimum. Multiplied by BTC move magnitude scaling (80%/90%/100%). Minimum 40 shares enforced
 8. **Post-trade risk checks** — Position size, concentration, cash, spread (BUY only)
 9. **Execute + log** — Simulate fill, update portfolio, write TradeRecord
