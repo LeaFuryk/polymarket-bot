@@ -23,6 +23,7 @@ class ApiConfig(BaseModel):
     polymarket_ws_url: str = "wss://ws-subscriptions-clob.polymarket.com/ws/market"
     ethereum_rpc_url: str = "https://ethereum.publicnode.com"
     chainlink_btcusd_address: str = "0xF4030086522a5bEEa4988F8cA5B36dbC97BeE88c"
+    polymarket_rtds_url: str = "wss://ws-live-data.polymarket.com"
 
 
 class AgentConfig(BaseModel):

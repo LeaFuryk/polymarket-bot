@@ -12,7 +12,7 @@ An AI-powered paper trading agent that trades Polymarket BTC 5-minute candle pre
 |-----------|------------|
 | Language | Python 3.11+ |
 | AI Brain | Claude (Anthropic API) with structured JSON output |
-| Market Data | Binance BTC/USDT spot (primary), Chainlink on-chain (cross-ref), CoinGecko (24h change), Binance 5-min OHLCV |
+| Market Data | Chainlink RTDS WebSocket (primary — matches resolution), Binance BTC/USDT spot (fallback), CoinGecko (24h change), Binance 5-min OHLCV |
 | Data Models | Pydantic v2 |
 | Config | YAML + `.env` overrides |
 | Dashboard | Rich live terminal UI + standalone web dashboard |
@@ -29,7 +29,7 @@ An AI-powered paper trading agent that trades Polymarket BTC 5-minute candle pre
 | `pydantic` | Strict data contracts across all components |
 | `pyyaml` | Configuration loading |
 | `rich` | Live terminal dashboard + analysis reports |
-| `websockets` | WebSocket support (wired, not yet active) |
+| `websockets` | Chainlink RTDS WebSocket for real-time resolution-source BTC price |
 | `python-dotenv` | `.env` secret management |
 
 ### External APIs
@@ -38,7 +38,8 @@ An AI-powered paper trading agent that trades Polymarket BTC 5-minute candle pre
 |-----|------|---------|
 | Polymarket CLOB | None (public) | Orderbooks, last trade prices |
 | Polymarket Gamma | None | Market discovery by slug pattern |
-| Chainlink BTC/USD (on-chain) | None (public RPC) | **Primary BTC price** — matches Polymarket resolution source |
+| Polymarket RTDS WebSocket | None (public) | **Primary BTC price** — Chainlink Data Streams price used for resolution |
+| Chainlink BTC/USD (on-chain) | None (public RPC) | Cross-reference BTC price (fallback when WebSocket inactive) |
 | CoinGecko | None | 24h change % (convenience metric only) |
 | Binance klines | None | 5-min OHLCV candle history for micro-trend analysis; historical price fallback |
 | Ethereum RPC | None | Read Chainlink price feed aggregator contract |
@@ -506,7 +507,7 @@ Edit `src/polybot/knowledge.py`:
 - `REFLECTION_PROMPT` — Controls what Claude analyzes and what observations it produces
 - Observations are append-only with automatic expiry — safe to experiment with
 
-### Activate WebSocket support
+### Activate WebSocket orderbook support
 
 The provider is already wired for WebSocket orderbook updates (`provider.update_from_ws()`). Build a WebSocket handler module that:
 1. Connects to `wss://ws-subscriptions-clob.polymarket.com/ws/market`
@@ -514,7 +515,7 @@ The provider is already wired for WebSocket orderbook updates (`provider.update_
 3. Maintains a live orderbook from diffs
 4. Calls `provider.update_from_ws(orderbook=..., last_price=...)` on each update
 
-This would give sub-second market data instead of polling REST every 60s.
+This would give sub-second orderbook data instead of polling REST every 60s. (Note: BTC price WebSocket is already active via `ChainlinkWSFeed`.)
 
 ### Potential enhancements
 
@@ -558,8 +559,11 @@ TradingAgent (agent.py) — orchestrator, launches 6 concurrent tasks
  ├── MarketDiscovery ─── Gamma API
  │   Finds current BTC 5-min candle market by slug pattern
  │
- ├── MarketDataProvider ─── CLOB REST + Chainlink + Binance 5m OHLCV + (WebSocket)
- │   Assembles MarketSnapshot: orderbooks, Chainlink BTC price, 5-min candle history
+ ├── ChainlinkWSFeed ─── Polymarket RTDS WebSocket
+ │   Real-time Chainlink BTC/USD (primary price — matches resolution source)
+ │
+ ├── MarketDataProvider ─── CLOB REST + Chainlink WS + Binance 5m OHLCV
+ │   Assembles MarketSnapshot: orderbooks, BTC price (Chainlink WS or Binance), 5-min candle history
  │
  ├── RiskManager
  │   Pre-trade: daily halt, min liquidity
@@ -641,7 +645,8 @@ polymarket-bot/
 │   ├── logging/
 │   │   └── trade_log.py          # JSONL trade + resolution logging
 │   ├── market_data/
-│   │   ├── btc_price.py          # Chainlink on-chain (primary) + CoinGecko (24h) + Binance (candles)
+│   │   ├── btc_price.py          # Hybrid BTC price: Chainlink WS (primary) + Binance (fallback) + CoinGecko (24h)
+│   │   ├── chainlink_ws.py       # Chainlink RTDS WebSocket — real-time resolution-source BTC price
 │   │   ├── client.py             # Polymarket CLOB REST client
 │   │   ├── discovery.py          # Gamma API market discovery
 │   │   └── provider.py           # Unified MarketSnapshot facade

@@ -20,11 +20,11 @@ PRICE_HISTORY_SIZE = 60  # keep last 60 midpoints
 class MarketDataProvider:
     """Combines all market data sources into a single MarketSnapshot."""
 
-    def __init__(self, config: AppConfig) -> None:
+    def __init__(self, config: AppConfig, chainlink_ws=None) -> None:
         self._config = config
         self._rest = PolymarketRestClient(config.market, config.api)
         cache_ttl = config.monitor.btc_price_cache_ttl if hasattr(config, 'monitor') else 30
-        self._btc = BtcPriceFeed(config.api, cache_ttl=cache_ttl)
+        self._btc = BtcPriceFeed(config.api, cache_ttl=cache_ttl, chainlink_ws=chainlink_ws)
         self._price_history: deque[float] = deque(maxlen=PRICE_HISTORY_SIZE)
         self._btc_price_history: deque[float] = deque(maxlen=PRICE_HISTORY_SIZE)
         self._ws_orderbook = None  # set by websocket module when active

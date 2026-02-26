@@ -37,7 +37,12 @@ class BtcPriceFeed:
     # Full candle history refresh interval (seconds)
     _CANDLE_REFRESH_INTERVAL = 600  # 10 minutes
 
-    def __init__(self, api_config: ApiConfig, cache_ttl: float = CACHE_TTL) -> None:
+    def __init__(
+        self,
+        api_config: ApiConfig,
+        cache_ttl: float = CACHE_TTL,
+        chainlink_ws=None,
+    ) -> None:
         self._coingecko_url = api_config.coingecko_url
         self._rpc_url = api_config.ethereum_rpc_url
         self._chainlink_address = api_config.chainlink_btcusd_address
@@ -50,6 +55,9 @@ class BtcPriceFeed:
         # Separate cache for 24h change from CoinGecko (updates less frequently)
         self._24h_change_pct: float = 0.0
         self._24h_change_time: float = 0.0
+        # Chainlink WS feed (primary when active — matches resolution source)
+        from polybot.market_data.chainlink_ws import ChainlinkWSFeed
+        self._chainlink_ws: ChainlinkWSFeed | None = chainlink_ws
 
     @property
     def candles(self) -> list[BtcCandle]:
@@ -270,22 +278,27 @@ class BtcPriceFeed:
     # --- Main price method ---
 
     async def get_price(self) -> BtcPrice | None:
-        """Get current BTC/USD price. Binance primary, CoinGecko fallback.
+        """Get current BTC/USD price. Chainlink WS primary, Binance fallback, CoinGecko last resort.
 
-        Also fetches Chainlink on-chain as cross-reference (logged but not used
-        for resolution, since the on-chain feed is too stale for 5-min candles).
+        Priority: Chainlink WS (matches resolution source) → Binance → CoinGecko → stale cache.
+        When on Chainlink WS, we skip the expensive on-chain RPC call entirely.
         """
         now = time.time()
         if self._cache and (now - self._cache_time) < self._cache_ttl:
             return self._cache
 
-        # Primary: Binance real-time spot price
-        price_usd = await self._fetch_binance_price()
-        source = "binance"
+        # 1. Try Chainlink WS (matches resolution source exactly)
+        if self._chainlink_ws and self._chainlink_ws.is_active:
+            price_usd = self._chainlink_ws.price
+            source = "chainlink_ws"
+        else:
+            # 2. Binance (fast, reliable)
+            price_usd = await self._fetch_binance_price()
+            source = "binance"
 
         if price_usd is None:
-            # Fallback to CoinGecko
-            logger.warning("Binance unavailable, falling back to CoinGecko")
+            # 3. CoinGecko fallback
+            logger.warning("Primary sources unavailable, falling back to CoinGecko")
             price_usd = await self._fetch_coingecko_price()
             source = "coingecko"
 
@@ -293,15 +306,27 @@ class BtcPriceFeed:
             logger.error("All BTC price sources failed")
             return self._cache  # return stale cache
 
-        # Cross-reference: fetch Chainlink on-chain (resolution source)
-        chainlink_price = await self._fetch_chainlink_price()
-        divergence = None
-        if chainlink_price is not None and price_usd:
-            divergence = price_usd - chainlink_price
-            logger.debug(
-                "Price cross-ref: Binance=$%.2f Chainlink=$%.2f divergence=$%.2f",
-                price_usd, chainlink_price, divergence,
-            )
+        # Cross-reference divergence
+        if source == "chainlink_ws":
+            # On Chainlink WS: compare vs Binance (informational only — no resolution risk)
+            binance_price = await self._fetch_binance_price()
+            divergence = (binance_price - price_usd) if binance_price else None
+            chainlink_display = price_usd  # WS IS the chainlink price
+            if divergence is not None:
+                logger.debug(
+                    "Price cross-ref: Chainlink WS=$%.2f Binance=$%.2f divergence=$%.2f",
+                    price_usd, binance_price, divergence,
+                )
+        else:
+            # On Binance: compare vs Chainlink RPC (resolution risk)
+            chainlink_rpc = await self._fetch_chainlink_price()
+            divergence = (price_usd - chainlink_rpc) if chainlink_rpc else None
+            chainlink_display = chainlink_rpc
+            if divergence is not None:
+                logger.debug(
+                    "Price cross-ref: Binance=$%.2f Chainlink=$%.2f divergence=$%.2f",
+                    price_usd, chainlink_rpc, divergence,
+                )
 
         # Get 24h change from CoinGecko (non-blocking, cached separately)
         change_24h = await self._fetch_coingecko_24h_change()
@@ -309,8 +334,9 @@ class BtcPriceFeed:
         price = BtcPrice(
             price_usd=price_usd,
             change_24h_pct=change_24h,
-            chainlink_price=chainlink_price,
+            chainlink_price=chainlink_display,
             price_divergence=divergence,
+            price_source=source,
         )
         self._cache = price
         self._cache_time = now
