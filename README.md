@@ -55,7 +55,7 @@ The bot runs 6 concurrent async tasks in the same event loop. The MarketMonitor 
 Monitor ──► Trigger AI ──► Trade ──► Monitor P&L ──► SL/TP Exit
   │              │           │           │              │
   │              │           │           │              └─ PositionMonitor detects -60%/+80%
-  │              │           │           │                 → triggers AI exit evaluation
+  │              │           │           │                 → triggers exit via AIDecision queue
   │              │           │           │
   │              │           │           └─ PositionMonitor marks-to-market every 1s
   │              │           │
@@ -86,7 +86,7 @@ All tasks are `asyncio.Task` in the same event loop (no OS threads). Safe for sh
 ### MarketMonitor (every 1 second)
 
 1. **Fetch snapshot** — Up + Down orderbooks, BTC spot price (2s cache TTL), latest 5-min candle
-2. **Run prefilter** — Checks 1-5: time remaining, spread width, book depth, choppy market, entry setup
+2. **Run prefilter** — Skips AI when positioned (exits handled by PositionMonitor). For entries: checks time remaining, spread width, book depth, choppy market, entry setup
 3. **Record PreFilterSnapshot** — Per-second market state stored in a 300-entry deque (~5 min history)
 4. **Compute R/R** — Calculate risk/reward ratio for both UP and DOWN tokens
 5. **Trigger AI** — Uses adaptive entry thresholds (learned from rolling candle history) to decide when to call AI. The `AdaptiveEntryTracker` sets a BTC move threshold ($20/$30/$40) based on rolling reversal rate and caps entry price based on recent winner ask prices. Falls back to static R/R threshold when adaptive is disabled. AI cooldown (60s) still applies
