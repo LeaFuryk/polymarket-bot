@@ -46,6 +46,7 @@ class ChainlinkWSFeed:
         # Candle building from ticks
         self._completed_candles: list[BtcCandle] = []  # completed 5-min candles (max 200)
         self._current_bucket: dict | None = None  # in-progress candle accumulator
+        self._msg_count: int = 0  # for debug logging first few messages
 
     @property
     def price(self) -> float | None:
@@ -120,17 +121,20 @@ class ChainlinkWSFeed:
             await ws.send(subscribe_msg)
             logger.info("Chainlink WS: subscribed to btc/usd")
             self._connected = True
+            self._msg_count = 0  # reset to log first messages after reconnect
 
             # Start keepalive ping loop
             ping_task = asyncio.create_task(self._ping_loop(ws))
 
             try:
                 async for raw_msg in ws:
+                    if not raw_msg or not raw_msg.strip():
+                        continue  # skip empty keepalive frames
                     try:
                         msg = json.loads(raw_msg)
                         self._handle_message(msg)
                     except (json.JSONDecodeError, KeyError, TypeError):
-                        logger.debug("Chainlink WS: unparseable message: %s", raw_msg[:200])
+                        logger.debug("Chainlink WS: unparseable message: %s", str(raw_msg)[:200])
             finally:
                 ping_task.cancel()
                 try:
@@ -148,30 +152,109 @@ class ChainlinkWSFeed:
             pass
 
     def _handle_message(self, msg: dict) -> None:
-        """Extract price from an RTDS message payload."""
-        # The RTDS sends messages with varying structure;
-        # look for the price value in common locations
-        data = msg
+        """Extract price(s) from an RTDS message payload.
 
-        # Some messages wrap data in a "data" key
-        if "data" in msg and isinstance(msg["data"], dict):
-            data = msg["data"]
+        RTDS sends batches: {"payload": {"data": [{"timestamp": ms, "value": price}, ...]}}
+        We process ALL ticks in the batch for accurate candle OHLC, and set the
+        live price to the most recent tick.
+        """
+        # Log first few messages at INFO to debug format issues
+        if self._msg_count < 3:
+            logger.info("Chainlink WS: sample message #%d: %s", self._msg_count, str(msg)[:500])
+        self._msg_count += 1
 
-        # Look for btc/usd price value
-        value = data.get("value") or data.get("price")
-        symbol = data.get("symbol", "")
-
-        if value is not None and ("btc" in symbol.lower() or not symbol):
-            try:
-                price = float(value)
-                if price > 0:
-                    now = time.time()
+        # Try to extract a batch of ticks from payload.data[]
+        payload = msg.get("payload")
+        if isinstance(payload, dict):
+            data = payload.get("data")
+            if isinstance(data, list) and data:
+                tick_count = 0
+                for item in data:
+                    if not isinstance(item, dict):
+                        continue
+                    val = item.get("value") or item.get("price")
+                    ts_ms = item.get("timestamp")
+                    if val is None:
+                        continue
+                    try:
+                        price = float(val)
+                    except (ValueError, TypeError):
+                        continue
+                    if price <= 0:
+                        continue
+                    # Use the tick's own timestamp (ms → s), fall back to now
+                    tick_ts = ts_ms / 1000.0 if ts_ms else time.time()
                     self._price = price
-                    self._last_update = now
-                    self._record_tick(price, now)
-                    logger.debug("Chainlink WS: BTC/USD = $%.2f", price)
-            except (ValueError, TypeError):
-                pass
+                    self._last_update = tick_ts
+                    self._record_tick(price, tick_ts)
+                    tick_count += 1
+                if tick_count > 0:
+                    logger.debug(
+                        "Chainlink WS: processed %d ticks, latest $%.2f",
+                        tick_count, self._price,
+                    )
+                    return
+
+        # Fallback: single-value extraction
+        price = self._extract_price(msg)
+        if price is not None and price > 0:
+            now = time.time()
+            self._price = price
+            self._last_update = now
+            self._record_tick(price, now)
+            logger.debug("Chainlink WS: BTC/USD = $%.2f", price)
+
+    def _extract_price(self, msg: dict) -> float | None:
+        """Try multiple strategies to extract BTC/USD price from RTDS message.
+
+        Known RTDS format: {"payload": {"data": [{"timestamp": ..., "value": ...}, ...]}, ...}
+        Uses the last item in the data array (most recent tick).
+        """
+        # Strategy 1: payload.data[] — actual Polymarket RTDS format
+        payload = msg.get("payload")
+        if isinstance(payload, dict):
+            data = payload.get("data")
+            if isinstance(data, list) and data:
+                # Use the last (most recent) tick in the batch
+                last_item = data[-1]
+                if isinstance(last_item, dict):
+                    val = last_item.get("value") or last_item.get("price")
+                    if val is not None:
+                        try:
+                            return float(val)
+                        except (ValueError, TypeError):
+                            pass
+
+        # Strategy 2: Direct value/price field
+        for key in ("value", "price"):
+            val = msg.get(key)
+            if val is not None:
+                try:
+                    return float(val)
+                except (ValueError, TypeError):
+                    pass
+
+        # Strategy 3: Nested in "data" dict or list
+        data = msg.get("data")
+        if isinstance(data, dict):
+            for key in ("value", "price"):
+                val = data.get(key)
+                if val is not None:
+                    try:
+                        return float(val)
+                    except (ValueError, TypeError):
+                        pass
+        elif isinstance(data, list) and data:
+            last_item = data[-1]
+            if isinstance(last_item, dict):
+                val = last_item.get("value") or last_item.get("price")
+                if val is not None:
+                    try:
+                        return float(val)
+                    except (ValueError, TypeError):
+                        pass
+
+        return None
 
     def _record_tick(self, price: float, ts: float) -> None:
         """Accumulate a tick into the current 5-min candle bucket."""
