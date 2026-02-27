@@ -18,6 +18,7 @@ Features used:
 - DOWN token midpoint
 - Orderbook imbalance ratio (UP)
 - Flat candle ratio
+- Rolling reversal rate (from adaptive entry tracker)
 """
 
 from __future__ import annotations
@@ -41,6 +42,7 @@ FEATURE_NAMES = [
     "down_midpoint",      # DOWN token midpoint
     "book_imbalance",     # UP bid_depth / ask_depth
     "flat_ratio",         # fraction of flat candles
+    "reversal_rate",      # rolling reversal rate from adaptive entry (0-1)
 ]
 
 NUM_FEATURES = len(FEATURE_NAMES)
@@ -215,6 +217,7 @@ class MLScorer:
             1.0,     # down_midpoint: 0 to 1
             2.0,     # book_imbalance: typically 0.3 to 3.0
             1.0,     # flat_ratio: 0 to 1
+            1.0,     # reversal_rate: 0 to 1 (already scaled)
         ]
         return [xi / s if s != 0 else xi for xi, s in zip(x, scales)]
 
@@ -227,6 +230,7 @@ class MLScorer:
         down_mid: float | None,
         up_bid_depth: float = 0,
         up_ask_depth: float = 0,
+        reversal_rate: float = 0.0,
     ) -> dict[str, float]:
         """Extract ML features from market data.
 
@@ -296,6 +300,9 @@ class MLScorer:
             features["book_imbalance"] = up_bid_depth / up_ask_depth
         else:
             features["book_imbalance"] = 1.0
+
+        # Reversal rate from adaptive entry
+        features["reversal_rate"] = reversal_rate
 
         return features
 

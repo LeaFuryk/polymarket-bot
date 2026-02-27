@@ -43,7 +43,7 @@ class PreFilter:
         min_time_remaining: float = 45.0,
         choppy_range_threshold: float = 50.0,
         choppy_max_entry: float = 0.28,
-        no_streak_max_entry: float = 0.40,
+        no_streak_max_entry: float = 0.50,
         min_streak_for_trade: int = 0,
         max_spread_pct: float = 0.08,
         min_book_depth: float = 50.0,

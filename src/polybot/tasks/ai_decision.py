@@ -35,6 +35,7 @@ from polybot.models import (
     TradeRecord,
     TradingDecision,
 )
+from polybot.adaptive_entry import AdaptiveEntryTracker
 from polybot.prefilter import PreFilter
 from polybot.resolution import ResolutionTracker
 from polybot.risk.manager import RiskManager
@@ -72,6 +73,7 @@ class AIDecision:
         recent_trades: list[TradeRecord],
         session_trades: list[TradeRecord],
         pending_ml_features: dict[str, dict[str, float]],
+        adaptive_entry: AdaptiveEntryTracker | None = None,
     ) -> None:
         self._config = config
         self._shared = shared
@@ -88,6 +90,7 @@ class AIDecision:
         self._knowledge = knowledge_manager
         self._feature_config = feature_config
         self._resolution_tracker = resolution_tracker
+        self._adaptive_entry = adaptive_entry
 
         # Optional SQLite analytics
         self._datastore = None  # set by agent if sqlite_enabled
@@ -369,6 +372,7 @@ class AIDecision:
             down_mid=down_mid,
             up_bid_depth=snapshot.orderbook.bid_depth,
             up_ask_depth=snapshot.orderbook.ask_depth,
+            reversal_rate=self._adaptive_entry.rolling_reversal_rate if self._adaptive_entry else 0.0,
         )
         ml_prediction = self._ml_scorer.predict(ml_features)
         if market:
@@ -385,6 +389,12 @@ class AIDecision:
             indicators_text += "\n" + ml_line
         else:
             indicators_text = "## Computed Indicators\n" + ml_line
+
+        # Inject adaptive entry reversal context (visible to both Haiku screen and Sonnet)
+        if self._adaptive_entry is not None:
+            reversal_ctx = self._adaptive_entry.get_ai_context()
+            if reversal_ctx:
+                indicators_text = indicators_text + "\n\n" + reversal_ctx if indicators_text else reversal_ctx
 
         # Two-pass screening (entry only, not exits)
         has_position = (

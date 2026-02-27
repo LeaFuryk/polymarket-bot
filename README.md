@@ -90,7 +90,7 @@ All tasks are `asyncio.Task` in the same event loop (no OS threads). Safe for sh
 2. **Run prefilter** — Skips AI when positioned (exits handled by PositionMonitor). For entries: checks time remaining, spread width, book depth, choppy market, entry setup
 3. **Record PreFilterSnapshot** — Per-second market state stored in a 300-entry deque (~5 min history)
 4. **Compute R/R** — Calculate risk/reward ratio for both UP and DOWN tokens
-5. **Trigger AI** — Uses adaptive entry thresholds (learned from rolling candle history) to decide when to call AI. The `AdaptiveEntryTracker` computes a continuous BTC move threshold ($20–$50) from the rolling reversal rate over a 10-candle window: `threshold = 20 + reversal_rate × 50` (clamped). Also caps entry price based on recent winner ask prices. Falls back to static R/R threshold when adaptive is disabled. AI cooldown (60s) still applies
+5. **Trigger AI** — Uses adaptive entry thresholds (learned from rolling candle history) to decide when to call AI. The `AdaptiveEntryTracker` computes a V-shaped BTC move threshold ($20–$50) from the rolling reversal rate over a 10-candle window: peaks at 50% reversal ($50, maximum uncertainty), drops at both extremes — low reversal ($20, reliable momentum) and high reversal ($20-32, predictable reversals = contrarian edge). When reversal rate >55%, the AI receives a contrarian context with the actual rate and average winner ask, letting it decide to bet against the initial BTC direction. Falls back to static R/R threshold when adaptive is disabled. AI cooldown (60s) still applies
 
 ### AIDecision (event-driven)
 
@@ -477,7 +477,7 @@ The most direct levers are in `config/default.yaml`:
 - **`monitor.ai_cooldown_seconds`** — Minimum time between AI calls (default 60s). Lower = more responsive but higher API costs
 - **`monitor.rr_trigger_threshold`** — R/R ratio needed to trigger AI when adaptive entry is disabled (default 1.0, entry <= $0.50)
 - **`monitor.adaptive_entry_enabled`** — Use adaptive BTC threshold + max entry price learned from rolling candle history (default true)
-- **`monitor.adaptive_entry_window`** — Number of candles in the rolling window for adaptive stats (default 5)
+- **`monitor.adaptive_entry_window`** — Number of candles in the rolling window for adaptive stats (default 10)
 - **`monitor.stop_loss_pct`** / **`monitor.take_profit_pct`** — Position exit thresholds (default -60%/+80%)
 - **`initial_cash`** — Affects position sizing through risk percentages
 - **`temperature`** — Currently 0.0 (deterministic); slight increase (0.1-0.3) may help exploration
@@ -563,7 +563,7 @@ TradingAgent (agent.py) — orchestrator, launches 6 concurrent tasks
  │   Writes dashboard JSON from shared state
  │
  ├── AdaptiveEntryTracker (adaptive_entry.py)
- │   Rolling reversal rate → adaptive BTC threshold ($20/$30/$40) + max entry price
+ │   Rolling reversal rate → V-shaped BTC threshold ($20–$50) + contrarian AI context
  │   Persisted to logs/adaptive_entry.jsonl
  │
  ├── MarketDiscovery ─── Gamma API
