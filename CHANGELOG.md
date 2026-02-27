@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 ## [v0.4.0] — 2026-02-26
 
 ### Added
+- **Market data analysis → AI knowledge base** — Deep statistical analysis across 159 candles and 16K snapshots (4 iterations) loaded into `data/knowledge/trading_patterns.md` as soft guidance for the AI. Key findings: $50+ BTC moves have ~90% directional accuracy vs ~54% for <$20; two EV peaks at 30-45s and 120-165s with dead zone at 60-105s; cheap entries (R/R 1.5-3.0) are contrarian traps winning only ~29%; streaks of 3+ continue ~62%; orderbook imbalance >70% predicts at ~80%. All framed as observations and tendencies, not absolute rules.
+- **Updated self_assessment.md** — Replaced rigid absolute rules with data-backed considerations. Removed hard entry price caps and strategy mandates, replaced with calibration awareness and bias warnings.
+
+### Changed
+- **R/R position sizing flattened** — Old curve: 0.20x-1.0x scale (cheap entries got full size, expensive entries got 20%). New curve: 0.75x-1.0x (gentle nudge only). Data showed expensive entries (R/R <0.5) win ~85% while cheap entries (R/R 1.5-3.0) win only ~29% — the old system was sizing up on losers and sizing down on winners. BTC move magnitude and trend remain the primary sizing drivers.
+
+### Added
 - **Polymarket outage detection and recovery** — The bot now detects when the Gamma API becomes unavailable (3+ consecutive discovery failures). During an outage: logs structured warnings with duration/failure count, pauses trading (no stale market data used), and reports outage status to the dashboard. On recovery: skips resolution of missed candles (stale token IDs would be wrong), cancels any pre-outage orders, and cleanly resumes with the next live market. In iter_006, the Polymarket API went down for ~13 minutes (129 failures) — the bot kept running but couldn't trade. This feature ensures it handles that gracefully.
 - **Dashboard outage banner** — A prominent banner appears at the top of the dashboard during outages (red, blinking) showing "Polymarket markets unavailable" with elapsed time. When markets recover, a green banner briefly shows "Markets recovered after Xm Ys". Auto-hides after 60 seconds.
 

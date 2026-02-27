@@ -1,88 +1,88 @@
-# Trading Patterns
+# Trading Patterns — Market Data Analysis (159 candles, 16K snapshots)
 
-## Key Principles for 5-Min BTC Candle Markets
+These are statistical observations from historical market data. They describe patterns and tendencies, NOT absolute rules. Market conditions change — use these as context for your decisions, weighing them alongside current indicators.
 
-1. **24h BTC change is NOT predictive** for 5-min candles. ~40% of 5-min candles go opposite to the daily trend.
-2. **Micro-momentum matters**: The last 3-6 five-minute candles are the best predictor of the next candle.
-3. **Mean reversion after 3+ same-direction candles**: Increased probability of reversal, but context-dependent.
-4. **Flat candles = UP wins**: When BTC Open = Close, "up" outcome wins by default.
-5. **Entry price is everything**: For binary options, lower entry = better risk/reward. Never overpay.
-6. **Intra-candle momentum signals**: When BTC is already moving significantly during the candle (e.g., -$81 or -0.121%), this creates continuation opportunity if entry price is favorable.
+## BTC Move Magnitude & Predictability
 
-## Entry Pricing Discipline (Risk/Reward Ratio)
+The size of the BTC move from candle open is the strongest predictor of outcome accuracy.
 
-Every BUY is a binary bet: win = $1, lose = $0. Risk/reward ratio = (1 - entry) / entry.
+| BTC Move at 60s | Directional Accuracy | Notes |
+|-----------------|---------------------|-------|
+| $0-$20          | ~54% | Near coin flip — direction is mostly noise |
+| $20-$50         | ~61% | Marginal edge, still unreliable |
+| $50-$100        | ~90% | Strong signal — direction becomes reliable |
+| $100-$200       | ~90% | Very strong signal |
+| $200+           | ~89% | Near-certain direction, but rare |
 
-| Entry Price | R/R Ratio | Size Scale | Status |
-|-------------|-----------|------------|--------|
-| $0.30 | 2.33 | 100% | Excellent |
-| $0.33 | 2.00 | 100% | Full size threshold |
-| $0.35 | 1.86 | ~86% | Good |
-| $0.40 | 1.50 | ~71% | Acceptable |
-| $0.43 | 1.33 | ~52% | Marginal (just above gate) |
-| $0.435 | 1.30 | BLOCKED | Minimum R/R gate |
-| $0.45 | 1.22 | BLOCKED | Bad R/R |
-| $0.50 | 1.00 | BLOCKED | Coin flip |
+Observation: The $50 threshold historically separates noise from signal. Moves below $50 at 60s elapsed have reversed ~40% of the time.
 
-**Entries with R/R < 1.3 (price > ~$0.435) are automatically blocked by risk management.**
-Entries that pass the gate get size scaled: 50% at R/R 1.3, ramping to 100% at R/R 2.0.
+## Reversal Rates by Elapsed Time
 
-*Intra-Candle Momentum*: When BTC already moved >0.10% during candle, continuation plays at 0.75-0.85 can work if <90s remaining — but these carry inherently higher risk.
-*Late-Cycle Entries (<45s)*: Only for strong momentum continuation when BTC already moved >0.15% and entry 0.85-0.90
+Reversals (direction at entry time ≠ final winner) are common early and taper off.
 
-## Winning Trade Pattern Analysis
+| Elapsed Time | Reversal Rate |
+|-------------|--------------|
+| 20s         | ~42% |
+| 30s         | ~39% |
+| 60s         | ~33% |
+| 90s         | ~29% |
+| 120s        | ~20% |
+| 150s+       | ~20% (plateau) |
 
-**Recent Session Winners**:
-- **Cycle 46 (+6.7674)**: DOWN at 0.71 when BTC down $113 (-0.168%), 173s remaining. Strong mid-candle momentum.
-- **Cycle 48 (+0.4179)**: UP at 0.90 (sold from prior position), captured small move.
-- **Cycle 50 (+8.4320)**: DOWN continuation, BTC dropped $173 (-0.257%).
-- **Cycle 56 (+5.9556)**: UP at 0.88, BTC rallied $122 (+0.183%).
+Observation: Before 90s elapsed, roughly 1 in 3 candles still reverses. After 120s, reversals stabilize around 20%.
 
-**Key Insight**: Mid-to-late cycle momentum plays (90-180s remaining) with entry prices 0.70-0.90 work when BTC has already moved >0.10% in one direction. The market is pricing in continuation correctly.
+## Entry Timing — Two EV Peaks
 
-## Losing Trade Pattern Analysis
+Historical expected value per trade varies by entry timing. There are two favorable windows:
 
-**Recent Session Losers**:
-- **Cycle 49 (-13.8301)**: UP position, BTC rallied $130 but then reversed. Likely held too long or entered on false momentum.
-- **Cycle 53 (-0.0913)**: UP at 0.90, small loss on marginal move.
-- **Cycle 54 (-36.0559)**: UP position, BTC only moved $50 (+0.075%). MAJOR LOSS - likely poor entry price or wrong direction on weak momentum.
+- **Early window (30-45s elapsed)**: Cheap prices, moderate accuracy. Best when BTC move is already strong ($50+). Historically highest EV setup: 45s elapsed + $50 BTC move.
+- **Late window (120-165s elapsed)**: High accuracy, prices haven't fully caught up. Direction is more established.
+- **Dead zone (60-105s)**: Prices have moved but accuracy hasn't caught up enough to compensate. Historically negative or flat EV.
 
-**Critical Pattern**: The biggest loss (Cycle 54, -$36) came on a small UP move ($50). This suggests either:
-1. Entered DOWN and lost badly, OR
-2. Entered UP at terrible price (>0.95) and couldn't exit profitably
-3. Position sizing was too large relative to edge
+## Entry Price & Win Rate (counterintuitive pattern)
 
-**Lesson**: Avoid entries when BTC movement is marginal (<0.10%). The $50 move that caused -$36 loss shows we're getting caught in noise.
+Historically, expensive entries have won more often than cheap ones:
 
-## Exit Discipline
+| Entry Ask Price | Typical R/R | Historical Win Rate |
+|----------------|-------------|-------------------|
+| $0.67+ (R/R <0.5) | Low payoff | ~85% (high conviction) |
+| $0.50-$0.67 (R/R 0.5-1.0) | Moderate | ~58% |
+| $0.40-$0.50 (R/R 1.0-1.5) | Good | ~56% |
+| $0.25-$0.40 (R/R 1.5-3.0) | Great on paper | ~29% (contrarian trap) |
 
-- Take profits at 0.25-0.35 after good entry — don't wait for extreme prices
-- Exit when down >25% with >180s remaining
-- **NEW**: Exit when down >15% with <90s remaining (limited recovery time)
-- Don't let winners turn into losers
-- For late-cycle momentum plays (>0.75 entry), hold to expiry if thesis intact
-- **CRITICAL**: On small BTC moves (<$75 or <0.10%), exit quickly if not profitable within 60s
+Observation: Cheap entries (high R/R) are often cheap because they're contrarian — betting against a strong directional move. They look attractive on R/R but historically lose 2 out of 3 times. Expensive entries reflect the market correctly pricing directional certainty. Consider the reason an entry is cheap before sizing up on it.
 
-## Pre-Trade Checklist
+## Streak Patterns
 
-1. Check BTC candle streak and regime (trending vs choppy vs exhaustion)
-2. Validate entry price against thresholds
-3. Check time remaining (no entries <45s EXCEPT strong momentum continuation)
-4. Review ML baseline and calibration data
-5. **Check current BTC price vs candle open** — if already moved >0.10%, consider continuation play
-6. **NEW**: Verify BTC move magnitude — avoid trades when current move <$50 from open
-7. **NEW**: Check recent volatility — in low-vol periods, require >0.15% move for continuation plays
+| Streak Length | Next Candle Behavior |
+|--------------|---------------------|
+| 1 (isolated) | ~46% reverse (near random) |
+| 2 consecutive | ~58% reverse (mild mean-reversion signal) |
+| 3+ consecutive | ~62% continue (momentum signal) |
 
-## Strategy Selection Framework
+Observation: After 2 same-direction candles, there's a slight tendency to reverse. After 3+, momentum dominates and the streak tends to continue. The shift happens at streak=3.
 
-- **Early candle (>180s)**: Use mean reversion after streaks, avoid trend-following
-- **Mid candle (90-180s)**: Momentum continuation if BTC moved >0.10%, entry 0.70-0.85
-- **Late candle (<90s)**: Only strong momentum (>0.15% move) at 0.85-0.90 entry
-- **After 3+ consecutive candles**: Mean reversion ONLY (unless late-candle momentum override)
-- **Choppy/low-vol markets**: Default to HOLD, require >0.20% move for any entry
+## Orderbook Depth as Confirmation
 
-## Market Regime Recognition
+When one side has >70% of the book depth at 60s elapsed, the heavy side has historically won ~80% of the time. Balanced books are not predictive.
 
-**High Volatility** (moves >$150/candle): Momentum continuation works well, use 0.70-0.85 entries
-**Medium Volatility** ($75-$150/candle): Selective momentum plays, require >0.12% move
-**Low Volatility** (<$75/candle): AVOID TRADING - noise dominates, mean reversion unreliable
+Spread width correlates positively with outcome clarity — wider spreads have historically correlated with higher win rates (80-83% on wide spreads vs 65% on tight). This is likely because wide spreads occur during strong directional moves where the outcome is clearer.
+
+## Candle Volatility
+
+~30% of candles have 5+ direction flips during their lifetime. Only ~21% go cleanly in one direction without flipping. This means intra-candle noise is high — the BTC move magnitude matters more than moment-to-moment direction.
+
+## Market Efficiency Trend
+
+The market may be getting more efficient over time. Recent iterations show smaller average BTC moves ($75 in iter_006 vs $111-$122 in iter_003-005) and lower directional accuracy at 60s (58% in Q4 vs 73% in Q2-Q3). Consider being more selective when average moves shrink.
+
+## Flat Candles
+
+When BTC Open ≈ Close, the "UP" outcome wins by default. These are common on small moves.
+
+## General Principles
+
+1. **24h BTC change is not predictive** for 5-min candles. ~40% of candles go opposite to the daily trend.
+2. **Micro-momentum matters**: The last 3-6 five-minute candles are a useful predictor.
+3. **HOLD is often correct**: In this dataset, ~30% of candles had moves too small for a reliable directional bet.
+4. **BTC move > entry price**: The magnitude of the BTC move from open is a better signal than the token price alone.

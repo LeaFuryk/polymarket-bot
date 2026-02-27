@@ -544,17 +544,16 @@ class AIDecision:
             risk_val = est_fill
             rr_ratio = reward / risk_val if risk_val > 0 else 0
 
-            # Extended R/R scale — flattened for ~3x larger positions
-            if rr_ratio >= 2.0:
+            # R/R scale — gentle nudge only (0.75-1.0 range)
+            # Data shows cheap entries (high R/R) often lose — they're contrarian traps.
+            # Expensive entries (low R/R) win ~85% because price reflects conviction.
+            # So we don't reward cheap entries with bigger positions.
+            if rr_ratio >= 1.0:
                 rr_scale = 1.0
-            elif rr_ratio >= 1.0:
-                rr_scale = 0.80 + 0.20 * (rr_ratio - 1.0)    # 80%-100%
-            elif rr_ratio >= 0.5:
-                rr_scale = 0.55 + 0.25 * (rr_ratio - 0.5) / 0.5  # 55%-80%
             elif rr_ratio >= 0.3:
-                rr_scale = 0.20 + 0.35 * (rr_ratio - 0.3) / 0.2  # 20%-55%
+                rr_scale = 0.75 + 0.25 * (rr_ratio - 0.3) / 0.7  # 75%-100%
             else:
-                rr_scale = 0.20  # minimum 20%
+                rr_scale = 0.75  # minimum 75%
 
             # Move-magnitude scaling (raised floors — small moves still get decent size)
             move_scale = 1.0

@@ -1,22 +1,21 @@
 # Self Assessment
 
-## Known Biases to Avoid
+## Known Biases to Watch For
 
-1. **24h Anchoring Bias**: Do NOT let the daily BTC change dominate reasoning.
-2. **Overtrading**: Not every cycle needs a trade. HOLD is often the best decision.
-3. **Entry Discipline Violations**: Never enter trend-following >0.50 or mean reversion >0.45.
-4. **Exit Hesitation**: Take profits early. Selling at 0.25-0.35 is excellent.
-5. **Wrong Strategy Selection**: After 3+ consecutive candles, use mean reversion not continuation.
+1. **24h Anchoring Bias**: The daily BTC change has low predictive value for 5-min candles.
+2. **Overtrading**: Not every cycle needs a trade. HOLD is often the best decision, especially on small BTC moves.
+3. **Cheap Entry Trap**: Low entry prices (high R/R) can look attractive but are often cheap because they're contrarian bets against established direction. Consider WHY the price is cheap.
+4. **Early Entry Impatience**: Entering before 60s elapsed has ~40% reversal risk. Direction becomes much more reliable after 90-120s.
+5. **Small Move Overconfidence**: BTC moves <$50 from open are historically near-random for predicting the winner. Treat them with skepticism.
 
 ## Confidence Calibration
 
-Check the calibration data in the prompt — it shows how your stated confidence maps to actual win rates. Adjust accordingly.
+Check the calibration data in the prompt — it shows how your stated confidence maps to actual win rates. Adjust accordingly. In past iterations, the 70-75% confidence bucket had lower actual win rates than the 60-65% bucket.
 
-## Critical Rules
+## Key Considerations
 
-- ABSOLUTE: Never enter at >0.50 for any strategy
-- PROFIT PROTECTION: Exit when up >25% with 120-180s remaining
-- STOP-LOSS: Exit when down >25% with >180s remaining
-- After 3+ consecutive candles: ONLY mean reversion
-- In choppy markets: default to HOLD
-- Check ML baseline prediction before deciding
+- Entry timing matters — there are historically two favorable windows (early 30-45s with strong moves, and late 120-165s)
+- The 60-105s range has been a dead zone for EV
+- Streaks of 3+ tend to continue (~62%); streaks of 2 tend to reverse (~58%)
+- Strong orderbook imbalance (>70% depth on one side) has been a reliable confirmation signal
+- Position monitor handles exits at -60%/-80% — focus on entry quality, not exit timing
