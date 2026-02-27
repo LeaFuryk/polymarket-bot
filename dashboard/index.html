@@ -2133,6 +2133,8 @@ function render(d) {
     const revPct = (ae.reversal_rate * 100).toFixed(0);
     const regime = ae.regime || (ae.reversal_rate < 0.20 ? 'calm' : ae.reversal_rate < 0.40 ? 'moderate' : 'choppy');
     const regimeLabel = regime === 'CALM' || regime === 'calm' ? 'Calm Market' : regime === 'CHOPPY' || regime === 'choppy' ? 'Choppy' : 'Moderate';
+    const signalType = ae.signal_type || (ae.reversal_rate > 0.55 ? 'CONTRARIAN' : ae.reversal_rate < 0.35 ? 'MOMENTUM' : 'UNCERTAIN');
+    const signalColor = signalType === 'CONTRARIAN' ? 'var(--blue, #60a5fa)' : signalType === 'MOMENTUM' ? 'var(--green)' : 'var(--amber)';
     const threshColor = ae.btc_threshold <= 25 ? 'var(--green)' : ae.btc_threshold >= 40 ? 'var(--red)' : 'var(--amber)';
     const entryColor = ae.max_entry_price <= 0.45 ? 'var(--green)' : ae.max_entry_price >= 0.60 ? 'var(--red)' : 'var(--amber)';
     const revColor = ae.reversal_rate < 0.20 ? 'var(--green)' : ae.reversal_rate >= 0.40 ? 'var(--red)' : 'var(--amber)';
@@ -2170,6 +2172,10 @@ function render(d) {
           <div class="risk-val">${ae.history_count}/${ae.window_size}</div>
         </div>
         <div class="ae-status ${regime}">${regimeLabel}</div>
+        <div style="margin-top:0.25rem;padding:0.15rem 0.5rem;border-radius:4px;background:color-mix(in srgb,${signalColor} 15%,transparent);border:1px solid color-mix(in srgb,${signalColor} 30%,transparent);display:inline-flex;align-items:center;gap:0.3rem;font-size:0.7rem">
+          <span style="color:var(--text-muted)">Signal</span>
+          <span style="color:${signalColor};font-weight:600">${signalType}</span>
+        </div>
         <div class="ae-sub">${histLabel}</div>
       </div>`;
       // Market trend badge (if available)

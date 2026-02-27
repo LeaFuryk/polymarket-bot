@@ -1,11 +1,16 @@
 """Adaptive entry threshold tracker — learns optimal BTC move threshold and max entry price.
 
 Tracks rolling candle outcomes to calibrate:
-- BTC move threshold ($20–$50, continuous) based on rolling reversal rate
+- BTC move threshold ($20–$50, V-shaped) based on rolling reversal rate
 - Max entry price cap based on recent winner ask prices
 
-Continuous formula: threshold = 20 + reversal_rate * 50, clamped to [20, 50].
-At 0% reversals → $20 (calm). At 40% → $40. At 60%+ → $50 cap (choppy).
+V-shaped threshold formula: peaks at 50% reversal (max uncertainty → $50),
+low at extremes (strong signal either momentum or contrarian → $20).
+  threshold = max(20, min(50, 50 - abs(rate - 0.5) * 60))
+
+At 0% reversals → $20 (strong momentum, direction reliable).
+At 50% → $50 (coin flip, need big BTC moves for any signal).
+At 80% → $32 (strong reversal, contrarian edge — enter early, bet opposite).
 
 Data is persisted to JSONL for cross-session continuity.
 """
@@ -52,6 +57,7 @@ class AdaptiveEntryTracker:
         # Computed adaptive thresholds
         self.btc_threshold: float = DEFAULT_BTC_THRESHOLD
         self.max_entry_price: float = DEFAULT_MAX_ENTRY
+        self._signal_type: str = "UNCERTAIN"  # MOMENTUM / CONTRARIAN / UNCERTAIN
 
         # Load persisted data
         self._load()
@@ -125,9 +131,20 @@ class AdaptiveEntryTracker:
         reversals = sum(1 for c in window if c.reversed)
         reversal_rate = reversals / len(window)
 
-        # Continuous BTC threshold: $20 at 0% reversal → $50 at 60%+ reversal
-        # Formula: 20 + (reversal_rate * 50), clamped to [20, 50]
-        self.btc_threshold = min(50.0, 20.0 + reversal_rate * 50.0)
+        # V-shaped BTC threshold: peaks at 50% reversal (max uncertainty),
+        # low at extremes (momentum or contrarian edge).
+        # deviation=0 at 50% → threshold=$50 (coin flip, need big moves)
+        # deviation=0.5 at 0% or 100% → threshold=$20 (predictable, enter early)
+        deviation = abs(reversal_rate - 0.5)
+        self.btc_threshold = max(20.0, min(50.0, 50.0 - deviation * 60.0))
+
+        # Signal type for logging/dashboard
+        if reversal_rate > 0.55:
+            self._signal_type = "CONTRARIAN"
+        elif reversal_rate < 0.35:
+            self._signal_type = "MOMENTUM"
+        else:
+            self._signal_type = "UNCERTAIN"
 
         # Adaptive max entry price: avg winner ask + $0.10, capped at $0.65
         winner_asks = [c.winner_ask_at_20 for c in window if c.winner_ask_at_20 > 0]
@@ -138,11 +155,13 @@ class AdaptiveEntryTracker:
             self.max_entry_price = DEFAULT_MAX_ENTRY
 
         logger.info(
-            "Adaptive entry updated: reversal_rate=%.2f → btc_thresh=$%.0f, "
-            "avg_winner_ask=$%.3f → max_entry=$%.2f (window=%d)",
-            reversal_rate, self.btc_threshold,
+            "Adaptive entry updated: reversal_rate=%.0f%% (%d/%d) → "
+            "signal=%s, btc_thresh=$%.0f (dev=%.2f), "
+            "avg_winner_ask=$%.3f → max_entry=$%.2f",
+            reversal_rate * 100, reversals, len(window),
+            self._signal_type, self.btc_threshold, deviation,
             avg_winner_ask if winner_asks else 0,
-            self.max_entry_price, len(window),
+            self.max_entry_price,
         )
 
     def should_trigger(self, abs_btc_move: float, min_ask: float) -> bool:
@@ -241,6 +260,11 @@ class AdaptiveEntryTracker:
             return "CHOPPY"
 
     @property
+    def signal_type(self) -> str:
+        """Signal type: MOMENTUM (<35%), UNCERTAIN (35-55%), CONTRARIAN (>55%)."""
+        return self._signal_type
+
+    @property
     def rolling_reversal_rate(self) -> float:
         """Current rolling reversal rate."""
         window = self._history[-self._window:]
@@ -262,6 +286,53 @@ class AdaptiveEntryTracker:
         return (
             f"Adaptive entry (last {len(window)} candles): "
             f"reversal_rate={reversal_rate:.0%}, "
+            f"signal={self._signal_type}, "
             f"btc_thresh=${self.btc_threshold:.0f}, "
             f"max_entry=${self.max_entry_price:.2f}"
         )
+
+    def get_ai_context(self) -> str | None:
+        """Build reversal rate context for the AI prompt.
+
+        Returns None if insufficient history. Otherwise returns a section
+        with the actual reversal rate and signal interpretation.
+        """
+        if not self.has_enough_history:
+            return None
+
+        rate = self.rolling_reversal_rate
+        window = self._history[-self._window:]
+        reversals = sum(1 for c in window if c.reversed)
+
+        lines = [
+            "## Reversal Rate Context (Adaptive Entry)",
+            f"- Rolling reversal rate: **{rate:.0%}** "
+            f"({reversals} of last {len(window)} candles reversed from initial BTC direction)",
+            f"- Signal type: **{self._signal_type}**",
+            f"- BTC move threshold: ${self.btc_threshold:.0f}",
+        ]
+
+        if rate > 0.55:
+            lines.extend([
+                "",
+                f"⚠ **High reversal rate ({rate:.0%})**: The initial BTC direction (first $20 move) "
+                f"has been WRONG {rate:.0%} of the time recently. The cheap (contrarian) side — "
+                f"opposite to the current BTC move — may be the better entry. "
+                f"When reversals dominated, the winning side's average ask was "
+                f"${self._avg_reversal_winner_ask():.2f} at the $20 cross.",
+            ])
+        elif rate < 0.25:
+            lines.extend([
+                "",
+                f"✓ **Low reversal rate ({rate:.0%})**: BTC direction has been reliable. "
+                f"The initial move is continuing {1-rate:.0%} of the time. "
+                f"Momentum entries aligned with the current BTC direction are favored.",
+            ])
+
+        return "\n".join(lines)
+
+    def _avg_reversal_winner_ask(self) -> float:
+        """Average winner ask price on reversed candles in the window."""
+        window = self._history[-self._window:]
+        asks = [c.winner_ask_at_20 for c in window if c.reversed and c.winner_ask_at_20 > 0]
+        return sum(asks) / len(asks) if asks else 0.0

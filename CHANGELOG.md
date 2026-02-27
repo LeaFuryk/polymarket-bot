@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v0.4.1] — 2026-02-26
+
+### Added
+- **Contrarian trading via reversal rate context** — When the rolling reversal rate exceeds 55%, the AI now receives a "Reversal Rate Context" section showing the actual rate (e.g., "80% — 8 of last 10 candles reversed"), signal type (CONTRARIAN/MOMENTUM/UNCERTAIN), and the average winner ask price during reversals. This lets the AI decide to bet against the initial BTC direction when reversals are predictable, instead of blindly following momentum. Both the Haiku screener and Sonnet decision maker see this context.
+- **V-shaped BTC threshold** — The adaptive entry threshold now peaks at 50% reversal rate ($50, maximum uncertainty) and drops at both extremes: low reversal ($20, reliable momentum) and high reversal ($20-32, predictable reversals = contrarian edge). Formula: `50 - abs(rate - 0.5) × 60`, clamped to [$20, $50]. Previously it was monotonically increasing, blocking all trades during high-reversal markets instead of exploiting the pattern.
+- **Signal type indicator** — Dashboard shows MOMENTUM (<35% reversal), UNCERTAIN (35-55%), or CONTRARIAN (>55%) badge alongside the existing regime label. Logged in adaptive entry updates for tracking.
+- **ML scorer: reversal rate feature** — Added `reversal_rate` as the 10th feature to the online logistic regression model. This lets the ML baseline learn the interaction between BTC direction and reversal rate (e.g., high reversal + positive BTC = DOWN wins). Model auto-resets on feature count change and retrains within ~10 candles.
+
+### Fixed
+- **YAML config override: `adaptive_entry_window` was stuck at 5** — `config/default.yaml` had `adaptive_entry_window: 5` which overrode the Python default of 10. With window=5, only 6 discrete reversal rates are possible (0/20/40/60/80/100%), causing wild jumps. Fixed to 10 in YAML.
+- **PreFilter: raised `no_streak_max_entry` from $0.40 → $0.50** — The $0.40 threshold blocked nearly all streak=1 entries (47% of candles), since ask prices typically sit at $0.44-0.55. Entries at $0.40-0.50 have ~56% win rate — profitable territory the AI should evaluate. The $0.50 threshold aligns with the R/R break-even boundary.
+- **Screening prompt updated for contrarian setups** — Haiku screener no longer rejects trades purely because BTC has moved in one direction. High reversal rate is now a valid trade signal (contrarian opportunity), not just a momentum signal.
+
 ## [v0.4.0] — 2026-02-26
 
 ### Added
