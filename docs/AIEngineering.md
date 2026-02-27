@@ -857,4 +857,23 @@ Every AI engineering decision should follow this cycle. Intuition about what "sh
 
 ---
 
+## 14. Implementation Status
+
+All 10 opportunities were implemented in v0.4.2. Here's the mapping:
+
+| # | Opportunity | Status | Files Modified |
+|---|---|---|---|
+| 1 | Prompt token waste | **Implemented** | `prompts.py` — static text moved to system prompt, feature vector compacted |
+| 2 | Haiku → Sonnet context | **Implemented** | `ai_decision.py` — screening reason injected as "Pre-Screening Note" |
+| 3 | ML scorer feature contributions | **Implemented** | `ai_decision.py` — top 3 feature drivers shown in ML line |
+| 4 | Cross-candle microstructure | **Implemented** | `shared_state.py` + `agent.py` + `ai_decision.py` — CandleMicrostructure saved at rotation |
+| 5 | Adaptive reflection | **Implemented** | `agent.py` — threshold 5 when losing (PnL < -$10), else 10 |
+| 6 | Calibration bins | **Implemented** | `calibration.py` — BIN_WIDTH 5%→10%, MIN_SAMPLES 15→10 |
+| 7 | Time-weighted exits | **Implemented** | `position_monitor.py` — dynamic_stop_loss() with linear time decay |
+| 8 | BTC velocity/drawback | **Implemented** | `ai_decision.py` — _compute_btc_trajectory() from prefilter snapshots |
+| 9 | Temperature 0.1 | **Implemented** | `config/default.yaml` — decision model temp 0.0→0.1, screening stays 0.0 |
+| 10 | Ensemble disagreement | **Implemented** | `ai_decision.py` + `agent.py` — tracking + dashboard JSON |
+
+---
+
 *This analysis was conducted by systematically reading every Python source file, tracing data flow between components, cross-referencing with archived trading results, and applying AI engineering principles from production ML systems, reinforcement learning, and LLM application design.*
