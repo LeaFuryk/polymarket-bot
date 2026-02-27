@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [v0.4.2] — 2026-02-26
+## [v0.5.0] — 2026-02-27
 
 ### Added — AI Engineering Improvements (see `docs/AIEngineering.md` for full analysis)
 - **BTC trajectory signals (velocity + peak-drawback)** — The AI now sees intra-candle BTC velocity ($/s, accelerating or decelerating) and peak drawback (how far BTC has pulled back from its candle peak). Computed from prefilter snapshots recorded every second. This directly addresses iter_007's #1 failure mode: all 4 losses were on decelerating BTC moves that reversed, but the AI only saw the static position (+$64) without knowing it was exhausting.
