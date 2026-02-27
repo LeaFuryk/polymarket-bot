@@ -14,6 +14,7 @@ All notable changes to this project will be documented in this file.
 - **YAML config override: `adaptive_entry_window` was stuck at 5** — `config/default.yaml` had `adaptive_entry_window: 5` which overrode the Python default of 10. With window=5, only 6 discrete reversal rates are possible (0/20/40/60/80/100%), causing wild jumps. Fixed to 10 in YAML.
 - **PreFilter: raised `no_streak_max_entry` from $0.40 → $0.50** — The $0.40 threshold blocked nearly all streak=1 entries (47% of candles), since ask prices typically sit at $0.44-0.55. Entries at $0.40-0.50 have ~56% win rate — profitable territory the AI should evaluate. The $0.50 threshold aligns with the R/R break-even boundary.
 - **Screening prompt updated for contrarian setups** — Haiku screener no longer rejects trades purely because BTC has moved in one direction. High reversal rate is now a valid trade signal (contrarian opportunity), not just a momentum signal.
+- **Dashboard: negative value formatting** — All PnL/loss values now display as `-$72.53` instead of `$-72.53`. Fixed `fmt$` helper and `pnlSign` to consistently show the minus before the dollar sign across sidebar, candle timeline, resolution table, and portfolio deltas.
 
 ## [v0.4.0] — 2026-02-26
 
