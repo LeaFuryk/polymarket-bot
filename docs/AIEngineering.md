@@ -859,7 +859,7 @@ Every AI engineering decision should follow this cycle. Intuition about what "sh
 
 ## 14. Implementation Status
 
-All 10 opportunities were implemented in v0.4.2. Here's the mapping:
+All 10 opportunities were implemented in v0.5.0. Here's the mapping:
 
 | # | Opportunity | Status | Files Modified |
 |---|---|---|---|
