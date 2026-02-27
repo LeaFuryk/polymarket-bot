@@ -2,32 +2,6 @@
 
 All notable changes to this project will be documented in this file.
 
-## [v0.5.1] — 2026-02-27
-
-### Added — 8 Soft Safeguards for Better AI Decisions
-
-Based on iter_008 loss analysis (27 losses totaling -$583), implemented 8 safeguards — 7 soft (inject context/warnings into the AI prompt so it makes better decisions) and 1 hard (single-entry-per-side is position discipline, not market-dependent).
-
-1. **Chainlink divergence warning** — When Chainlink diverges >$100 from Binance, a warning block is injected into the AI's indicators text: "resolution source may differ significantly." The AI decides whether to reduce confidence or skip. Previously, 6/27 losses had divergence >$100 with no warning surfaced.
-
-2. **Single-entry-per-side enforcement** (code-level) — Prevents buying the same side twice on the same candle. Tracks `_bought_sides` per slug, overrides duplicate BUY to HOLD. The system prompt already said "do NOT buy more of the same token" but iter_008 showed 5 violations causing -$123 including the largest single loss (-$52.73). This is the ONE code-level enforcement.
-
-3. **Post-stop-loss cooldown signal** — After a stop-loss exit fires, a warning is injected into the next AI call on the same candle: "Re-entering immediately is high-risk — the price moved against you and may continue." Stored in `SharedState.last_stop_loss`, cleared on candle rotation. iter_008 had 5 post-stop-loss re-entries that all lost.
-
-4. **Corrected $50 threshold accuracy** — Fixed `trading_patterns.md`: the $50-$100 BTC move accuracy was listed as ~90% (from a smaller sample) but iter_008's 128 candles showed ~65-70%. Updated the table and added a caveat about accuracy varying by market conditions.
-
-5. **Drawdown awareness in prompt** — When the last 10 resolutions have net PnL < -$5, a "SESSION DRAWDOWN ALERT" is injected into the feedback context. The AI can adjust sizing and selectivity during losing streaks rather than trading blind to cumulative losses.
-
-6. **Counter-trend accuracy context** — When a strong market trend is detected (score >= 0.3), a "Counter-Trend Advisory" is injected before the AI call: "Historical counter-trend accuracy: ~55-60% (vs ~75% trend-aligned)." Previously the counter-trend sizing reduction existed but the AI didn't know *why* or the accuracy differential.
-
-7. **Calibration overconfidence warnings** — Enhanced `get_calibration_summary()` to flag bins where actual win rate is below the stated confidence range: "OVERCONFIDENT — actual 67% win rate but you state 70%-80% confidence (23W/11L from 34 trades)." iter_008 showed the 0.72-0.74 band claimed 73% but actually won 67%.
-
-8. **Per-side failure pattern surfacing** — Enhanced `build_feedback_context()` with: (a) side-specific accuracy warnings when UP or DOWN win rate < 50% over 3+ trades, (b) losing streak detection (3+ consecutive losses trigger "Increase selectivity" warning). iter_008 showed the AI acknowledged its own 0W/10L UP failure pattern and continued buying UP.
-
-### Changed
-- `SharedState` now includes `last_stop_loss` field for post-stop-loss cooldown tracking
-- `_handle_market_transition()` clears `last_stop_loss` on candle rotation
-
 ## [v0.5.0] — 2026-02-27
 
 ### iter_008 Analysis (pre-v0.5.0 code — baseline for AI engineering changes)
@@ -54,7 +28,69 @@ Based on iter_008 loss analysis (27 losses totaling -$583), implemented 8 safegu
 - **Ensemble disagreement tracking** — Tracks Haiku pass-through rate (what % of screenings reach Sonnet), Sonnet trade rate (what % of Haiku passes result in actual trades), and ML-Sonnet directional agreement rate. Disagreements are logged with both model predictions. All stats exposed to dashboard JSON for monitoring.
 - **Prompt token reduction** — Moved static explanations (what Chainlink is, why 24h change isn't predictive, spread advice) from per-cycle feature vector into system prompt. Compacted orderbook, positions, portfolio, and risk sections from verbose multi-line to data-dense single-line formats. ~20-25% token reduction per Sonnet call.
 
+### Added — 8 Soft Safeguards for Better AI Decisions
+
+Based on iter_008 loss analysis (27 losses totaling -$583), implemented 8 safeguards — 7 soft (inject context/warnings into the AI prompt so it makes better decisions) and 1 hard (single-entry-per-side is position discipline, not market-dependent).
+
+1. **Chainlink divergence warning** — When Chainlink diverges >$100 from Binance, a warning block is injected into the AI's indicators text: "resolution source may differ significantly." The AI decides whether to reduce confidence or skip. Previously, 6/27 losses had divergence >$100 with no warning surfaced.
+
+2. **Single-entry-per-side enforcement** (code-level) — Prevents buying the same side twice on the same candle. Tracks `_bought_sides` per slug, overrides duplicate BUY to HOLD. The system prompt already said "do NOT buy more of the same token" but iter_008 showed 5 violations causing -$123 including the largest single loss (-$52.73). This is the ONE code-level enforcement.
+
+3. **Post-stop-loss cooldown signal** — After a stop-loss exit fires, a warning is injected into the next AI call on the same candle: "Re-entering immediately is high-risk — the price moved against you and may continue." Stored in `SharedState.last_stop_loss`, cleared on candle rotation. iter_008 had 5 post-stop-loss re-entries that all lost.
+
+4. **Corrected $50 threshold accuracy** — Fixed `trading_patterns.md`: the $50-$100 BTC move accuracy was listed as ~90% (from a smaller sample) but iter_008's 128 candles showed ~65-70%. Updated the table and added a caveat about accuracy varying by market conditions.
+
+5. **Drawdown awareness in prompt** — When the last 10 resolutions have net PnL < -$5, a "SESSION DRAWDOWN ALERT" is injected into the feedback context. The AI can adjust sizing and selectivity during losing streaks rather than trading blind to cumulative losses.
+
+6. **Counter-trend accuracy context** — When a strong market trend is detected (score >= 0.3), a "Counter-Trend Advisory" is injected before the AI call: "Historical counter-trend accuracy: ~55-60% (vs ~75% trend-aligned)." Previously the counter-trend sizing reduction existed but the AI didn't know *why* or the accuracy differential.
+
+7. **Calibration overconfidence warnings** — Enhanced `get_calibration_summary()` to flag bins where actual win rate is below the stated confidence range: "OVERCONFIDENT — actual 67% win rate but you state 70%-80% confidence (23W/11L from 34 trades)." iter_008 showed the 0.72-0.74 band claimed 73% but actually won 67%.
+
+8. **Per-side failure pattern surfacing** — Enhanced `build_feedback_context()` with: (a) side-specific accuracy warnings when UP or DOWN win rate < 50% over 3+ trades, (b) losing streak detection (3+ consecutive losses trigger "Increase selectivity" warning). iter_008 showed the AI acknowledged its own 0W/10L UP failure pattern and continued buying UP.
+
+### Added — Adaptive Dynamic Stop-Loss & Take-Profit
+
+The fixed -60% SL was too wide (let losing positions bleed) while the previous -15% SL was too tight (stopped winners prematurely). iter_008 showed avg loss $22.36 — 2.1x avg win $10.51, with 16/27 losses being mid-candle reversals. The right threshold depends on market conditions.
+
+**Dynamic Stop-Loss** — Computed every second from 5 additive factors on top of the existing time-weighted base:
+
+1. **Time weighting** (existing, preserved as base) — Tightens from -60% at 240s to -20% at 0s
+2. **Regime** (from reversal rate) — Momentum (rr<0.35): tighten up to +12% (drawdowns are real signals). Choppy (rr>0.55): widen up to -8% (whipsaws may recover)
+3. **BTC velocity** (real-time from prefilter history) — BTC accelerating against position: tighten up to +8%. In favor: widen up to -6%
+4. **ML alignment at entry** — ML agreed with position: widen -4% (give room). ML disagreed: tighten +5% (less room for error)
+5. **Entry price quality** — Expensive entries (>=$0.75): tighten +6%. Cheap entries (<=$0.40): widen -5%
+
+Combined with configurable floor/ceiling: never wider than -75%, never tighter than -15%.
+
+**Dynamic Take-Profit** — Time-weighted base with 3 adjustments:
+
+1. **Regime** — Momentum: +10% (let winners run). Choppy: -15% (take profits early)
+2. **BTC velocity** — Accelerating in favor: raise TP up to +10%. Turning against: lower TP up to -10%
+3. **Entry price** — Expensive (>$0.70): lower TP -15%. Cheap (<$0.40): raise TP +10%
+
+Floor/ceiling: never below +20%, never above +120%.
+
+**New config parameters** (`config/default.yaml`):
+- `dynamic_sl_enabled` / `dynamic_tp_enabled` — feature flags (default: true)
+- `sl_floor` / `sl_ceiling` — SL bounds (-0.75 / -0.15)
+- `tp_floor` / `tp_ceiling` — TP bounds (0.20 / 1.20)
+
+**Data flow**:
+- `EntryContext` dataclass stores ML prediction, entry price, BTC move, reversal rate at fill time
+- Stored on BUY fill, cleared on SELL fill and candle rotation
+- Reversal rate, signal type, regime synced from AdaptiveEntryTracker every 2s
+- Dynamic SL/TP values written to SharedState for dashboard display
+
+**Fallback**: When `dynamic_sl_enabled: false`, falls back to existing time-weighted-only logic. When signals are unavailable (no reversal data, no prefilter history, no entry context), the corresponding adjustment is 0.
+
 ### Changed
+- `SharedState` now includes `last_stop_loss` field for post-stop-loss cooldown tracking, plus `EntryContext` dataclass and fields: `entry_context`, `reversal_rate`, `signal_type`, `regime`, `dynamic_sl`, `dynamic_tp`
+- `_handle_market_transition()` clears `last_stop_loss`, `entry_context`, `dynamic_sl`, `dynamic_tp` on candle rotation
+- `MonitorConfig` gains 6 new fields for dynamic SL/TP configuration
+- `PositionMonitor._dynamic_stop_loss()` now takes `token_side` parameter and uses 5-factor adaptive formula
+- `PositionMonitor._check_thresholds()` uses both dynamic SL and dynamic TP
+- Dashboard JSON includes `dynamic_sl` and `dynamic_tp` sections
+- SL/TP trigger log messages include component breakdown (time, regime, velocity, entry price, ML)
 - **Calibration bins widened from 5% to 10%** — With 5%-wide bins, the calibrator needed ~75+ trades to populate any single bin (MIN_SAMPLES=15). Most bins had 1-5 samples after 7 iterations and zero reliable calibration. Changed to 10%-wide bins with MIN_SAMPLES=10 — reaches reliability ~3x faster. Trade-off: lower resolution (can't distinguish 0.62 from 0.67), but the AI doesn't have that precision anyway.
 - **Temperature raised from 0.0 to 0.1** — Mild exploration for the decision model (Sonnet). Introduces slight variety in reasoning paths without compromising coherence. Screening (Haiku) stays at 0.0 for deterministic filtering. Avoids systematic biases from always picking the same highest-probability output.
 

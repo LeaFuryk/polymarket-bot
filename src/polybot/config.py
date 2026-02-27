@@ -74,6 +74,12 @@ class MonitorConfig(BaseModel):
     btc_price_cache_ttl: float = 2.0         # seconds (was 30s)
     adaptive_entry_enabled: bool = True      # use adaptive BTC threshold + max entry
     adaptive_entry_window: int = 10          # rolling candle window for adaptive stats
+    dynamic_sl_enabled: bool = True          # adaptive stop-loss using 5 factors
+    dynamic_tp_enabled: bool = True          # adaptive take-profit using 3 factors
+    sl_floor: float = -0.75                  # never wider than -75%
+    sl_ceiling: float = -0.15               # never tighter than -15%
+    tp_floor: float = 0.20                   # never below +20%
+    tp_ceiling: float = 1.20                 # never above +120%
 
 
 class LoggingConfig(BaseModel):

@@ -113,9 +113,10 @@ Waits for entry triggers (from MarketMonitor) or exit triggers (from PositionMon
 
 1. **Mark-to-market** — Update position values using cached snapshot
 2. **Compute P&L %** — For each open position (UP and DOWN independently)
-3. **Time-weighted stop-loss** — Stop-loss tightens as candle nears expiry: -60% at 240s, -40% at 120s, -30% at 60s, -20% at 30s
-3. **Check thresholds** — Stop-loss at -60%, take-profit at +80% (configurable)
-4. **Trigger exit** — Push exit signal to AIDecision with reason and current P&L (respects AI cooldown; emergencies ≤-30% bypass)
+3. **Adaptive dynamic stop-loss** — Computed per-position from 5 factors: (1) time weighting (-60% at 240s to -20% at 0s), (2) regime from reversal rate (momentum tightens, choppy widens), (3) BTC velocity (against position tightens, favors widens), (4) ML alignment at entry (agreed widens, disagreed tightens), (5) entry price quality (expensive tightens, cheap widens). Bounded by configurable floor/ceiling (-75% to -15%)
+4. **Adaptive dynamic take-profit** — Time-weighted base with 3 adjustments: regime (momentum lets winners run, choppy takes profits), BTC velocity, entry price quality. Bounded (+20% to +120%)
+5. **Trigger exit** — Push exit signal to AIDecision with reason, P&L, and dynamic threshold (respects AI cooldown; emergencies ≤-30% bypass)
+6. **Fallback** — When `dynamic_sl_enabled: false`, uses existing time-weighted-only logic
 
 ### Market Rotation & Resolution
 
@@ -480,7 +481,10 @@ The most direct levers are in `config/default.yaml`:
 - **`monitor.rr_trigger_threshold`** — R/R ratio needed to trigger AI when adaptive entry is disabled (default 1.0, entry <= $0.50)
 - **`monitor.adaptive_entry_enabled`** — Use adaptive BTC threshold + max entry price learned from rolling candle history (default true)
 - **`monitor.adaptive_entry_window`** — Number of candles in the rolling window for adaptive stats (default 10)
-- **`monitor.stop_loss_pct`** / **`monitor.take_profit_pct`** — Position exit thresholds (default -60%/+80%)
+- **`monitor.stop_loss_pct`** / **`monitor.take_profit_pct`** — Base position exit thresholds (default -60%/+80%). When dynamic SL/TP is enabled, these serve as the starting point for adaptive computation
+- **`monitor.dynamic_sl_enabled`** / **`monitor.dynamic_tp_enabled`** — Enable adaptive SL/TP using regime, velocity, ML, and entry price factors (default true)
+- **`monitor.sl_floor`** / **`monitor.sl_ceiling`** — Bounds for dynamic stop-loss (default -75% / -15%)
+- **`monitor.tp_floor`** / **`monitor.tp_ceiling`** — Bounds for dynamic take-profit (default +20% / +120%)
 - **`initial_cash`** — Affects position sizing through risk percentages
 - **`temperature`** — Currently 0.0 (deterministic); slight increase (0.1-0.3) may help exploration
 - **`risk.max_position_pct`** — Increase for more aggressive sizing, decrease for safety
@@ -535,7 +539,7 @@ This would give sub-second orderbook data instead of polling REST every 60s. (No
 - **Ensemble decisions** — Run multiple Claude calls with different temperatures and aggregate
 - **Backtesting** — Replay historical JSONL logs through the decision engine
 - **SQLite query tooling** — The SQLite analytics store (`logs/polybot.db`) captures per-second snapshots, decisions, and candle outcomes. Build analysis scripts or a query UI on top of it
-- **Dynamic SL/TP thresholds** — Currently stop-loss (-15%) and take-profit (+30%) are fixed; could adapt based on time remaining, volatility, or position size
+- **Dynamic SL/TP thresholds** — Implemented in v0.5.2: adaptive stop-loss and take-profit computed every second from 5 factors (time, regime, BTC velocity, ML alignment, entry price)
 - **Cross-candle learning** — Track BTC price patterns across multiple candles for longer-term trend detection
 
 ---
