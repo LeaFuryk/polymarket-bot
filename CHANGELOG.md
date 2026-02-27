@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 ## [v0.5.0] — 2026-02-27
 
+### iter_008 Analysis (pre-v0.5.0 code — baseline for AI engineering changes)
+- **10.4 hours, 128 candles, 95 traded** — longest session by far. 71.6% win rate, +$97 net after fees
+- **Recovered from -$96 max drawdown** in the first 2 hours to finish profitable — system resilience proven
+- **Loss magnitude remains #1 problem**: avg loss $22.36 is 2.1x avg win $10.51. 27 losses totaled -$604 vs 68 wins at +$715
+- **16/27 losses were mid-candle reversals** where BTC moved $30-80+ at entry but reversed before resolution
+- **5 double-entry violations** where the AI bought the same side twice on one candle despite prompt rules — caused -$123 including the session's largest loss (-$52.73)
+- **6 losses had Chainlink divergence >$100** — this is a reliable reversal warning that was treated as advisory, not blocking
+- **AI acknowledged its own 0W/10L failure pattern** on UP trades and continued buying UP — 3 instances totaling -$57
+- **5 late re-entries** after stop-loss at prices >0.85 with <80s remaining — all had R/R <0.15x (pure gambling)
+- **Confidence 0.72-0.74 band overconfident**: claimed 73% but actual win rate was 67% — this band contained 47% of all trades
+- **v0.5.0 AI engineering changes were NOT active** during iter_008 (committed after bot started). iter_009 will be the first test of all 10 improvements
+- **Key improvements identified**: hard Chainlink divergence block, code-enforced single-entry-per-side, post-stop-loss re-entry block, drawdown circuit breaker, corrected $50 threshold accuracy claim
+
 ### Added — AI Engineering Improvements (see `docs/AIEngineering.md` for full analysis)
 - **BTC trajectory signals (velocity + peak-drawback)** — The AI now sees intra-candle BTC velocity ($/s, accelerating or decelerating) and peak drawback (how far BTC has pulled back from its candle peak). Computed from prefilter snapshots recorded every second. This directly addresses iter_007's #1 failure mode: all 4 losses were on decelerating BTC moves that reversed, but the AI only saw the static position (+$64) without knowing it was exhausting.
 - **Haiku screening reason passed to Sonnet** — When the fast screener (Haiku) approves a trade, its reasoning is now injected into Sonnet's context as a "Pre-Screening Note." This gives the decision model a free second opinion and primes it to evaluate the key signal Haiku identified. Previously the screening reason was logged but discarded.

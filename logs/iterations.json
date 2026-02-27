@@ -2369,5 +2369,2105 @@
       }
     ],
     "session_history": "# Session History\n\n| Date | Summary |\n|------|---------|\n| 2026-02-26 20:15 | First batch: 67% win rate but two large stop-losses on late UP entries eroded gains from successful early DOWN trades |\n| 2026-02-26 21:05 | win rate jumped to 83% with +$6.13 average PnL driven by better UP trade selection at lower fill prices and strong performance on large BTC moves above $100 |\n| 2026-02-26 22:07 | win rate improved to 87% with increased hold rate (25%) as anti-hedge logic activated more frequently, but average PnL declined due to two large reversal losses offsetting one exceptional +$64 win |\n"
+  },
+  {
+    "label": "iter_007",
+    "archived_at": "2026-02-27T01:18:36.166983+00:00",
+    "date_range": {
+      "start": "2026-02-27T00:11:57.888572+00:00",
+      "end": "2026-02-27T01:10:39.685900+00:00"
+    },
+    "total_candles": 14,
+    "total_trades": 11,
+    "total_cycles": 38,
+    "wins": 3,
+    "losses": 4,
+    "win_rate": 0.42857142857142855,
+    "total_pnl": -71.34629316323107,
+    "total_fees": 0.5560892263672755,
+    "ai_cost": 0.629408,
+    "net_result": -72.53179038959834,
+    "final_cash": 927.4105478104015,
+    "final_portfolio_value": 927.4105478104015,
+    "reflections_count": 5,
+    "enabled_indicators": [
+      "token_momentum",
+      "token_volatility",
+      "token_mean_reversion",
+      "orderbook_imbalance",
+      "spread_trend",
+      "token_price_divergence",
+      "btc_momentum",
+      "btc_volatility",
+      "btc_candle_momentum",
+      "session_streak",
+      "confidence_calibration",
+      "consecutive_streak",
+      "streak_magnitude",
+      "btc_vs_candle_open",
+      "volatility_30m",
+      "volume_trend",
+      "down_orderbook_imbalance",
+      "cross_book_flow",
+      "best_entry_analysis",
+      "chainlink_divergence",
+      "market_trend"
+    ],
+    "deep_analysis": {
+      "summary": {
+        "win_rate": 0.4286,
+        "wins": 3,
+        "losses": 4,
+        "net_pnl": -71.35,
+        "total_fees": 0.56,
+        "ai_cost": 0.63,
+        "total_cost": -72.53,
+        "avg_win": 3.44,
+        "avg_loss": -21.4,
+        "win_loss_ratio": 0.16,
+        "total_trades_executed": 11,
+        "total_buys": 8,
+        "total_sells": 3,
+        "total_cycles": 38,
+        "total_candles": 14,
+        "candles_traded": 8,
+        "candles_flat": 6,
+        "holds": 27,
+        "duration_minutes": 59,
+        "max_drawdown": 80.54,
+        "starting_cash": 1000.0,
+        "ending_cash": 927.41,
+        "session_reversal_rate": 0.769,
+        "note": "Extremely choppy session: 10/13 candles reversed from their direction at 20s mark. Win/loss ratio of 0.16 means losses were ~6x larger than wins."
+      },
+      "loss_analysis": [
+        {
+          "trade": "Trade 2 (Cycle 8)",
+          "candle": "btc-updown-5m-1772151900",
+          "side": "DOWN",
+          "entry_price": 0.7912,
+          "size": 40.0,
+          "pnl": -22.07,
+          "classification": "REVERSAL",
+          "detail": "BTC was -$45 from open at entry (193s remaining). The candle REVERSED -- BTC ultimately closed +$61 above open. The bot correctly identified the mid-candle bearish move but the 3-candle DOWN streak exhausted, and BTC bounced. Stop-loss triggered at -69% with 42s left. This was a textbook mean-reversion trap: strong trend continuation looked certain, but exhaustion kicked in.",
+          "btc_at_entry": "down $45 from open",
+          "btc_at_close": "up $61 from open",
+          "time_remaining_at_entry": "193s",
+          "exit": "Stop-loss at -69% (fill 0.2395)"
+        },
+        {
+          "trade": "Trade 3 (Cycle 19)",
+          "candle": "btc-updown-5m-1772153100",
+          "side": "DOWN",
+          "entry_price": 0.7613,
+          "size": 41.6,
+          "pnl": -27.11,
+          "classification": "REVERSAL",
+          "detail": "BTC was -$58 from open at entry (204s remaining). Direction was DOWN confirmed by all indicators. Then BTC reversed sharply, closing +$66 above open. Stop-loss triggered at -84.9% with 39s left. Sold at 0.1097. This was the largest single loss. The bot had identified streak exhaustion risk (3-candle DOWN streak) but traded anyway due to $50+ threshold rule.",
+          "btc_at_entry": "down $58 from open",
+          "btc_at_close": "up $66 from open",
+          "time_remaining_at_entry": "204s",
+          "exit": "Stop-loss at -84.9% (fill 0.1097)"
+        },
+        {
+          "trade": "Trade 4 (Cycle 22)",
+          "candle": "btc-updown-5m-1772153400",
+          "side": "UP",
+          "entry_price": 0.7708,
+          "size": 21.0,
+          "pnl": -16.19,
+          "classification": "REVERSAL",
+          "detail": "BTC was +$56 from open at entry (254s remaining -- early entry). Direction looked strong with $50+ threshold crossed. But the candle reversed, closing -$16 below open. No stop-loss exit this time -- the position was held to resolution and lost. The reversal was subtle (only -$16 final close) but enough to flip the candle to DOWN.",
+          "btc_at_entry": "up $56 from open",
+          "btc_at_close": "down $16 from open",
+          "time_remaining_at_entry": "254s",
+          "exit": "Resolved as loss (held to expiry)"
+        },
+        {
+          "trade": "Trade 7 (Cycle 33)",
+          "candle": "btc-updown-5m-1772154300",
+          "side": "UP",
+          "entry_price": 0.761,
+          "size": 29.1,
+          "pnl": -19.24,
+          "classification": "REVERSAL + WRONG DIRECTION",
+          "detail": "BTC was +$64 from open at entry (184s remaining). Strong UP signal. Then BTC crashed -$159 from open in a massive reversal. Stop-loss triggered at -73.1% with 151s left. Sold at 0.0999. After this stop-loss, the bot then re-entered DOWN on the same candle (trade 8) at 0.954, which was correct but at terrible R/R. The reversal was extreme -- a $223 swing from peak to trough within this candle.",
+          "btc_at_entry": "up $64 from open",
+          "btc_at_close": "down $124 from open",
+          "time_remaining_at_entry": "184s",
+          "exit": "Stop-loss at -73.1% (fill 0.0999)"
+        }
+      ],
+      "winner_analysis": [
+        {
+          "trade": "Trade 1 (Cycle 2)",
+          "candle": "btc-updown-5m-1772151000",
+          "side": "DOWN",
+          "entry_price": 0.9824,
+          "size": 40.0,
+          "pnl": 0.71,
+          "detail": "Correct direction but extremely expensive entry at 0.98. Only $0.71 profit on $39.29 cost. R/R was 0.02x. This was a 'right direction, terrible price' win -- the market had already priced in the outcome. BTC was -$77 at entry with only 102s remaining. Won because no reversal occurred.",
+          "btc_move": "-$46 close",
+          "entry_timing": "102s remaining"
+        },
+        {
+          "trade": "Trade 5 (Cycle 25)",
+          "candle": "btc-updown-5m-1772153700",
+          "side": "UP",
+          "entry_price": 0.831,
+          "size": 20.0,
+          "pnl": 3.38,
+          "detail": "BTC was +$50 from open at entry. Direction held through resolution. Entry at 0.83 was expensive but this candle was one of the few that did NOT reverse. The $77 final BTC move was strong enough to withstand any late-candle noise. This was the correct time to trade -- strong move that actually followed through.",
+          "btc_move": "+$77 close",
+          "entry_timing": "98s remaining"
+        },
+        {
+          "trade": "Trade 6 (Cycle 30)",
+          "candle": "btc-updown-5m-1772154000",
+          "side": "DOWN",
+          "entry_price": 0.8721,
+          "size": 48.8,
+          "pnl": 6.24,
+          "detail": "Best win of the session. BTC was -$58 from open at entry with 76s remaining. The candle ended with a massive -$136 move -- one of the strongest of the session. This was a late entry on a confirmed move that kept accelerating. The large BTC move ($136) was well above the $50 threshold and created real separation.",
+          "btc_move": "-$136 close",
+          "entry_timing": "76s remaining"
+        }
+      ],
+      "adaptive_entry_analysis": {
+        "window_size": 5,
+        "bug_description": "The adaptive entry window was set to 5 (bugged config). This means only the last 5 candle resolutions were used to calculate reversal rate and thresholds. In a session with 10/13 candles reversing, a window of 5 is far too small -- it creates extreme sensitivity to recent noise.",
+        "reversal_rate_progression": [
+          {
+            "after_candles": 5,
+            "reversal_rate": 0.6,
+            "btc_threshold": 50,
+            "max_entry": 0.64,
+            "note": "Initial: 3/5 reversed"
+          },
+          {
+            "after_candles": 7,
+            "reversal_rate": 0.8,
+            "btc_threshold": 50,
+            "max_entry": 0.52,
+            "note": "4/5 reversed in window -- threshold tightened sharply"
+          },
+          {
+            "after_candles": 8,
+            "reversal_rate": 0.8,
+            "btc_threshold": 50,
+            "max_entry": 0.56,
+            "note": "Still 4/5 reversed"
+          },
+          {
+            "after_candles": 9,
+            "reversal_rate": 0.8,
+            "btc_threshold": 50,
+            "max_entry": 0.56,
+            "note": "Still 4/5 reversed"
+          },
+          {
+            "after_candles": 10,
+            "reversal_rate": 0.8,
+            "btc_threshold": 50,
+            "max_entry": 0.57,
+            "note": "Still 4/5 reversed"
+          },
+          {
+            "after_candles": 11,
+            "reversal_rate": 0.6,
+            "btc_threshold": 50,
+            "max_entry": 0.6,
+            "note": "Window shifted: 3/5 reversed"
+          }
+        ],
+        "threshold_changes": "btc_threshold started at $30 (first 14 cycles) then jumped to $50 after reversal_rate hit 0.60. It stayed at $50 for the rest of the session.",
+        "max_entry_price_range": "Ranged from $0.52 to $0.64. With window=5 in this choppy market, max_entry was often too tight (blocking good trades) or too loose (allowing bad ones).",
+        "trades_blocked_by_adaptive": "The adaptive system blocked many prefilter cycles by keeping max_entry at $0.52-$0.64. However, the AI still entered at much higher prices (0.76-0.98) when it got past prefilter. The real problem: the 5-candle window made the system flip between states too quickly, providing no stable signal.",
+        "impact_assessment": "The bugged window=5 config caused two problems: (1) reversal_rate was artificially spiked to 0.80, making the system overly cautious on some candles while (2) simultaneously not blocking the entries that actually lost. The AI overrode the adaptive signal anyway by entering at expensive prices. Net effect: adaptive entry was noise, not signal.",
+        "should_have_blocked": "Trades 2, 3, 4, and 7 all lost to reversals. Adaptive entry detected 60-80% reversal rate but did not prevent the AI from entering. The max_entry price cap (0.52-0.64) was below actual fill prices (0.76-0.98), suggesting the AI bypassed or the trigger logic allowed through anyway.",
+        "correctly_triggered": "The prefilter trigger was based on btc_move exceeding btc_threshold AND min_ask being below max_entry -- but the AI then independently decided to buy at much higher prices on the other side of the book."
+      },
+      "prefilter_analysis": {
+        "total_checks": 1500,
+        "total_skipped": 653,
+        "skip_rate": 0.435,
+        "total_passed": 847,
+        "ai_cycles_triggered": 38,
+        "dominant_skip_reason": "No clear setup: streak=1, best entry > 0.400",
+        "skip_reason_breakdown": {
+          "no_clear_setup_entry_too_high": "Vast majority (~650 of 653). The prefilter checked every 3 seconds and most of the time the cheapest side token was priced above the $0.40 threshold, indicating no obvious directional signal yet.",
+          "both_spreads_wide": "2 occurrences. Rare because spreads were generally tight on these 5-min BTC markets.",
+          "time_remaining_too_low": "0 explicit occurrences in logs (handled by AI rather than prefilter)."
+        },
+        "assessment": "PreFilter was working correctly as a gatekeeper -- it saved 653 unnecessary AI calls (saving ~$0.017 per call = ~$11 in AI costs). However, it was too permissive when directional signals appeared: it passed through to AI when BTC moved $30-50+, but the AI then entered at expensive prices the prefilter never intended to allow. The prefilter checks entry price on the leading side, but the AI buys on the opposite side at whatever price is available.",
+        "cycles_per_candle": "Average 2.7 cycles per candle (38 cycles / 14 candles). Many candles had 0 AI calls (flat) while traded candles had 2-4 calls each."
+      },
+      "what_went_well": [
+        "Stop-loss system worked correctly: 3/3 stop-loss exits were good exits, saving $17.05 in additional losses",
+        "AI correctly identified expensive entries and avoided many late-candle traps (multiple HOLDs when tokens were >$0.90)",
+        "Two wins on non-reversing candles (trades 5 and 6) showed the core strategy works when direction holds",
+        "PreFilter saved significant AI costs by blocking 653/1500 checks (43.5%)",
+        "Position sizing was reduced appropriately on uncertain trades (21 shares instead of 80)",
+        "The bot correctly identified poor R/R on many candles and chose to stay flat",
+        "Trade 6 captured the largest BTC move of the session (-$136) for the best win (+$6.24)"
+      ],
+      "what_went_wrong": [
+        "Extremely choppy market: 10/13 candles (77%) reversed from their direction at 20s mark",
+        "All 4 losses were reversals -- the $50+ BTC threshold rule failed in this regime",
+        "Adaptive entry window=5 was bugged and too small, causing reversal_rate to spike to 0.80 but not actually blocking trades",
+        "Win/loss asymmetry was catastrophic: avg win $3.44 vs avg loss $21.40 (6x worse)",
+        "Net loss of -$71.35 in just 59 minutes destroyed capital accumulated in prior iterations",
+        "Trade 3 and Trade 7 were essentially the same mistake repeated: entering on $50+ moves that reversed",
+        "The bot entered on the SAME candle twice (1772154300) -- once UP (lost), then DOWN (won small) -- showing indecision",
+        "BTC entry threshold of $50 was not sufficient in this choppy regime; candles were swinging $70-160",
+        "Chainlink divergence warnings ($38-$150) were noted but not acted upon",
+        "The bot traded too aggressively in a STRONG BEAR + CHOPPY regime when it should have gone fully flat"
+      ],
+      "key_takeaway": "In a 77% reversal-rate choppy market, the bot lost $71.35 in 59 minutes because its $50+ BTC threshold rule -- which assumes directional continuation -- was the exact wrong strategy for a regime where BTC was whipsawing $60-160 within each 5-minute candle; the adaptive entry system detected this (reversal_rate=0.80) but the bugged window=5 config and lack of a hard trade-block mechanism meant the AI kept entering anyway."
+    },
+    "calibration": {
+      "total_records": 7,
+      "shadow_accuracy": 0.778,
+      "shadow_total": 9,
+      "bins": [
+        {
+          "range": "60%-65%",
+          "wins": 0,
+          "losses": 1,
+          "win_rate": 0.0,
+          "reliable": false
+        },
+        {
+          "range": "65%-70%",
+          "wins": 1,
+          "losses": 0,
+          "win_rate": 1.0,
+          "reliable": false
+        },
+        {
+          "range": "70%-75%",
+          "wins": 2,
+          "losses": 2,
+          "win_rate": 0.5,
+          "reliable": false
+        },
+        {
+          "range": "80%-85%",
+          "wins": 1,
+          "losses": 0,
+          "win_rate": 1.0,
+          "reliable": false
+        }
+      ]
+    },
+    "exit_analysis": {
+      "total_exits": 3,
+      "good_exit_rate": 1.0,
+      "good_exits": 3,
+      "total_saved": 17.0492,
+      "total_missed": 0.0
+    },
+    "ml_model": {
+      "training_samples": 13,
+      "model_trained": true
+    },
+    "trade_analysis": {
+      "total_buys": 8,
+      "total_sells": 3,
+      "total_holds": 27,
+      "avg_fill_price": 0.8405,
+      "cheap_entries": 0,
+      "mid_entries": 0,
+      "expensive_entries": 8,
+      "avg_confidence": 0.7137,
+      "hold_rate": 0.711
+    },
+    "resolution_analysis": {
+      "total": 13,
+      "avg_btc_move": 69.5,
+      "max_btc_move": 136.0,
+      "avg_win_pnl": 3.4423,
+      "avg_loss_pnl": -20.4183,
+      "biggest_win": 6.2419,
+      "biggest_loss": -27.1052,
+      "cumulative_pnl": [
+        0.7059,
+        0.7059,
+        0.7059,
+        -21.3638,
+        -21.3638,
+        -21.3638,
+        -21.3638,
+        -48.469,
+        -64.6557,
+        -61.2765,
+        -55.0346,
+        -71.3463,
+        -71.3463
+      ]
+    },
+    "resolutions_detail": [
+      {
+        "slug": "btc-updown-5m-1772151000",
+        "pnl": 0.7059281622995996,
+        "btc_move": -46.194476638236665,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772151300",
+        "pnl": 0.0,
+        "btc_move": -79.00473615281226,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772151600",
+        "pnl": 0.0,
+        "btc_move": -36.97526384719822,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772151900",
+        "pnl": -22.06972878868941,
+        "btc_move": 61.024339760420844,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772152200",
+        "pnl": 0.0,
+        "btc_move": -19.09433976042783,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772152500",
+        "pnl": 0.0,
+        "btc_move": -125.71824200288393,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772152800",
+        "pnl": 0.0,
+        "btc_move": -69.4717579971184,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772153100",
+        "pnl": -27.105214120467377,
+        "btc_move": 66.38000000000466,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772153400",
+        "pnl": -16.186666261243587,
+        "btc_move": -16.101055681705475,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772153700",
+        "pnl": 3.379198157484474,
+        "btc_move": 77.0410556817078,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772154000",
+        "pnl": 6.241864643883908,
+        "btc_move": -136.036980645702,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772154300",
+        "pnl": -16.31167495649867,
+        "btc_move": -124.31741603891714,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772154600",
+        "pnl": 0.0,
+        "btc_move": 46.364396684613894,
+        "resolution": ""
+      }
+    ],
+    "observations": [
+      {
+        "category": "pattern",
+        "text": "late-entry momentum trades (entering with <230s remaining on strong BTC moves) resulted in 0/3 wins with severe losses averaging -$21.79, suggesting momentum had already exhausted by entry time",
+        "timestamp": "2026-02-27T01:00:18.469775+00:00"
+      },
+      {
+        "category": "bias",
+        "text": "all 3 losing trades were DOWN positions entered at high prices (0.76-0.79) during downward BTC moves that subsequently reversed, while the 2 winning trades included 1 UP position at 0.83 and 1 DOWN at lower entry",
+        "timestamp": "2026-02-27T01:00:18.470350+00:00"
+      },
+      {
+        "category": "edge",
+        "text": "the bot held 50% of resolutions (5/10) and avoided losses on 4 of those holds, suggesting the HOLD decision-making preserved capital during uncertain conditions",
+        "timestamp": "2026-02-27T01:00:18.470508+00:00"
+      },
+      {
+        "category": "pattern",
+        "text": "stop-losses triggered at -69% and -84.9% on cycles 10 and 21, both on DOWN positions that experienced sharp BTC reversals within the 5-minute window after entry",
+        "timestamp": "2026-02-27T01:00:18.470584+00:00"
+      },
+      {
+        "category": "regime",
+        "text": "during this batch BTC traded in a tight $67084-$67396 range (~$312 span), with small moves ($40-$80) that frequently reversed direction mid-candle",
+        "timestamp": "2026-02-27T01:00:18.470657+00:00"
+      }
+    ],
+    "session_history": "# Session History\n\n| Date | Summary |\n|------|---------|\n| 2026-02-27 01:00 | First batch: 40% win rate with -$12.26 avg PnL, losses driven by late-entry momentum trades that reversed sharply in low-volatility ranging conditions |\n"
+  },
+  {
+    "label": "iter_008",
+    "archived_at": "2026-02-27T12:03:16.658828+00:00",
+    "date_range": {
+      "start": "2026-02-27T01:26:47.077297+00:00",
+      "end": "2026-02-27T11:52:33.687275+00:00"
+    },
+    "total_candles": 128,
+    "total_trades": 137,
+    "total_cycles": 294,
+    "wins": 68,
+    "losses": 27,
+    "win_rate": 0.7157894736842105,
+    "total_pnl": 111.25932822267868,
+    "total_fees": 7.5550072319625015,
+    "ai_cost": 6.701318,
+    "net_result": 97.00300299071617,
+    "final_cash": 980.1769241907173,
+    "final_portfolio_value": 1064.4944241907174,
+    "reflections_count": 7,
+    "enabled_indicators": [
+      "token_momentum",
+      "token_volatility",
+      "token_mean_reversion",
+      "orderbook_imbalance",
+      "spread_trend",
+      "token_price_divergence",
+      "btc_momentum",
+      "btc_volatility",
+      "btc_candle_momentum",
+      "session_streak",
+      "confidence_calibration",
+      "consecutive_streak",
+      "streak_magnitude",
+      "btc_vs_candle_open",
+      "volatility_30m",
+      "volume_trend",
+      "down_orderbook_imbalance",
+      "cross_book_flow",
+      "best_entry_analysis",
+      "chainlink_divergence",
+      "market_trend"
+    ],
+    "deep_analysis": {
+      "summary": {
+        "win_rate": 0.716,
+        "wins": 68,
+        "losses": 27,
+        "net_pnl": 111.26,
+        "total_fees": 7.56,
+        "ai_cost": 6.7,
+        "total_cost": 97.0,
+        "avg_win": 10.51,
+        "avg_loss": -22.36,
+        "win_loss_ratio": 0.47,
+        "total_trades_executed": 137,
+        "total_buys": 137,
+        "total_sells": 25,
+        "total_cycles": 294,
+        "total_candles": 128,
+        "candles_traded": 95,
+        "candles_flat": 32,
+        "holds": 157,
+        "duration_minutes": 626,
+        "max_drawdown": 96.28,
+        "max_win_streak": 10,
+        "max_loss_streak": 3,
+        "starting_cash": 1000.0,
+        "ending_cash": 1064.49,
+        "biggest_win": 42.39,
+        "biggest_loss": -52.73,
+        "total_won": 714.96,
+        "total_lost": -603.7,
+        "session_reversal_rate": 0.39,
+        "note": "Largest session by far: 10.4 hours, 128 candles, 95 traded. Recovered from -$96 max drawdown in first 2 hours to finish +$97 net. Loss asymmetry persists: avg loss ($22.36) is 2.1x avg win ($10.51). 27 losses totaling -$604 vs 68 wins totaling +$715."
+      },
+      "hourly_performance": [
+        {
+          "hour": "01 UTC",
+          "pnl": -42.93,
+          "trades": 7,
+          "note": "Session start \u2014 rough opening, 5 losses in first 6 traded candles"
+        },
+        {
+          "hour": "02 UTC",
+          "pnl": -20.38,
+          "trades": 9,
+          "note": "Still struggling with reversals"
+        },
+        {
+          "hour": "03 UTC",
+          "pnl": -7.88,
+          "trades": 7,
+          "note": "Stabilizing but still net negative"
+        },
+        {
+          "hour": "04 UTC",
+          "pnl": 44.78,
+          "trades": 10,
+          "note": "Breakthrough: 10-candle win streak begins here"
+        },
+        {
+          "hour": "05 UTC",
+          "pnl": -13.15,
+          "trades": 7,
+          "note": "Includes largest single loss (-$52.73)"
+        },
+        {
+          "hour": "06 UTC",
+          "pnl": 29.21,
+          "trades": 9,
+          "note": "Strong recovery"
+        },
+        {
+          "hour": "07 UTC",
+          "pnl": 31.51,
+          "trades": 9,
+          "note": "Best consecutive hour"
+        },
+        {
+          "hour": "08 UTC",
+          "pnl": 18.22,
+          "trades": 7,
+          "note": "Solid performance"
+        },
+        {
+          "hour": "09 UTC",
+          "pnl": -1.46,
+          "trades": 10,
+          "note": "Late-session deterioration begins"
+        },
+        {
+          "hour": "10 UTC",
+          "pnl": 6.69,
+          "trades": 11,
+          "note": "Mixed with heavy bearish trend"
+        },
+        {
+          "hour": "11 UTC",
+          "pnl": 66.66,
+          "trades": 9,
+          "note": "Strong finish, including $29.42 trade"
+        }
+      ],
+      "loss_analysis": [
+        {
+          "candle": "1772155500",
+          "time": "00:05 UTC",
+          "side": "UP",
+          "entry_price": 0.71,
+          "size": 20,
+          "pnl": -10.22,
+          "classification": "REVERSAL",
+          "detail": "BTC +$31 at entry, reversed to close -$11. Counter-trend (bearish -0.75). Stop-loss triggered at -70.5%."
+        },
+        {
+          "candle": "1772156400",
+          "time": "00:20 UTC",
+          "side": "UP",
+          "entry_price": 0.63,
+          "size": 41.8,
+          "pnl": -17.61,
+          "classification": "REVERSAL + CHAINLINK_DIVERGENCE",
+          "detail": "BTC +$74 at entry, reversed to close barely +$1.78. Chainlink divergence +$367 was the warning sign. AI cited 90% accuracy at $50+ but ignored divergence."
+        },
+        {
+          "candle": "1772157000",
+          "time": "00:30 UTC",
+          "side": "DOWN",
+          "entry_price": 0.73,
+          "size": 42.6,
+          "pnl": -20.94,
+          "classification": "REVERSAL",
+          "detail": "BTC -$55 at entry, reversed completely to close UP. Early candle (52s in), 248s for reversal to play out."
+        },
+        {
+          "candle": "1772157300",
+          "time": "00:35 UTC",
+          "side": "DOWN",
+          "entry_price": 0.74,
+          "size": 40,
+          "pnl": -18.06,
+          "classification": "REVERSAL",
+          "detail": "BTC -$61 at entry, reversed to close +$41. Identical pattern to previous candle \u2014 consecutive reversal trap."
+        },
+        {
+          "candle": "1772157900",
+          "time": "00:45 UTC",
+          "side": "UP",
+          "entry_price": 0.69,
+          "size": 52.2,
+          "pnl": -36.09,
+          "classification": "REVERSAL",
+          "detail": "BTC +$37 at entry, candle resolved barely DOWN (+$1.41 final). Narrowest possible loss \u2014 essentially a coin flip that went wrong."
+        },
+        {
+          "candle": "1772158500",
+          "time": "00:55 UTC",
+          "side": "DOWN",
+          "entry_price": 0.54,
+          "size": 71,
+          "pnl": -28.5,
+          "classification": "MASSIVE_REVERSAL",
+          "detail": "BTC -$57 at entry, reversed to close +$174 from open. Enormous $231 swing. AI entered at good price (0.54) but direction completely wrong."
+        },
+        {
+          "candle": "1772158800",
+          "time": "01:00 UTC",
+          "side": "UP (contrarian)",
+          "entry_price": 0.36,
+          "size": 85,
+          "pnl": -19.65,
+          "classification": "FAILED_CONTRARIAN",
+          "detail": "Contrarian play: bought UP while BTC -$57, citing 60% reversal rate. BTC continued to -$112 \u2014 contrarian failed. Good R/R entry (1.8x) but wrong direction."
+        },
+        {
+          "candle": "1772160900",
+          "time": "01:35 UTC",
+          "side": "DOWN",
+          "entry_price": 0.67,
+          "size": 61.4,
+          "pnl": -25.91,
+          "classification": "STOP_LOSS_ON_CORRECT_SIDE",
+          "detail": "Bought DOWN, winner was DOWN, but still lost -$25.91. Stop-loss triggered during mid-candle reversal before final resolution confirmed direction."
+        },
+        {
+          "candle": "1772161200",
+          "time": "01:40 UTC",
+          "side": "UP",
+          "entry_price": 0.69,
+          "size": 27.8,
+          "pnl": -13.1,
+          "classification": "REVERSAL",
+          "detail": "BTC +$28 at entry, reversed to close -$23. Moderate signal misread. Mean reversion z=+2.01 was the warning."
+        },
+        {
+          "candle": "1772161800",
+          "time": "01:50 UTC",
+          "side": "UP\u2192DOWN flip",
+          "entry_price": 0.71,
+          "size": 38.6,
+          "pnl": -10.81,
+          "classification": "STOP_LOSS_AND_REENTRY",
+          "detail": "UP stopped out at -$17.42, then re-entered DOWN at 0.88 with only 77s left. R/R on re-entry was terrible (0.13x). Net loss reduced but still negative."
+        },
+        {
+          "candle": "1772162400",
+          "time": "02:00 UTC",
+          "side": "UP",
+          "entry_price": 0.71,
+          "size": 35.9,
+          "pnl": -15.85,
+          "classification": "REVERSAL",
+          "detail": "BTC +$39 at entry, reversed to close -$68. Classic mid-candle momentum that reversed."
+        },
+        {
+          "candle": "1772166000",
+          "time": "03:00 UTC",
+          "side": "UP\u2192DOWN flip",
+          "entry_price": 0.46,
+          "size": 85,
+          "pnl": -25.0,
+          "classification": "IGNORED_OWN_DATA",
+          "detail": "AI ACKNOWLEDGED 0W/10L record on recent UP buys and still bought UP at $0.46. BTC reversed from +$55 to -$81. Re-entry DOWN at 0.97 (tiny R/R) couldn't recover."
+        },
+        {
+          "candle": "1772167800",
+          "time": "03:30 UTC",
+          "side": "DOWN",
+          "entry_price": 0.68,
+          "size": 32.4,
+          "pnl": -14.3,
+          "classification": "COUNTER_TREND",
+          "detail": "Bought DOWN while trend was STRONG BULLISH (+0.88). BTC -$39 at entry but reversed to +$80. Counter-trend trade against macro."
+        },
+        {
+          "candle": "1772170500",
+          "time": "04:15 UTC",
+          "side": "DOWN (double entry)",
+          "entry_price": 0.83,
+          "size": 40,
+          "pnl": -33.03,
+          "classification": "DOUBLE_ENTRY + RULE_VIOLATION",
+          "detail": "Two DOWN entries 14s apart. AI said 'should NOT add to position per risk rules' then bought again anyway. BTC reversed from -$33 to +$8."
+        },
+        {
+          "candle": "1772171100",
+          "time": "04:25 UTC",
+          "side": "UP\u2192DOWN flip",
+          "entry_price": 0.57,
+          "size": 61.6,
+          "pnl": -23.56,
+          "classification": "STOP_LOSS_AND_REENTRY",
+          "detail": "UP stopped out at -$24.13. Re-entered DOWN at 0.97 with only 62s left (R/R=0.03x). Terrible recovery attempt."
+        },
+        {
+          "candle": "1772173500",
+          "time": "05:05 UTC",
+          "side": "DOWN",
+          "entry_price": 0.82,
+          "size": 48.8,
+          "pnl": -40.08,
+          "classification": "REVERSAL + CHAINLINK_DIVERGENCE",
+          "detail": "BTC -$53 at entry, reversed to +$12. Chainlink divergence -$290 was a massive warning. 4 consecutive DOWN candles = exhaustion. Second largest loss."
+        },
+        {
+          "candle": "1772175600",
+          "time": "05:40 UTC",
+          "side": "UP (double entry)",
+          "entry_price": 0.67,
+          "size": 103.4,
+          "pnl": -52.73,
+          "classification": "DOUBLE_ENTRY + LARGEST_LOSS",
+          "detail": "LARGEST LOSS. Two UP entries 18s apart totaling 103.4 shares. BTC only +$28 at entry (moderate signal) but reversed to -$77. Double entry compounded damage catastrophically."
+        },
+        {
+          "candle": "1772179800",
+          "time": "06:50 UTC",
+          "side": "UP",
+          "entry_price": 0.67,
+          "size": 61.4,
+          "pnl": -25.3,
+          "classification": "REVERSAL",
+          "detail": "BTC +$48 at entry, reversed to close -$66. AI cited $50 threshold accuracy but BTC was $2 short of that threshold."
+        },
+        {
+          "candle": "1772182200",
+          "time": "07:30 UTC",
+          "side": "DOWN",
+          "entry_price": 0.87,
+          "size": 28.9,
+          "pnl": -0.07,
+          "classification": "CHAINLINK_RESOLUTION_DIVERGENCE",
+          "detail": "Near break-even. BTC fell on Binance but resolved UP per Chainlink. Chainlink divergence of -$103 was the differentiator."
+        },
+        {
+          "candle": "1772182800",
+          "time": "07:40 UTC",
+          "side": "UP",
+          "entry_price": 0.76,
+          "size": 56.7,
+          "pnl": -27.9,
+          "classification": "REVERSAL",
+          "detail": "BTC +$51 at entry (just crossing $50 threshold), reversed to -$44. The $50 threshold was barely crossed."
+        },
+        {
+          "candle": "1772184000",
+          "time": "08:00 UTC",
+          "side": "UP",
+          "entry_price": 0.88,
+          "size": 48.8,
+          "pnl": -34.74,
+          "classification": "REVERSAL + EXPENSIVE_ENTRY + CHAINLINK_DIVERGENCE",
+          "detail": "BTC +$81 at entry (strong signal), entry at 0.88 (R/R=0.14x \u2014 terrible). Reversed to -$92. Chainlink divergence -$150. Even correct direction wouldn't justify 0.88 entry."
+        },
+        {
+          "candle": "1772185800",
+          "time": "08:30 UTC",
+          "side": "UP\u2192DOWN flip",
+          "entry_price": 0.65,
+          "size": 62.6,
+          "pnl": -17.49,
+          "classification": "IGNORED_OWN_DATA + STOP_LOSS_AND_REENTRY",
+          "detail": "AI noted '4/6 recent UP trades lost' and bought UP anyway. BTC reversed from +$66 to -$100. Stop-loss, re-entry DOWN partially salvaged."
+        },
+        {
+          "candle": "1772186400",
+          "time": "08:40 UTC",
+          "side": "UP",
+          "entry_price": 0.64,
+          "size": 29.5,
+          "pnl": -12.13,
+          "classification": "COUNTER_TREND + IGNORED_WARNINGS",
+          "detail": "AI had LOW confidence (0.68), noted BEARISH trend (-0.41) and recent UP failures, but still traded UP. BTC reversed from +$38 to -$101."
+        },
+        {
+          "candle": "1772187900",
+          "time": "09:05 UTC",
+          "side": "UP (double entry)",
+          "entry_price": 0.58,
+          "size": 49.6,
+          "pnl": -20.99,
+          "classification": "DOUBLE_ENTRY + COUNTER_TREND",
+          "detail": "Two UP entries 19s apart against -0.83 bearish trend. AI explicitly noted 'counter-trend' but traded anyway. BTC reversed from +move to -$93."
+        },
+        {
+          "candle": "1772188800",
+          "time": "09:20 UTC",
+          "side": "DOWN",
+          "entry_price": 0.81,
+          "size": 67.5,
+          "pnl": -40.01,
+          "classification": "REVERSAL + CHAINLINK_DIVERGENCE",
+          "detail": "BTC -$56 at entry, reversed to +$39. Chainlink divergence -$147. Stop-loss triggered at -72.3% with 57s left."
+        },
+        {
+          "candle": "1772191800",
+          "time": "10:10 UTC",
+          "side": "UP (double entry)",
+          "entry_price": 0.6,
+          "size": 42.1,
+          "pnl": -16.25,
+          "classification": "DOUBLE_ENTRY",
+          "detail": "Two UP entries 19s apart. BTC reversed from +$31 to -$91. Double entry on a moderate signal."
+        },
+        {
+          "candle": "1772192400",
+          "time": "10:20 UTC",
+          "side": "UP\u2192DOWN flip",
+          "entry_price": 0.64,
+          "size": 25.3,
+          "pnl": -3.4,
+          "classification": "STOP_LOSS_AND_REENTRY",
+          "detail": "UP stopped out, DOWN re-entry recovered most loss. Net only -$3.40. Bearish trend -0.75 + Chainlink divergence -$150 ignored."
+        }
+      ],
+      "loss_classifications": [
+        {
+          "type": "Mid-candle reversal (direction flipped before resolution)",
+          "count": 16,
+          "total_pnl": -364.29,
+          "pct_of_losses": "60.4%"
+        },
+        {
+          "type": "Double entry on same side (compounded damage)",
+          "count": 5,
+          "total_pnl": -123.0,
+          "pct_of_losses": "20.4%"
+        },
+        {
+          "type": "Stop-loss + re-entry (still net negative)",
+          "count": 5,
+          "total_pnl": -80.26,
+          "pct_of_losses": "13.3%"
+        },
+        {
+          "type": "Counter-trend (traded against macro direction)",
+          "count": 4,
+          "total_pnl": -67.42,
+          "pct_of_losses": "11.2%"
+        },
+        {
+          "type": "Chainlink divergence warning ignored",
+          "count": 6,
+          "total_pnl": -156.44,
+          "pct_of_losses": "25.9%"
+        },
+        {
+          "type": "AI acknowledged own failure pattern and ignored it",
+          "count": 3,
+          "total_pnl": -56.79,
+          "pct_of_losses": "9.4%"
+        }
+      ],
+      "ai_engineering_v050_impact": {
+        "note": "v0.5.0 code was committed DURING iter_008 (bot started at 01:23 UTC, commits at 02:22 and 08:54 UTC). Since Python loads modules at startup, the running process used PRE-v0.5.0 code for the entire session. The 10 AI engineering improvements were NOT active during this iteration.",
+        "baseline_for_next_iteration": true,
+        "what_v050_would_have_changed": [
+          "BTC trajectory signals would have shown velocity deceleration before 16 of 27 reversals \u2014 the AI would have seen 'BTC decelerating at -$5/s' instead of just 'BTC +$51 from open'",
+          "Haiku screening reason would have been passed to Sonnet, giving a second opinion on uncertain trades",
+          "ML feature contributions would have shown WHICH features drove the prediction, helping Sonnet override when ML was keying on the wrong signal",
+          "Adaptive reflection (every 5 during losses) would have triggered 4x more reflections in the bad first 2 hours instead of the fixed 10-resolution cadence",
+          "Time-weighted stop-loss would have cut losses earlier near candle expiry \u2014 5 re-entry trades at 0.88-0.97 with <80s remaining would have been blocked or tightened",
+          "Ensemble disagreement tracking would have flagged when Haiku, Sonnet, and ML disagreed \u2014 potential early warning for uncertain setups",
+          "Temperature 0.1 might have prevented the AI from robotically repeating the same $50-threshold reasoning on 16 consecutive reversals",
+          "Cross-candle microstructure would have shown spread widening patterns that precede reversals"
+        ]
+      },
+      "ml_model_analysis": {
+        "training_samples": 112,
+        "top_features": {
+          "btc_vs_open": {
+            "weight": 0.281,
+            "interpretation": "Strongest predictor \u2014 larger BTC moves from open correlate with UP winning"
+          },
+          "down_midpoint": {
+            "weight": -0.158,
+            "interpretation": "Higher DOWN prices predict DOWN losing (contrarian signal)"
+          },
+          "up_midpoint": {
+            "weight": 0.129,
+            "interpretation": "Higher UP prices predict UP winning (momentum confirmation)"
+          },
+          "book_imbalance": {
+            "weight": 0.06,
+            "interpretation": "Orderbook tilt toward UP predicts UP winning"
+          },
+          "streak_magnitude": {
+            "weight": -0.045,
+            "interpretation": "Larger streak magnitudes weakly predict reversal"
+          }
+        },
+        "note": "ML model had 112 training samples by session end. btc_vs_open is the dominant feature (weight 0.28) which aligns with the $50+ threshold strategy. However, the model doesn't capture DECELERATION \u2014 a key gap that v0.5.0's trajectory signals aim to fill."
+      },
+      "calibration_analysis": {
+        "total_records": 95,
+        "confidence_0.62_0.68": {
+          "count": 12,
+          "wins": 8,
+          "losses": 4,
+          "actual_win_rate": 0.667,
+          "note": "Under-confident \u2014 actual 67% vs stated ~65%"
+        },
+        "confidence_0.72_0.74": {
+          "count": 45,
+          "wins": 30,
+          "losses": 15,
+          "actual_win_rate": 0.667,
+          "note": "Overconfident \u2014 actual 67% vs stated ~73%"
+        },
+        "confidence_0.76_0.78": {
+          "count": 30,
+          "wins": 24,
+          "losses": 6,
+          "actual_win_rate": 0.8,
+          "note": "Slightly overconfident \u2014 actual 80% vs stated ~77%"
+        },
+        "confidence_0.82": {
+          "count": 4,
+          "wins": 4,
+          "losses": 0,
+          "actual_win_rate": 1.0,
+          "note": "Perfect but tiny sample"
+        },
+        "key_finding": "The 0.72-0.74 band is poorly calibrated: AI claims 73% confidence but actual win rate is only 67%. This band contains 47% of all trades \u2014 the biggest source of overconfidence."
+      },
+      "exit_analysis": {
+        "total_stop_loss_exits": 25,
+        "exits_on_correct_side": 1,
+        "exits_that_saved_money": "Most stop-losses were correct \u2014 the position was on the wrong side and would have lost more at resolution",
+        "late_reentries_after_stop": 5,
+        "late_reentry_net_effect": "Re-entries after stop-loss at prices >0.85 with <80s remaining universally had terrible R/R (0.03-0.13x). The bot would have been better off staying flat after a stop-loss.",
+        "recommendation": "Block re-entry after stop-loss if time_remaining < 120s OR if entry price > 0.85"
+      },
+      "what_went_well": [
+        "71.6% win rate across 95 trades \u2014 consistent with best iterations (iter_004: 77%, iter_006: 79%)",
+        "Recovered from -$96 max drawdown to finish +$97 net \u2014 resilient system",
+        "10-candle win streak during hours 04-05 UTC showed the core strategy works in trending markets",
+        "Longest session ever (10.4 hours, 128 candles) \u2014 system stability proven",
+        "Strong finish: last 2 hours produced +$73 after a late dip",
+        "Position sizing mostly appropriate: counter-trend reductions worked on 4 trades",
+        "Binance bootstrap gave warm reversal rate from the first candle (60% reversal detected immediately)",
+        "Adaptive entry correctly identified regime shifts throughout the session",
+        "12 reflections triggered across the session (vs 7 in much shorter iter_007)",
+        "ML model accumulated 112 training samples \u2014 largest training set yet"
+      ],
+      "what_went_wrong": [
+        "27 losses totaling -$604 despite only 95 trades \u2014 avg loss ($22.36) is 2.1x avg win ($10.51)",
+        "First 2 hours were catastrophic: -$63 PnL with 5 losses in first 6 traded candles",
+        "AI repeatedly cited '$50 threshold = 90% accuracy' but at least 10 losses exceeded $50 at entry \u2014 real accuracy much lower",
+        "Double entries on same side caused 5 of the worst losses (-$123 total), including the session's largest loss (-$52.73)",
+        "AI acknowledged its own failure patterns 3 times and ignored them ('0W/10L on UP buys' then bought UP)",
+        "Chainlink divergence >$100 present in 6 losing trades (-$156 total) but never used as a hard block",
+        "5 late re-entries after stop-loss at prices >0.85 with <80s remaining \u2014 all had R/R < 0.15x, pure gambling",
+        "UP trades lost disproportionately: 15 UP losses ($-382) vs 8 DOWN losses ($-201)",
+        "Confidence 0.72-0.74 band was overconfident: claimed 73% but actual was 67%, and this band had 47% of all trades",
+        "Counter-trend trades against strong macro direction produced 4 unnecessary losses"
+      ],
+      "improvement_opportunities": [
+        {
+          "id": 1,
+          "title": "Hard block on Chainlink divergence >$150",
+          "impact": "Would have prevented 4-6 losses totaling ~$120-$156",
+          "detail": "When Chainlink divergence exceeds $150, the resolution source (Chainlink) is pricing a fundamentally different BTC level than Binance. The AI sees BTC +$50 on Binance but Chainlink disagrees by $150+. Hard-block trades when |chainlink_divergence| > $150.",
+          "priority": "HIGH"
+        },
+        {
+          "id": 2,
+          "title": "Enforce single-entry-per-side-per-candle in code, not just prompt",
+          "impact": "Would have reduced 5 losses by ~50% each, saving ~$60",
+          "detail": "The AI said 'should NOT add per risk rules' then added anyway in 5 cases. This is a prompt compliance failure. Move the rule to code: after a BUY on side X for candle Y, block further BUYs on side X for candle Y. The prompt is advisory; the code is law.",
+          "priority": "HIGH"
+        },
+        {
+          "id": 3,
+          "title": "Block re-entry after stop-loss if <120s remaining or price >0.85",
+          "impact": "Would have prevented 5 terrible R/R re-entries, saving ~$30-40 in compounded losses",
+          "detail": "After a stop-loss exit, the bot re-entered on the opposite side at 0.88-0.97 with 42-77s remaining. These all had R/R of 0.03-0.15x. Even when correct, the profit was tiny. When wrong, the loss was doubled. Hard-block re-entry when time_remaining < 120s or entry_price > 0.85.",
+          "priority": "HIGH"
+        },
+        {
+          "id": 4,
+          "title": "Discount the '$50 threshold = 90% accuracy' claim",
+          "impact": "Would fix the AI's systematic overconfidence on large BTC moves",
+          "detail": "Across iter_008, at least 10 trades entered on $50+ BTC moves and lost. The actual accuracy of $50+ moves is closer to 60-70%, not 90%. The knowledge base claim comes from a small sample and doesn't account for mid-candle reversals. Either update the knowledge base with corrected stats, or add a system-prompt caveat: '$50 threshold accuracy is 65-70% in choppy markets, not 90%'.",
+          "priority": "HIGH"
+        },
+        {
+          "id": 5,
+          "title": "Drawdown circuit breaker",
+          "impact": "Would have paused trading during the -$96 drawdown period, potentially saving $30-50",
+          "detail": "After 3 consecutive losses or -$50 drawdown within 30 minutes, pause trading for 2-3 candles (10-15 minutes). The bot's worst periods were loss streaks where it kept entering on the same failing pattern. A circuit breaker forces a cooldown period for the market regime to shift.",
+          "priority": "MEDIUM"
+        },
+        {
+          "id": 6,
+          "title": "Counter-trend hard block when trend score >0.7 (or <-0.7)",
+          "impact": "Would have prevented 4 counter-trend losses totaling -$67",
+          "detail": "When market_trend score exceeds +/-0.7 (strong trend), block trades in the opposite direction entirely, rather than just reducing position size. The current 50% size reduction still allows big losses. In a strong bearish trend (-0.83), buying UP is almost always wrong.",
+          "priority": "MEDIUM"
+        },
+        {
+          "id": 7,
+          "title": "Calibration-adjusted confidence cap",
+          "impact": "Would reduce position sizes on overconfident 0.72-0.74 band",
+          "detail": "The 0.72-0.74 confidence band claims 73% but delivers 67%. Use the calibrator to cap effective confidence: if stated=0.73 but calibrated_accuracy=0.67, use 0.67 for sizing. This naturally reduces position sizes on overconfident trades.",
+          "priority": "MEDIUM"
+        },
+        {
+          "id": 8,
+          "title": "BTC deceleration as a trade-quality signal (v0.5.0 trajectory)",
+          "impact": "The v0.5.0 velocity signal addresses the #1 loss pattern \u2014 verify in iter_009",
+          "detail": "16 of 27 losses were mid-candle reversals where BTC was moving strongly at entry but decelerating. The v0.5.0 BTC trajectory signals (velocity + peak-drawback) should help the AI detect decelerating moves. This is the highest-impact v0.5.0 feature to validate.",
+          "priority": "VERIFY_IN_ITER_009"
+        }
+      ],
+      "comparison_with_previous": {
+        "iter_004": {
+          "candles": 54,
+          "win_rate": "77.1%",
+          "net": "+$219",
+          "note": "Best iteration overall. Higher win rate, lower loss magnitude."
+        },
+        "iter_005": {
+          "candles": 50,
+          "win_rate": "61.4%",
+          "net": "-$2",
+          "note": "Choppy market with window=5 bug. Poor performance."
+        },
+        "iter_006": {
+          "candles": 31,
+          "win_rate": "79.2%",
+          "net": "+$79",
+          "note": "Most selective (29 trades). 78% of PnL from 1 trade."
+        },
+        "iter_007": {
+          "candles": 14,
+          "win_rate": "42.9%",
+          "net": "-$73",
+          "note": "Extremely choppy (77% reversal). Short disaster session."
+        },
+        "iter_008": {
+          "candles": 128,
+          "win_rate": "71.6%",
+          "net": "+$97",
+          "note": "Longest session. Recovered from huge drawdown. Loss magnitude remains the core problem."
+        },
+        "trend": "Win rate has stabilized at 70-80% in non-choppy markets. The persistent problem is loss MAGNITUDE: avg loss is 2-6x avg win across all iterations. Cutting individual loss size is the highest-leverage improvement."
+      }
+    },
+    "calibration": {
+      "total_records": 95,
+      "shadow_accuracy": 0.846,
+      "shadow_total": 78,
+      "bins": [
+        {
+          "range": "60%-65%",
+          "wins": 0,
+          "losses": 3,
+          "win_rate": 0.0,
+          "reliable": false
+        },
+        {
+          "range": "65%-70%",
+          "wins": 9,
+          "losses": 1,
+          "win_rate": 0.9,
+          "reliable": false
+        },
+        {
+          "range": "70%-75%",
+          "wins": 40,
+          "losses": 12,
+          "win_rate": 0.769,
+          "reliable": true
+        },
+        {
+          "range": "75%-80%",
+          "wins": 22,
+          "losses": 5,
+          "win_rate": 0.815,
+          "reliable": true
+        },
+        {
+          "range": "80%-85%",
+          "wins": 3,
+          "losses": 0,
+          "win_rate": 1.0,
+          "reliable": false
+        }
+      ]
+    },
+    "exit_analysis": {
+      "total_exits": 24,
+      "good_exit_rate": 0.958,
+      "good_exits": 23,
+      "total_saved": 252.9715,
+      "total_missed": 46.09
+    },
+    "ml_model": {
+      "training_samples": 112,
+      "model_trained": true
+    },
+    "trade_analysis": {
+      "total_buys": 114,
+      "total_sells": 24,
+      "total_holds": 155,
+      "avg_fill_price": 0.7543,
+      "cheap_entries": 1,
+      "mid_entries": 10,
+      "expensive_entries": 102,
+      "avg_confidence": 0.7324,
+      "hold_rate": 0.527
+    },
+    "resolution_analysis": {
+      "total": 127,
+      "avg_btc_move": 73.3,
+      "max_btc_move": 389.8,
+      "avg_win_pnl": 10.5141,
+      "avg_loss_pnl": -22.3592,
+      "biggest_win": 42.3884,
+      "biggest_loss": -52.728,
+      "cumulative_pnl": [
+        0.0,
+        -10.2202,
+        -3.6362,
+        3.3146,
+        -14.2992,
+        -3.9304,
+        -24.8678,
+        -42.9279,
+        -0.5395,
+        -36.625,
+        -27.9066,
+        -56.4018,
+        -76.0538,
+        -76.0538,
+        -58.216,
+        -47.4605,
+        -37.3946,
+        -37.3946,
+        -37.3946,
+        -63.3081,
+        -76.4046,
+        -76.4046,
+        -87.2132,
+        -77.1192,
+        -92.9687,
+        -92.9687,
+        -88.6713,
+        -88.6713,
+        -88.6713,
+        -88.6713,
+        -84.7346,
+        -71.1903,
+        -55.073,
+        -46.6825,
+        -35.5191,
+        -17.3077,
+        -42.3073,
+        -34.2934,
+        -27.9479,
+        -27.9479,
+        -27.9479,
+        -17.7772,
+        -32.0733,
+        -26.4069,
+        -13.5143,
+        -13.5143,
+        -6.3656,
+        -6.3656,
+        1.9732,
+        1.9732,
+        15.4955,
+        -17.5388,
+        -17.5388,
+        -41.0947,
+        -41.0947,
+        -39.5606,
+        -23.9717,
+        -23.9717,
+        -22.1708,
+        -22.1708,
+        -16.1002,
+        -56.1843,
+        -52.2402,
+        -39.3309,
+        -39.3309,
+        -30.5917,
+        -21.8034,
+        -10.3548,
+        -63.0827,
+        -61.1512,
+        -59.7741,
+        -59.7741,
+        -49.3478,
+        -49.3478,
+        -35.1825,
+        -35.1825,
+        -30.2,
+        -18.5406,
+        15.2122,
+        21.1564,
+        32.3108,
+        34.2432,
+        8.9478,
+        14.6541,
+        14.6541,
+        14.6541,
+        14.6541,
+        28.8549,
+        28.8549,
+        39.4417,
+        39.3747,
+        39.3747,
+        11.4757,
+        30.8292,
+        39.2848,
+        39.2848,
+        4.5473,
+        19.4417,
+        19.4417,
+        28.4001,
+        34.6456,
+        53.2202,
+        35.7267,
+        37.91,
+        25.7839,
+        42.3649,
+        43.4687,
+        55.3402,
+        61.5912,
+        40.605,
+        48.7941,
+        48.7941,
+        8.7851,
+        25.4262,
+        37.4462,
+        44.5998,
+        47.3827,
+        63.3028,
+        63.3028,
+        73.4104,
+        77.5954,
+        84.717,
+        68.4654,
+        68.4654,
+        65.0632,
+        81.8435,
+        111.2593
+      ]
+    },
+    "resolutions_detail": [
+      {
+        "slug": "btc-updown-5m-1772155200",
+        "pnl": 0.0,
+        "btc_move": 50.669999999998254,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772155500",
+        "pnl": -10.220182561340252,
+        "btc_move": -10.630000000004657,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772155800",
+        "pnl": 6.583973403740435,
+        "btc_move": 146.1299999999901,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772156100",
+        "pnl": 6.950794815775218,
+        "btc_move": 13.15860232579871,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772156400",
+        "pnl": -17.613767527354774,
+        "btc_move": 1.7818129126826534,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772156700",
+        "pnl": 10.368761386926053,
+        "btc_move": 108.44000000000233,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772157000",
+        "pnl": -20.937397772993315,
+        "btc_move": 52.228285944249365,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772157300",
+        "pnl": -18.060092589844125,
+        "btc_move": 41.48999999999069,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772157600",
+        "pnl": 42.38836152170486,
+        "btc_move": 82.16559368890012,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772157900",
+        "pnl": -36.08543675610091,
+        "btc_move": 1.4104536863305839,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772158200",
+        "pnl": 8.718366800159984,
+        "btc_move": -88.72604737522488,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772158500",
+        "pnl": -28.495178009897625,
+        "btc_move": 173.58347329606477,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772158800",
+        "pnl": -19.651968734810428,
+        "btc_move": -112.07216771175445,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772159100",
+        "pnl": 0.0,
+        "btc_move": 11.918694415697246,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772159400",
+        "pnl": 17.837720807567827,
+        "btc_move": 109.19999999999709,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772159700",
+        "pnl": 10.755566352495116,
+        "btc_move": -66.7782733834465,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772160000",
+        "pnl": 10.065922048984525,
+        "btc_move": -44.98359639165574,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772160300",
+        "pnl": 0.0,
+        "btc_move": -2.7400000000052387,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772160600",
+        "pnl": 0.0,
+        "btc_move": -133.12009276878962,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772160900",
+        "pnl": -25.91350421155072,
+        "btc_move": -51.94796857073379,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772161200",
+        "pnl": -13.096497118457545,
+        "btc_move": -23.429999999993015,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772161500",
+        "pnl": 0.0,
+        "btc_move": -43.038416198964114,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772161800",
+        "pnl": -10.808651882549313,
+        "btc_move": -19.417324691297836,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772162100",
+        "pnl": 10.094016299982027,
+        "btc_move": 11.045740890258458,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772162400",
+        "pnl": -15.849520546871153,
+        "btc_move": -67.61999999999534,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772162700",
+        "pnl": 0.0,
+        "btc_move": -6.995410077957786,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772163000",
+        "pnl": 4.297444481367659,
+        "btc_move": 144.1489120804763,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772163300",
+        "pnl": 0.0,
+        "btc_move": 71.07247438291961,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772163600",
+        "pnl": 0.0,
+        "btc_move": 65.81752561707981,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772163900",
+        "pnl": 0.0,
+        "btc_move": 65.48729312821524,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772164200",
+        "pnl": 3.9366391673338725,
+        "btc_move": 66.66591307817725,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772164500",
+        "pnl": 13.544344556894835,
+        "btc_move": 140.63982688600663,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772164800",
+        "pnl": 16.11729949435299,
+        "btc_move": 210.2176562740351,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772165100",
+        "pnl": 8.39049769129884,
+        "btc_move": -14.551646482388605,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772165400",
+        "pnl": 11.163415795428179,
+        "btc_move": 156.95399020834884,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772165700",
+        "pnl": 18.21132757325003,
+        "btc_move": 132.82840676531487,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772166000",
+        "pnl": -24.999550872610293,
+        "btc_move": -80.7297860927356,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772166300",
+        "pnl": 8.01389248400693,
+        "btc_move": -34.84787482698448,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772166600",
+        "pnl": 6.345479411148077,
+        "btc_move": -99.33301591928466,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772166900",
+        "pnl": 0.0,
+        "btc_move": -66.3991092537326,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772167200",
+        "pnl": 0.0,
+        "btc_move": -11.970000000001164,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772167500",
+        "pnl": 10.170682218619703,
+        "btc_move": 57.87905847757065,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772167800",
+        "pnl": -14.296015789885164,
+        "btc_move": 79.78094152243284,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772168100",
+        "pnl": 5.666355296977404,
+        "btc_move": -141.69000000000233,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772168400",
+        "pnl": 12.892569360104119,
+        "btc_move": 78.41143594497407,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772168700",
+        "pnl": 0.0,
+        "btc_move": -33.96293394936947,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772169000",
+        "pnl": 7.148773380502732,
+        "btc_move": 67.16149800439598,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772169300",
+        "pnl": 0.0,
+        "btc_move": 1.2493659713800298,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772169600",
+        "pnl": 8.338788970304584,
+        "btc_move": -59.7899999999936,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772169900",
+        "pnl": 0.0,
+        "btc_move": 21.40830747128348,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772170200",
+        "pnl": 13.522268139970983,
+        "btc_move": 42.111692528706044,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772170500",
+        "pnl": -33.034285315262466,
+        "btc_move": 7.669999999998254,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772170800",
+        "pnl": 0.0,
+        "btc_move": -16.389999999999418,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772171100",
+        "pnl": -23.555903340470888,
+        "btc_move": -47.29999999998836,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772171400",
+        "pnl": 0.0,
+        "btc_move": -26.080000000001746,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772171700",
+        "pnl": 1.534053904430511,
+        "btc_move": -42.12908738513943,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772172000",
+        "pnl": 15.58892237368459,
+        "btc_move": 63.359087385149905,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772172300",
+        "pnl": 0.0,
+        "btc_move": -52.88000000000466,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772172600",
+        "pnl": 1.8009306475793387,
+        "btc_move": -48.276032748195576,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772172900",
+        "pnl": 0.0,
+        "btc_move": -38.3797580460232,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772173200",
+        "pnl": 6.070536037196824,
+        "btc_move": -53.14999999999418,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772173500",
+        "pnl": -40.08409060041631,
+        "btc_move": 11.846526934488793,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772173800",
+        "pnl": 3.9441211906987945,
+        "btc_move": 30.65608891379088,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772174100",
+        "pnl": 12.90931854049164,
+        "btc_move": 77.85723904511542,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772174400",
+        "pnl": 0.0,
+        "btc_move": -1.1694080452871276,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772174700",
+        "pnl": 8.739235665824499,
+        "btc_move": 26.43216900016705,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772175000",
+        "pnl": 8.788312373552145,
+        "btc_move": -52.87777050769364,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772175300",
+        "pnl": 11.448566712400336,
+        "btc_move": -51.32958079536911,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772175600",
+        "pnl": -52.727956865716436,
+        "btc_move": -76.67481644669897,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772175900",
+        "pnl": 1.9315242578213159,
+        "btc_move": 84.55000000000291,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772176200",
+        "pnl": 1.3771636433929828,
+        "btc_move": -43.974460392128094,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772176500",
+        "pnl": 0.0,
+        "btc_move": -14.525591131663532,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772176800",
+        "pnl": 10.426234915897453,
+        "btc_move": -29.454943145625293,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772177100",
+        "pnl": 0.0,
+        "btc_move": -109.65844790506526,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772177400",
+        "pnl": 14.165268986402005,
+        "btc_move": 84.87797793567006,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772177700",
+        "pnl": 0.0,
+        "btc_move": -33.29953003060655,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772178000",
+        "pnl": 4.982513861832295,
+        "btc_move": -23.59638053398521,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772178300",
+        "pnl": 11.659415754484783,
+        "btc_move": 116.84201747881889,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772178600",
+        "pnl": 33.7528196962575,
+        "btc_move": 77.45154348119104,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772178900",
+        "pnl": 5.94415173685686,
+        "btc_move": -74.1221780997148,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772179200",
+        "pnl": 11.154450887315768,
+        "btc_move": 37.54069570313732,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772179500",
+        "pnl": 1.9324360595226366,
+        "btc_move": 248.9094678991678,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772179800",
+        "pnl": -25.295438332075044,
+        "btc_move": -66.01946789916838,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772180100",
+        "pnl": 5.7062501794428755,
+        "btc_move": 28.711804696416948,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772180400",
+        "pnl": 0.0,
+        "btc_move": -43.44785685586976,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772180700",
+        "pnl": 0.0,
+        "btc_move": 72.79061185278988,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772181000",
+        "pnl": 0.0,
+        "btc_move": -96.98855832639674,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772181300",
+        "pnl": 14.200897804896492,
+        "btc_move": -52.454223652748624,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772181600",
+        "pnl": 0.0,
+        "btc_move": 103.07000000000698,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772181900",
+        "pnl": 10.5867976363662,
+        "btc_move": 51.979999999995925,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772182200",
+        "pnl": -0.06702878157118573,
+        "btc_move": -73.90120661992114,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772182500",
+        "pnl": 0.0,
+        "btc_move": -73.72999999999593,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772182800",
+        "pnl": -27.899064221902126,
+        "btc_move": -43.5186107368645,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772183100",
+        "pnl": 19.35351813311732,
+        "btc_move": 99.74104426945269,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772183400",
+        "pnl": 8.455623739936357,
+        "btc_move": -6.702433532584109,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772183700",
+        "pnl": 0.0,
+        "btc_move": 65.25,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772184000",
+        "pnl": -34.73746442159706,
+        "btc_move": -92.31999999999243,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772184300",
+        "pnl": 14.89436207105534,
+        "btc_move": 84.71786344371503,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772184600",
+        "pnl": 0.0,
+        "btc_move": -41.88479300477775,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772184900",
+        "pnl": 8.95841879218682,
+        "btc_move": -170.99421066489595,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772185200",
+        "pnl": 6.245476300325151,
+        "btc_move": -190.31583393685287,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772185500",
+        "pnl": 18.574659925213673,
+        "btc_move": -193.22238694246334,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772185800",
+        "pnl": -17.49358607595446,
+        "btc_move": -100.25177912067738,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772186100",
+        "pnl": 2.18330693740446,
+        "btc_move": 26.45999999999185,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772186400",
+        "pnl": -12.126113836263707,
+        "btc_move": -100.96598416859342,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772186700",
+        "pnl": 16.58103966862955,
+        "btc_move": 11.660010091611184,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772187000",
+        "pnl": 1.1037593617262331,
+        "btc_move": -389.83329681510804,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772187300",
+        "pnl": 11.87153123382189,
+        "btc_move": 140.77329681511037,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772187600",
+        "pnl": 6.250985582853026,
+        "btc_move": -142.95918447113945,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772187900",
+        "pnl": -20.98620883012036,
+        "btc_move": -93.26081552886171,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772188200",
+        "pnl": 8.189132721348258,
+        "btc_move": 52.429999999993015,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772188500",
+        "pnl": 0.0,
+        "btc_move": -61.590046861427254,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772188800",
+        "pnl": -40.009041557673626,
+        "btc_move": 39.08829025532759,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772189100",
+        "pnl": 16.64118115286702,
+        "btc_move": -29.198243393897428,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772189400",
+        "pnl": 12.019950187096647,
+        "btc_move": -166.834901798371,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772189700",
+        "pnl": 7.153599247524472,
+        "btc_move": 11.75918386138801,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772190000",
+        "pnl": 2.782959898130816,
+        "btc_move": 50.94412155826285,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772190300",
+        "pnl": 15.920044143769974,
+        "btc_move": 57.080000000001746,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772190600",
+        "pnl": 0.0,
+        "btc_move": -78.66999999999825,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772190900",
+        "pnl": 10.107581674926635,
+        "btc_move": -227.61000000000058,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772191200",
+        "pnl": 4.185049459328171,
+        "btc_move": 71.61398942039523,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772191500",
+        "pnl": 7.121574886555107,
+        "btc_move": 9.466010579606518,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772191800",
+        "pnl": -16.251591447466193,
+        "btc_move": -90.92999999999302,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772192100",
+        "pnl": 0.0,
+        "btc_move": -349.55301714768575,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772192400",
+        "pnl": -3.4021851647776096,
+        "btc_move": -103.9706177112821,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772192700",
+        "pnl": 16.78028433428853,
+        "btc_move": 85.9436348589661,
+        "resolution": ""
+      },
+      {
+        "slug": "btc-updown-5m-1772193000",
+        "pnl": 29.415827610861484,
+        "btc_move": -39.85000000000582,
+        "resolution": ""
+      }
+    ],
+    "observations": [
+      {
+        "category": "edge",
+        "text": "DOWN positions entered during strong momentum moves (-$178 to -$292) at fill prices 0.90-0.98 in cycles 233, 243, 247 won all three trades, with cycle 243 entering at 0.98 on a -$292 move producing a winning outcome",
+        "timestamp": "2026-02-27T10:30:24.159112+00:00"
+      },
+      {
+        "category": "bias",
+        "text": "hold rate dropped from 35% to 15% while trades taken increased from 23 to 29, with the bot taking positions more aggressively despite already holding inventory, as seen in cycles 236, 240, 241, 247, 249, 250 where new positions were opened while existing ones were active",
+        "timestamp": "2026-02-27T10:30:24.159260+00:00"
+      },
+      {
+        "category": "pattern",
+        "text": "UP positions entered at moderate moves (+$34 to +$55) at fill prices 0.57-0.67 in cycles 237, 241, 245, 249, 250 resulted in 4 losses and 1 hold, with three hitting stop-losses, while UP positions entered at very strong moves (+$100+) at fill prices 0.83-0.89 in cycles 236, 240 won 2/2",
+        "timestamp": "2026-02-27T10:30:24.159366+00:00"
+      },
+      {
+        "category": "pattern",
+        "text": "the single largest loss (-$40.01 in cycle 266) occurred on an UP position entered at 0.8609 fill price during a +$72.40 move, which was the highest fill price among all UP trades this batch, while UP positions entered at lower fill prices (0.55-0.70) in cycles 263, 270, 271 all won",
+        "timestamp": "2026-02-27T11:20:19.565188+00:00"
+      },
+      {
+        "category": "edge",
+        "text": "DOWN positions entered at fill prices above 0.80 (cycles 256, 261, 274) went 2/2 with wins of +$18.57 and +$10.11, while the one DOWN position entered at 0.7316 (cycle 259) also won +$16.58, showing 100% win rate on DOWN momentum entries this batch",
+        "timestamp": "2026-02-27T11:20:19.567896+00:00"
+      },
+      {
+        "category": "pattern",
+        "text": "losses averaged -$22.65 while wins averaged +$9.69, creating a 2.3:1 loss-to-win ratio, yet the 78% win rate produced net positive outcomes, with 5 of 6 losses occurring on positions that moved against entry direction immediately",
+        "timestamp": "2026-02-27T11:20:19.568030+00:00"
+      },
+      {
+        "category": "bias",
+        "text": "the bot entered 5 DOWN positions versus 4 UP positions (excluding holds), with DOWN trades winning 5/5 (100%) and UP trades winning 2/4 (50%), suggesting better directional accuracy on downward momentum detection during this batch",
+        "timestamp": "2026-02-27T11:20:19.568120+00:00"
+      }
+    ],
+    "session_history": "# Session History\n\n| Date | Summary |\n|------|---------|\n| 2026-02-27 02:10 | First batch showed 44% win rate with large losses from late momentum entries above 0.63 that reversed, while lower-priced entries performed better |\n| 2026-02-27 03:00 | win rate improved to 50% with slightly better avg PnL, but stop-losses on late momentum entries continued to produce -60%+ losses while increased time-based holds avoided late-entry traps |\n| 2026-02-27 03:50 | performance degraded slightly with avg PnL declining $0.38 as hold rate doubled to 40%, while UP momentum-chasing at 0.65-0.71 fills produced three consecutive stop-losses versus one successful DOWN fade |\n| 2026-02-27 04:40 | win rate improved from 50% to 71% (+$6.86 PnL delta) driven by successful DOWN momentum trades at high fills, though one large UP reversal loss (-$25) offset multiple smaller wins |\n| 2026-02-27 05:30 | win rate jumped from 71% to 87% with reduced holding (25% vs 30%) as bot captured strong directional moves in $67.4k-$68.1k range, with 13/15 wins on momentum entries despite two stop-loss exits |\n| 2026-02-27 06:20 | win rate declined 12% to 75% as hold rate increased to 40%, with losses concentrated at high fill prices (0.75+) despite strong BTC moves, reducing avg PnL by $5.56 |\n| 2026-02-27 07:10 | win rate held at 73% but average PnL dropped $-4.69 as hold rate decreased to 25% and two large reversal losses (-$52.73, -$40.08) offset multiple small-to-medium wins |\n| 2026-02-27 08:00 | win rate improved to 88% by avoiding expensive entries, but two high-fill-price trades (0.75 and 0.92) captured both large losses |\n| 2026-02-27 08:50 | win rate improved to 92% with higher hold rate (35%) and significantly better average PnL (+$7.74 vs +$2.71), driven by successful large momentum captures and increased selectivity |\n| 2026-02-27 09:40 | win rate dropped 23% to 69% as two large UP reversals at high entry prices (-$60 combined) offset consistent DOWN momentum wins, increasing trade volume to 23 but reducing avg PnL to +$0.56 |\n| 2026-02-27 10:30 | performance degraded with win rate dropping to 65% and avg PnL to $0.07 as aggressive trading (hold rate 15%) led to multiple UP stop-losses during a strong downtrend regime, while DOWN momentum trades at high fill prices continued to perform well |\n| 2026-02-27 11:20 | win rate jumped to 78% (+13%) with DOWN momentum trades going 5/5 while UP trades struggled at 2/4, though loss sizes remained 2.3x larger than wins |\n"
   }
 ]
