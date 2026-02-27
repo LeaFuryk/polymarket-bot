@@ -115,6 +115,12 @@ The 24h change tells you the daily trend but is NOT predictive for the next 5-mi
 You may receive computed technical indicators below. These are dynamically selected \
 based on past performance. Use them as supporting signals, not sole decision drivers.
 
+## Data Format Notes (for interpreting the market data below)
+- "Chainlink On-Chain Price" is the resolution source — divergence from Binance is the pricing risk
+- BTC 24h change is NOT predictive for 5-min candles (~40% go opposite to daily trend)
+- DOWN tokens often have wider spreads — prefer the token with tighter spread when both sides are viable
+- "Condition ID" and "Token ID" are internal identifiers, not trading signals
+
 ## Output Guidelines
 - action: BUY, SELL, or HOLD
 - token_side: "up" or "down" — which token to trade
@@ -166,44 +172,21 @@ def format_feature_vector(
     if btc_move_line:
         lines.append(btc_move_line)
 
-    lines.extend([
-        "## Current Candle Market",
-        f"- Condition ID: {fv.market.condition_id}",
-        f"- Time Remaining: {fv.time_remaining:.0f}s",
-        "",
-        "### Up Token (BTC goes up)",
-        f"- Token ID: {fv.market.up_token_id[:12]}...",
-        f"- Best Bid: {up_ob.best_bid or 'N/A'}",
-        f"- Best Ask: {up_ob.best_ask or 'N/A'}",
-        f"- Midpoint: {up_ob.midpoint or 'N/A'}",
-        f"- Spread: {up_ob.spread or 'N/A'}"
-        + (f" ({up_ob.spread_pct:.2%})" if up_ob.spread_pct else ""),
-        f"- Bid Depth (USDC): {up_ob.bid_depth:.2f}",
-        f"- Ask Depth (USDC): {up_ob.ask_depth:.2f}",
-        "",
-        "### Down Token (BTC goes down)",
-        f"- Token ID: {fv.market.down_token_id[:12]}...",
-        f"- Best Bid: {down_ob.best_bid or 'N/A'}",
-        f"- Best Ask: {down_ob.best_ask or 'N/A'}",
-        f"- Midpoint: {down_ob.midpoint or 'N/A'}",
-        f"- Spread: {down_ob.spread or 'N/A'}"
-        + (f" ({down_ob.spread_pct:.2%})" if down_ob.spread_pct else ""),
-        f"- Bid Depth (USDC): {down_ob.bid_depth:.2f}",
-        f"- Ask Depth (USDC): {down_ob.ask_depth:.2f}",
-    ])
-
-    # Spread comparison to help choose token
+    # Compact orderbook — data only, explanations in system prompt
     up_spread_str = f"{up_ob.spread_pct:.2%}" if up_ob.spread_pct else "N/A"
     down_spread_str = f"{down_ob.spread_pct:.2%}" if down_ob.spread_pct else "N/A"
     lines.extend([
+        "## Current Market",
+        f"Time remaining: {fv.time_remaining:.0f}s",
         "",
-        f"**Spread comparison**: UP={up_spread_str}, DOWN={down_spread_str}. "
-        "Prefer the token with tighter spread when both sides are viable. "
-        "DOWN tokens often have wider spreads — factor this cost into your edge calculation.",
+        f"**UP token**: ask={up_ob.best_ask or 'N/A'} bid={up_ob.best_bid or 'N/A'} "
+        f"mid={up_ob.midpoint or 'N/A'} spread={up_spread_str} "
+        f"depth: ${up_ob.bid_depth:.0f}bid/${up_ob.ask_depth:.0f}ask",
+        f"**DOWN token**: ask={down_ob.best_ask or 'N/A'} bid={down_ob.best_bid or 'N/A'} "
+        f"mid={down_ob.midpoint or 'N/A'} spread={down_spread_str} "
+        f"depth: ${down_ob.bid_depth:.0f}bid/${down_ob.ask_depth:.0f}ask",
+        f"Spreads: UP={up_spread_str} DOWN={down_spread_str}",
     ])
-
-    # Last trade price (Up token)
-    lines.append(f"- Last Trade Price (Up): {fv.market.last_trade_price or 'N/A'}")
 
     # Price history for trend (Up token midpoints)
     if fv.market.price_history:
@@ -213,30 +196,21 @@ def format_feature_vector(
             trend = recent[-1] - recent[0]
             lines.append(f"- Price Trend: {'UP' if trend > 0 else 'DOWN'} ({trend:+.4f})")
 
-    # BTC context
+    # BTC context — compact, explanations in system prompt
     if fv.market.btc_price:
-        lines.extend([
-            "",
-            "## BTC Context (Chainlink BTC/USD — resolution source)",
-            f"- BTC Price NOW: ${fv.market.btc_price.price_usd:,.2f}",
-        ])
+        lines.extend(["", "## BTC Context"])
+        btc_parts = [f"NOW: ${fv.market.btc_price.price_usd:,.2f}"]
         if candle_open_btc is not None:
             diff = fv.market.btc_price.price_usd - candle_open_btc
             who_winning = "UP winning" if diff >= 0 else "DOWN winning"
-            lines.append(
-                f"- BTC at Candle Open: ${candle_open_btc:,.2f} → "
-                f"**Current move: ${diff:+,.2f} ({who_winning})**"
-            )
+            btc_parts.append(f"Open: ${candle_open_btc:,.2f} → **move: ${diff:+,.2f} ({who_winning})**")
         if fv.market.btc_price.chainlink_price is not None:
-            lines.append(
-                f"- Chainlink On-Chain Price: ${fv.market.btc_price.chainlink_price:,.2f} "
-                f"(divergence: ${fv.market.btc_price.price_divergence:+,.2f})"
-                " — THIS is the resolution source"
+            btc_parts.append(
+                f"Chainlink: ${fv.market.btc_price.chainlink_price:,.2f} "
+                f"(div: ${fv.market.btc_price.price_divergence:+,.2f})"
             )
-        lines.append(
-            f"- BTC 24h Change: {fv.market.btc_price.change_24h_pct:+.2f}% "
-            "(⚠ NOT predictive for 5-min candles — ~40% go opposite to daily trend)"
-        )
+        btc_parts.append(f"24h: {fv.market.btc_price.change_24h_pct:+.2f}%")
+        lines.append(" | ".join(btc_parts))
 
     # BTC 5-min candle history
     candles = fv.market.btc_candles
@@ -320,41 +294,32 @@ def format_feature_vector(
                     f"- Counter-trend ({weak_side}) positions size-reduced by {reduce_pct}"
                 )
 
-    # Positions (both tokens)
-    lines.extend([
-        "",
-        "## Your Current Positions",
-        "### Up Token Position",
-        f"- Shares Held: {fv.up_position.shares:.2f}",
-        f"- Avg Entry Price: {fv.up_position.avg_entry_price:.4f}",
-        f"- Unrealized PnL: ${fv.up_position.unrealized_pnl:.4f}",
-        f"- Realized PnL: ${fv.up_position.realized_pnl:.4f}",
-        "### Down Token Position",
-        f"- Shares Held: {fv.down_position.shares:.2f}",
-        f"- Avg Entry Price: {fv.down_position.avg_entry_price:.4f}",
-        f"- Unrealized PnL: ${fv.down_position.unrealized_pnl:.4f}",
-        f"- Realized PnL: ${fv.down_position.realized_pnl:.4f}",
-    ])
+    # Positions — compact
+    lines.extend(["", "## Positions"])
+    if fv.up_position.shares > 0:
+        lines.append(
+            f"- UP: {fv.up_position.shares:.0f} shares @ {fv.up_position.avg_entry_price:.4f} "
+            f"(unrealized: ${fv.up_position.unrealized_pnl:.4f}, realized: ${fv.up_position.realized_pnl:.4f})"
+        )
+    else:
+        lines.append("- UP: no position")
+    if fv.down_position.shares > 0:
+        lines.append(
+            f"- DOWN: {fv.down_position.shares:.0f} shares @ {fv.down_position.avg_entry_price:.4f} "
+            f"(unrealized: ${fv.down_position.unrealized_pnl:.4f}, realized: ${fv.down_position.realized_pnl:.4f})"
+        )
+    else:
+        lines.append("- DOWN: no position")
 
-    # Portfolio
+    # Portfolio + Risk — compact
     lines.extend([
         "",
-        "## Portfolio",
-        f"- Cash Available: ${fv.portfolio_cash:.2f}",
-        f"- Total Portfolio Value: ${fv.portfolio_total_value:.2f}",
-        f"- AI Operating Cost This Cycle: ~${ai_cycle_cost:.4f}",
-        f"- Total AI Costs This Session: ${ai_session_cost:.4f}",
-    ])
-
-    # Risk state
-    lines.extend([
-        "",
-        "## Risk State",
-        f"- Daily PnL: ${fv.risk.daily_pnl:.4f}",
-        f"- Daily Trades: {fv.risk.daily_trades}",
-        f"- Daily Fees: ${fv.risk.daily_fees:.4f}",
-        f"- Max Drawdown: ${fv.risk.max_drawdown:.4f}",
-        f"- Risk Halted: {fv.risk.is_halted}",
+        f"## Portfolio & Risk",
+        f"Cash: ${fv.portfolio_cash:.2f} | Portfolio: ${fv.portfolio_total_value:.2f} | "
+        f"AI cost: ${ai_session_cost:.4f}",
+        f"Daily PnL: ${fv.risk.daily_pnl:.4f} | Trades: {fv.risk.daily_trades} | "
+        f"Fees: ${fv.risk.daily_fees:.4f} | Drawdown: ${fv.risk.max_drawdown:.4f}"
+        + (f" | **HALTED**" if fv.risk.is_halted else ""),
     ])
 
     if indicators_text:

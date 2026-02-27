@@ -44,7 +44,7 @@ from polybot.models import (
 )
 from polybot.resolution import ResolutionTracker
 from polybot.risk.manager import RiskManager
-from polybot.shared_state import SharedState
+from polybot.shared_state import CandleMicrostructure, SharedState
 from polybot.simulator.engine import ExecutionSimulator
 from polybot.simulator.orderbook import SimulatedOrderBook
 from polybot.simulator.portfolio import Portfolio
@@ -735,6 +735,9 @@ class TradingAgent:
                 except asyncio.QueueEmpty:
                     break
 
+            # Save microstructure summary before clearing
+            self._save_candle_microstructure()
+
             # Reset shared state for new candle
             self._shared.candle_open_btc = None
             self._shared.position_pnl_pct.clear()
@@ -742,6 +745,34 @@ class TradingAgent:
 
         finally:
             self._shared.rotation_in_progress = False
+
+    def _save_candle_microstructure(self) -> None:
+        """Compute and save microstructure summary from current candle's prefilter history."""
+        history = list(self._shared.prefilter_history)
+        if len(history) < 10:
+            return
+
+        import statistics
+        import time as _time
+
+        spreads_up = [s.up_spread_pct for s in history if s.up_spread_pct is not None]
+        spreads_down = [s.down_spread_pct for s in history if s.down_spread_pct is not None]
+        moves = [s.btc_move_from_open for s in history]
+
+        summary = CandleMicrostructure(
+            timestamp=_time.time(),
+            avg_spread_up=statistics.mean(spreads_up) if spreads_up else 0.0,
+            avg_spread_down=statistics.mean(spreads_down) if spreads_down else 0.0,
+            avg_depth=0.0,  # filled from snapshot if available
+            avg_imbalance=1.0,
+            btc_range=max(moves) - min(moves) if moves else 0.0,
+            btc_final_move=moves[-1] if moves else 0.0,
+        )
+
+        self._shared.microstructure_history.append(summary)
+        # Keep last 5 candles
+        if len(self._shared.microstructure_history) > 5:
+            self._shared.microstructure_history = self._shared.microstructure_history[-5:]
 
     # --- Dashboard Data Writer ---
 
@@ -985,6 +1016,19 @@ class TradingAgent:
                     "window_size": self._adaptive_entry._window,
                     "history_count": len(self._adaptive_entry._history),
                     **self._compute_market_trend(snapshot),
+                },
+                "ensemble": {
+                    "screen_calls": self._ai_decision._screen_calls,
+                    "screen_passes": self._ai_decision._screen_passes,
+                    "screen_pass_rate": round(
+                        self._ai_decision._screen_passes / max(1, self._ai_decision._screen_calls), 3
+                    ),
+                    "sonnet_trades": self._ai_decision._sonnet_trades,
+                    "ml_sonnet_agree": self._ai_decision._ml_sonnet_agree,
+                    "ml_sonnet_total": self._ai_decision._ml_sonnet_total,
+                    "ml_sonnet_agree_rate": round(
+                        self._ai_decision._ml_sonnet_agree / max(1, self._ai_decision._ml_sonnet_total), 3
+                    ),
                 },
                 "outage": {
                     "is_down": self._outage_start is not None,
