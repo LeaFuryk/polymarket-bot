@@ -1379,12 +1379,12 @@ document.addEventListener('mouseout', e => {
 });
 
 const $ = id => document.getElementById(id);
-const fmt$ = (v, d=2) => v != null ? '$' + Number(v).toFixed(d) : '--';
+const fmt$ = (v, d=2) => v != null ? (Number(v) < 0 ? '-$' + Math.abs(Number(v)).toFixed(d) : '$' + Number(v).toFixed(d)) : '--';
 const fmtPct = (v, d=1) => v != null ? Number(v).toFixed(d) + '%' : '--';
 const fmtNum = (v, d=2) => v != null ? Number(v).toFixed(d) : '--';
 const signCls = v => v > 0.001 ? 'v-green' : v < -0.001 ? 'v-red' : '';
 const pnlCls = v => v > 0.001 ? 'pos' : v < -0.001 ? 'neg' : 'zero';
-const pnlSign = v => v >= 0 ? '+' : '';
+const pnlSign = v => v >= 0 ? '+' : '-';
 
 function confColor(c) {
   if (c >= 0.75) return 'var(--green)';
@@ -1605,7 +1605,7 @@ function renderSidebar(data) {
     <div class="sb-item-metrics">
       <span class="sb-wl w">${allStats.w}W</span>
       <span class="sb-wl l">${allStats.l}L</span>
-      <span class="sb-pnl ${pnlCls(allStats.pnl)}">${pnlSign(allStats.pnl)}${allStats.pnl.toFixed(2)}</span>
+      <span class="sb-pnl ${pnlCls(allStats.pnl)}">${pnlSign(allStats.pnl)}${Math.abs(allStats.pnl).toFixed(2)}</span>
     </div>
   </div>`;
 
@@ -1619,7 +1619,7 @@ function renderSidebar(data) {
     // Day header with aggregate PnL
     h += `<div class="sb-day-header">
       <span>${esc(dateLabel(dateStr))}</span>
-      <span class="sb-day-pnl ${pnlCls(daySt.pnl)}">${pnlSign(daySt.pnl)}${daySt.pnl.toFixed(2)}</span>
+      <span class="sb-day-pnl ${pnlCls(daySt.pnl)}">${pnlSign(daySt.pnl)}${Math.abs(daySt.pnl).toFixed(2)}</span>
     </div>`;
 
     // Day-level item (all sessions combined)
@@ -1629,7 +1629,7 @@ function renderSidebar(data) {
       <div class="sb-item-metrics">
         <span class="sb-wl w">${daySt.w}W</span>
         <span class="sb-wl l">${daySt.l}L</span>
-        <span class="sb-pnl ${pnlCls(daySt.pnl)}">${pnlSign(daySt.pnl)}${daySt.pnl.toFixed(2)}</span>
+        <span class="sb-pnl ${pnlCls(daySt.pnl)}">${pnlSign(daySt.pnl)}${Math.abs(daySt.pnl).toFixed(2)}</span>
       </div>
     </div>`;
 
@@ -1650,7 +1650,7 @@ function renderSidebar(data) {
           <div class="sb-item-metrics">
             <span class="sb-wl w">${sst.w}W</span>
             <span class="sb-wl l">${sst.l}L</span>
-            <span class="sb-pnl ${pnlCls(sst.pnl)}">${pnlSign(sst.pnl)}${sst.pnl.toFixed(2)}</span>
+            <span class="sb-pnl ${pnlCls(sst.pnl)}">${pnlSign(sst.pnl)}${Math.abs(sst.pnl).toFixed(2)}</span>
           </div>
         </div>`;
       }
@@ -1875,7 +1875,7 @@ function render(d) {
       <div class="metric-sub">initial: ${fmt$(s.initial_cash, 0)}</div></div>`;
     mh += `<div class="metric" data-tip="Total value: cash + current market value of all open token positions. Tracks overall account performance."><div class="metric-label">Portfolio</div>
       <div class="metric-value v-blue">${fmt$(s.portfolio_value, 2)}</div>
-      <div class="metric-sub">${pnlSign(s.portfolio_value - s.initial_cash)}${fmtNum(s.portfolio_value - s.initial_cash, 2)} from start</div></div>`;
+      <div class="metric-sub">${pnlSign(s.portfolio_value - s.initial_cash)}${fmtNum(Math.abs(s.portfolio_value - s.initial_cash), 2)} from start</div></div>`;
   } else if (showLive && ts.hasCashData) {
     // Live session/day view with per-trade snapshots: show session-scoped start→current
     const sessionStartCash = ts.startCash;
@@ -1884,20 +1884,20 @@ function render(d) {
     const portDelta = s.portfolio_value - sessionStartPort;
     mh += `<div class="metric" data-tip="Current cash for this session. Shows change from the session's starting cash, not the all-time initial balance."><div class="metric-label">Cash</div>
       <div class="metric-value v-cyan">${fmt$(s.cash, 2)}</div>
-      <div class="metric-sub">start: ${fmt$(sessionStartCash, 2)} (${pnlSign(cashDelta)}${fmtNum(cashDelta, 2)})</div></div>`;
+      <div class="metric-sub">start: ${fmt$(sessionStartCash, 2)} (${pnlSign(cashDelta)}${fmtNum(Math.abs(cashDelta), 2)})</div></div>`;
     mh += `<div class="metric" data-tip="Current portfolio value for this session. Shows change from the session's starting value."><div class="metric-label">Portfolio</div>
       <div class="metric-value v-blue">${fmt$(s.portfolio_value, 2)}</div>
-      <div class="metric-sub">start: ${fmt$(sessionStartPort, 2)} (${pnlSign(portDelta)}${fmtNum(portDelta, 2)})</div></div>`;
+      <div class="metric-sub">start: ${fmt$(sessionStartPort, 2)} (${pnlSign(portDelta)}${fmtNum(Math.abs(portDelta), 2)})</div></div>`;
   } else if (ts.hasCashData) {
     // Historical session with per-trade cash snapshots: show start→end cash & portfolio
     const cashDelta = ts.endCash - ts.startCash;
     const portDelta = ts.endPortfolio - ts.startPortfolio;
     mh += `<div class="metric" data-tip="Cash at the start and end of this session. Shows how much undeployed capital changed across the session."><div class="metric-label">Cash</div>
       <div class="metric-value v-cyan">${fmt$(ts.endCash, 2)}</div>
-      <div class="metric-sub">start: ${fmt$(ts.startCash, 2)} (${pnlSign(cashDelta)}${fmtNum(cashDelta, 2)})</div></div>`;
+      <div class="metric-sub">start: ${fmt$(ts.startCash, 2)} (${pnlSign(cashDelta)}${fmtNum(Math.abs(cashDelta), 2)})</div></div>`;
     mh += `<div class="metric" data-tip="Portfolio value (cash + positions) at end of session vs start. Tracks overall account performance for this session."><div class="metric-label">Portfolio</div>
       <div class="metric-value v-blue">${fmt$(ts.endPortfolio, 2)}</div>
-      <div class="metric-sub">start: ${fmt$(ts.startPortfolio, 2)} (${pnlSign(portDelta)}${fmtNum(portDelta, 2)})</div></div>`;
+      <div class="metric-sub">start: ${fmt$(ts.startPortfolio, 2)} (${pnlSign(portDelta)}${fmtNum(Math.abs(portDelta), 2)})</div></div>`;
   } else {
     // No per-trade snapshots: fall back to invested/returned
     mh += `<div class="metric" data-tip="Total dollars spent buying UP and DOWN tokens during this period. Sum of (shares x price) for all BUY orders."><div class="metric-label">Invested</div>
@@ -2856,7 +2856,7 @@ function buildCandleTimelines(trades, resolutions, currentMarket) {
     let pnlH = '';
     if (res) {
       const v = res.pnl || 0;
-      pnlH = `<span class="candle-pnl ${pnlCls(v)}">${pnlSign(v)}${v.toFixed(4)}</span>`;
+      pnlH = `<span class="candle-pnl ${pnlCls(v)}">${pnlSign(v)}${Math.abs(v).toFixed(4)}</span>`;
     }
 
     // Action counts
@@ -2994,7 +2994,7 @@ function buildResTable(resolutions) {
       <td title="${esc(r.slug)}">${truncSlug(r.slug, 22)}</td>
       <td><span class="res-b ${c}">${lb}</span> <span style="color:var(--text-muted);font-size:0.7rem">${r.winner.toUpperCase()}</span></td>
       <td>${ms}$${Math.abs(r.btc_move).toFixed(0)}</td>
-      <td style="color:${r.pnl >= 0 ? 'var(--green)' : 'var(--red)'}">${pnlSign(r.pnl)}${r.pnl.toFixed(4)}</td>
+      <td style="color:${r.pnl >= 0 ? 'var(--green)' : 'var(--red)'}">${pnlSign(r.pnl)}${Math.abs(r.pnl).toFixed(4)}</td>
     </tr>`;
   }).join('');
   return `<table class="res-table"><thead><tr><th data-tip="Polymarket candle market identifier">Slug</th><th data-tip="WIN if bot profited, LOSS if not. UP/DOWN shows which side won.">Result</th><th data-tip="BTC price change during the 5-minute candle (close - open)">BTC Move</th><th data-tip="Bot's profit or loss on this candle from token positions">PnL</th></tr></thead><tbody>${rows}</tbody></table>`;
