@@ -701,8 +701,16 @@ class TradingAgent:
 
                 self._resolutions_since_reflection += 1
                 self._save_agent_state()
-                if self._resolutions_since_reflection >= 10:
-                    logger.info("Triggering reflection after %d resolutions", self._resolutions_since_reflection)
+
+                # Adaptive reflection: faster when losing, normal when profitable
+                recent_pnl = sum(r.pnl for r in self._recent_resolutions[-5:])
+                reflection_threshold = 5 if recent_pnl < -10.0 else 10
+
+                if self._resolutions_since_reflection >= reflection_threshold:
+                    logger.info(
+                        "Triggering reflection after %d resolutions (threshold=%d, recent_pnl=$%.2f)",
+                        self._resolutions_since_reflection, reflection_threshold, recent_pnl,
+                    )
                     self._resolutions_since_reflection = 0
                     await self._knowledge_manager.reflect(
                         self._recent_resolutions, self._recent_trades,

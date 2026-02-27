@@ -37,6 +37,7 @@ from polybot.models import (
 )
 from polybot.adaptive_entry import AdaptiveEntryTracker
 from polybot.prefilter import PreFilter
+from polybot.shared_state import PreFilterSnapshot
 from polybot.resolution import ResolutionTracker
 from polybot.risk.manager import RiskManager
 from polybot.shared_state import SharedState
@@ -46,6 +47,51 @@ from polybot.simulator.portfolio import Portfolio
 from polybot.logging.trade_log import TradeLog
 
 logger = logging.getLogger(__name__)
+
+
+def _compute_btc_trajectory(history: list[PreFilterSnapshot]) -> str | None:
+    """Compute BTC velocity and peak-drawback from prefilter snapshots.
+
+    Returns a compact trajectory section for the AI prompt, or None
+    if insufficient data.
+    """
+    if len(history) < 15:
+        return None
+
+    moves = [s.btc_move_from_open for s in history]
+
+    # Velocity: rate of change over last ~10s vs ~20-30s ago
+    recent = moves[-10:]
+    earlier = moves[-30:-20] if len(moves) >= 30 else moves[:10]
+
+    if len(recent) < 2 or len(earlier) < 2:
+        return None
+
+    current_vel = (recent[-1] - recent[0]) / len(recent)
+    earlier_vel = (earlier[-1] - earlier[0]) / len(earlier)
+
+    # Peak drawback: furthest BTC move vs current
+    current_move = moves[-1]
+    # Find peak in the direction of the current move
+    if current_move >= 0:
+        peak = max(moves)
+        drawback = peak - current_move
+    else:
+        peak = min(moves)
+        drawback = abs(peak) - abs(current_move)
+
+    # Format
+    vel_dir = "accelerating" if abs(current_vel) > abs(earlier_vel) * 1.2 else "decelerating" if abs(current_vel) < abs(earlier_vel) * 0.8 else "steady"
+    parts = [
+        f"## BTC Trajectory (intra-candle)",
+        f"- Velocity: ${current_vel:+.1f}/s ({vel_dir}, was ${earlier_vel:+.1f}/s)",
+    ]
+    if abs(drawback) >= 5.0:
+        parts.append(f"- Peak drawback: peak was ${peak:+,.0f} from open, now ${current_move:+,.0f} (pulled back ${drawback:.0f})")
+    else:
+        parts.append(f"- No significant drawback (peak ${peak:+,.0f}, current ${current_move:+,.0f})")
+
+    return "\n".join(parts)
 
 
 class AIDecision:
@@ -379,9 +425,16 @@ class AIDecision:
             self._pending_ml_features[market.slug] = ml_features
 
         if ml_prediction.model_trained:
+            # Show top 3 feature drivers so the AI knows WHY the ML predicts a direction
+            top_feats = sorted(
+                ml_prediction.feature_contributions.items(),
+                key=lambda x: abs(x[1]),
+                reverse=True,
+            )[:3]
+            drivers = ", ".join(f"{n}: {v:+.2f}" for n, v in top_feats)
             ml_line = (
                 f"- ML Baseline: {ml_prediction.up_probability:.0%} UP probability "
-                f"({ml_prediction.confidence})"
+                f"({ml_prediction.confidence}) — drivers: {drivers}"
             )
         else:
             ml_line = f"- ML Baseline: {self._ml_scorer.get_summary()}"
@@ -395,6 +448,11 @@ class AIDecision:
             reversal_ctx = self._adaptive_entry.get_ai_context()
             if reversal_ctx:
                 indicators_text = indicators_text + "\n\n" + reversal_ctx if indicators_text else reversal_ctx
+
+        # Inject BTC trajectory (velocity + peak drawback) from prefilter snapshots
+        trajectory_ctx = _compute_btc_trajectory(list(self._shared.prefilter_history))
+        if trajectory_ctx:
+            indicators_text = indicators_text + "\n\n" + trajectory_ctx if indicators_text else trajectory_ctx
 
         # Two-pass screening (entry only, not exits)
         has_position = (
@@ -415,6 +473,9 @@ class AIDecision:
                 self._log_cycle(cycle, snapshot, risk_blocked=False, risk_reason="")
                 self._record_ai_call_time()
                 return
+
+            # Pass screening reasoning to Sonnet — free "second opinion" context
+            indicators_text += f"\n\n## Pre-Screening Note (fast model)\n{screen_reason}"
 
         # Full AI decision
         decision, latency_ms, api_cost = await self._engine.decide(

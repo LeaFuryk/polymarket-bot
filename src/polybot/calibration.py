@@ -18,9 +18,9 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 # Confidence is bucketed into bins of this width
-BIN_WIDTH = 0.05
+BIN_WIDTH = 0.10
 # Minimum samples in a bin before we trust the calibration
-MIN_SAMPLES = 15
+MIN_SAMPLES = 10
 # Default break-even threshold (price + fees)
 DEFAULT_BREAK_EVEN = 0.55
 

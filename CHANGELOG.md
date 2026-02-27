@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v0.4.2] — 2026-02-26
+
+### Added — AI Engineering Improvements (see `docs/AIEngineering.md` for full analysis)
+- **BTC trajectory signals (velocity + peak-drawback)** — The AI now sees intra-candle BTC velocity ($/s, accelerating or decelerating) and peak drawback (how far BTC has pulled back from its candle peak). Computed from prefilter snapshots recorded every second. This directly addresses iter_007's #1 failure mode: all 4 losses were on decelerating BTC moves that reversed, but the AI only saw the static position (+$64) without knowing it was exhausting.
+- **Haiku screening reason passed to Sonnet** — When the fast screener (Haiku) approves a trade, its reasoning is now injected into Sonnet's context as a "Pre-Screening Note." This gives the decision model a free second opinion and primes it to evaluate the key signal Haiku identified. Previously the screening reason was logged but discarded.
+- **ML scorer feature contributions in prompt** — The ML baseline line now shows the top 3 features driving the prediction (e.g., "drivers: btc_vs_open: +0.25, streak_signed: +0.18, reversal_rate: -0.12"). This lets the AI understand WHY the ML predicts a direction, not just the probability, enabling it to agree or disagree with the ML's logic.
+- **Adaptive reflection frequency** — Reflection now triggers every 5 resolutions (~25 min) when the bot is losing (recent 5-candle PnL < -$10), instead of the fixed 10-resolution interval (~50 min). This doubles feedback speed during drawdowns while keeping normal pace during profitable periods.
+
+### Changed
+- **Calibration bins widened from 5% to 10%** — With 5%-wide bins, the calibrator needed ~75+ trades to populate any single bin (MIN_SAMPLES=15). Most bins had 1-5 samples after 7 iterations and zero reliable calibration. Changed to 10%-wide bins with MIN_SAMPLES=10 — reaches reliability ~3x faster. Trade-off: lower resolution (can't distinguish 0.62 from 0.67), but the AI doesn't have that precision anyway.
+
 ## [v0.4.1] — 2026-02-26
 
 ### Added
