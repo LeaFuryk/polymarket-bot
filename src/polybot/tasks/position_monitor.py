@@ -2,6 +2,10 @@
 
 Runs every 1 second. Uses cached snapshot data (no API calls).
 Pushes exit signals to the exit_trigger_queue when SL/TP thresholds are hit.
+
+Dynamic SL/TP: computes adaptive thresholds from 5 factors (time, regime,
+BTC velocity, ML alignment, entry price quality). Tighter when signals say
+"you're wrong", wider when "market is noisy but you're likely right".
 """
 
 from __future__ import annotations
@@ -10,7 +14,7 @@ import asyncio
 import logging
 
 from polybot.config import AppConfig
-from polybot.shared_state import SharedState
+from polybot.shared_state import EntryContext, PreFilterSnapshot, SharedState
 from polybot.simulator.portfolio import Portfolio
 
 logger = logging.getLogger(__name__)
@@ -38,8 +42,10 @@ class PositionMonitor:
     async def run(self) -> None:
         """Main loop — checks positions every second."""
         logger.info(
-            "PositionMonitor started (SL=%.0f%%, TP=+%.0f%%)",
+            "PositionMonitor started (SL=%.0f%%, TP=+%.0f%%, dynamic_sl=%s, dynamic_tp=%s)",
             self._stop_loss_pct * 100, self._take_profit_pct * 100,
+            self._config.monitor.dynamic_sl_enabled,
+            self._config.monitor.dynamic_tp_enabled,
         )
         while not self._shared.shutdown:
             if self._shared.rotation_in_progress:
@@ -94,56 +100,263 @@ class PositionMonitor:
             self._shared.position_pnl_pct.pop("down", None)
             self._triggered.pop("down", None)
 
-    def _dynamic_stop_loss(self) -> float:
-        """Compute time-weighted stop-loss: tighter as candle nears expiry.
+    # --- BTC Velocity Helper ---
 
-        With 240s+ left: use configured stop-loss (e.g., -60%) — let it breathe.
-        With 120s left:  ~midpoint between configured and tight.
-        With 60s left:   -30% (losses unlikely to recover with so little time).
-        With 30s left:   -20% (almost certainly staying there).
+    def _btc_velocity(self, token_side: str) -> tuple[float, bool]:
+        """Compute BTC velocity and whether it favors the position.
+
+        Returns (velocity_magnitude, favors_position).
+        velocity is the rate of change in btc_move_from_open over last ~10s.
+        """
+        history = list(self._shared.prefilter_history)
+        if len(history) < 10:
+            return 0.0, True  # no data → neutral
+
+        recent = history[-1]
+        earlier = history[-10]
+        velocity = (recent.btc_move_from_open - earlier.btc_move_from_open) / 10.0
+
+        # UP position benefits from positive BTC move, DOWN from negative
+        if token_side == "up":
+            favors = velocity >= 0
+        else:
+            favors = velocity <= 0
+
+        return abs(velocity), favors
+
+    # --- ML Alignment Helper ---
+
+    def _ml_alignment_adj(self, token_side: str, ctx: EntryContext) -> float:
+        """Compute ML alignment adjustment from entry context.
+
+        ML agreed with position side → widen (give room).
+        ML disagreed → tighten (less room for error).
+        """
+        prob = ctx.ml_up_probability
+        if ctx.ml_confidence == "neutral":
+            return 0.0
+
+        if token_side == "up":
+            if prob > 0.55:
+                return -0.04  # ML agreed → widen 4%
+            elif prob < 0.45:
+                return 0.05   # ML disagreed → tighten 5%
+        else:  # down
+            if prob < 0.45:
+                return -0.04  # ML agreed with DOWN → widen 4%
+            elif prob > 0.55:
+                return 0.05   # ML disagreed → tighten 5%
+
+        return 0.0
+
+    # --- Dynamic Stop-Loss (5 factors) ---
+
+    def _dynamic_stop_loss(self, token_side: str) -> float:
+        """Compute adaptive stop-loss from 5 factors.
+
+        Factor 1: Time weighting (existing base — tighter near expiry)
+        Factor 2: Regime (reversal rate → momentum tightens, choppy widens)
+        Factor 3: BTC velocity (against position → tighten, favors → widen)
+        Factor 4: ML alignment at entry (agreed → widen, disagreed → tighten)
+        Factor 5: Entry price quality (expensive → tighten, cheap → widen)
+
+        Returns a negative float (e.g., -0.45 for -45% SL).
+        Falls back to time-weighted-only when dynamic_sl_enabled is false.
         """
         market = self._shared.current_market
         if market is None:
             return self._stop_loss_pct
 
         time_remaining = market.time_remaining()
-        if time_remaining >= 240:
-            return self._stop_loss_pct
 
-        # Linear interpolation: from configured stop at 240s to -0.20 at 0s
-        # time_factor goes from 1.0 (240s) to 0.0 (0s)
-        time_factor = max(0.0, min(1.0, time_remaining / 240.0))
-        tight_stop = -0.20
-        return tight_stop + (self._stop_loss_pct - tight_stop) * time_factor
+        # Factor 1: Time-weighted base (preserved from existing logic)
+        if time_remaining >= 240:
+            time_sl = self._stop_loss_pct
+        else:
+            time_factor = max(0.0, min(1.0, time_remaining / 240.0))
+            tight_stop = -0.20
+            time_sl = tight_stop + (self._stop_loss_pct - tight_stop) * time_factor
+
+        if not self._config.monitor.dynamic_sl_enabled:
+            return time_sl
+
+        # Factor 2: Regime (reversal rate)
+        regime_adj = 0.0
+        rr = self._shared.reversal_rate
+        if rr > 0:  # have data
+            if rr < 0.35:
+                # MOMENTUM: drawdowns are real → tighten
+                regime_adj = (0.35 - rr) / 0.35 * 0.12
+            elif rr > 0.55:
+                # CHOPPY: whipsaws expected → widen
+                regime_adj = -((rr - 0.55) / 0.45 * 0.08)
+
+        # Factor 3: BTC velocity
+        vel_adj = 0.0
+        vel_mag, favors = self._btc_velocity(token_side)
+        if favors:
+            vel_adj = -min(0.06, vel_mag / 25.0)  # widen up to 6%
+        else:
+            vel_adj = min(0.08, vel_mag / 15.0)    # tighten up to 8%
+
+        # Factors 4 & 5: ML alignment + Entry price (need EntryContext)
+        ml_adj = 0.0
+        price_adj = 0.0
+        ctx = self._shared.entry_context.get(token_side)
+        if ctx is not None:
+            # Factor 4: ML alignment
+            ml_adj = self._ml_alignment_adj(token_side, ctx)
+
+            # Factor 5: Entry price quality
+            ep = ctx.entry_price
+            if ep >= 0.75:
+                price_adj = 0.06    # expensive → tighten 6%
+            elif ep >= 0.60:
+                price_adj = 0.03    # moderately expensive → tighten 3%
+            elif ep <= 0.40:
+                price_adj = -0.05   # cheap → widen 5%
+
+        # Combine: positive adjustments = tighter (less negative SL), negative = wider
+        raw_sl = time_sl + regime_adj + vel_adj + ml_adj + price_adj
+        sl_floor = self._config.monitor.sl_floor
+        sl_ceiling = self._config.monitor.sl_ceiling
+        final_sl = max(sl_floor, min(sl_ceiling, raw_sl))
+
+        # Store for dashboard
+        self._shared.dynamic_sl[token_side] = final_sl
+
+        return final_sl
+
+    # --- Dynamic Take-Profit (3 adjustments) ---
+
+    def _dynamic_take_profit(self, token_side: str) -> float:
+        """Compute adaptive take-profit from time + 3 factors.
+
+        Base: time-weighted TP (full TP with time, reduced near expiry)
+        Adj 1: Regime (momentum → let winners run, choppy → take profits)
+        Adj 2: BTC velocity (favors → raise TP, against → lower TP)
+        Adj 3: Entry price (expensive → lower TP, cheap → raise TP)
+
+        Returns a positive float (e.g., 0.60 for +60% TP).
+        Falls back to static take_profit_pct when dynamic_tp_enabled is false.
+        """
+        if not self._config.monitor.dynamic_tp_enabled:
+            return self._take_profit_pct
+
+        market = self._shared.current_market
+        if market is None:
+            return self._take_profit_pct
+
+        time_remaining = market.time_remaining()
+        base_tp = self._take_profit_pct
+
+        # Time-weighted base TP
+        if time_remaining >= 180:
+            time_tp = base_tp
+        elif time_remaining >= 60:
+            time_tp = base_tp * (0.60 + 0.40 * (time_remaining - 60) / 120.0)
+        else:
+            time_tp = base_tp * 0.40
+
+        # Adjustment 1: Regime
+        regime_adj = 0.0
+        rr = self._shared.reversal_rate
+        if rr > 0:
+            if rr < 0.35:
+                regime_adj = 0.10    # MOMENTUM → let winners run
+            elif rr > 0.55:
+                regime_adj = -0.15   # CHOPPY → take profits early
+
+        # Adjustment 2: BTC velocity
+        vel_adj = 0.0
+        vel_mag, favors = self._btc_velocity(token_side)
+        if favors:
+            vel_adj = min(0.10, vel_mag / 20.0)     # accelerating in favor → raise TP
+        else:
+            vel_adj = -min(0.10, vel_mag / 20.0)    # turning against → lower TP
+
+        # Adjustment 3: Entry price
+        price_adj = 0.0
+        ctx = self._shared.entry_context.get(token_side)
+        if ctx is not None:
+            ep = ctx.entry_price
+            if ep > 0.70:
+                price_adj = -0.15   # expensive → lower TP (less room to grow)
+            elif ep < 0.40:
+                price_adj = 0.10    # cheap → raise TP (more room to grow)
+
+        # Combine
+        raw_tp = time_tp + regime_adj + vel_adj + price_adj
+        tp_floor = self._config.monitor.tp_floor
+        tp_ceiling = self._config.monitor.tp_ceiling
+        final_tp = max(tp_floor, min(tp_ceiling, raw_tp))
+
+        # Store for dashboard
+        self._shared.dynamic_tp[token_side] = final_tp
+
+        return final_tp
+
+    # --- Threshold Check ---
 
     async def _check_thresholds(self, token_side: str, pnl_pct: float) -> None:
         """Check if P&L has hit stop-loss or take-profit thresholds."""
         if token_side in self._triggered:
             return  # Already triggered for this position
 
-        dynamic_sl = self._dynamic_stop_loss()
+        dynamic_sl = self._dynamic_stop_loss(token_side)
+        dynamic_tp = self._dynamic_take_profit(token_side)
+
         if pnl_pct <= dynamic_sl:
+            # Build component breakdown for log
+            components = self._sl_components_str(token_side)
             logger.warning(
-                "STOP-LOSS triggered: %s position P&L=%.1f%% <= %.1f%% (dynamic SL, base=%.0f%%)",
-                token_side.upper(), pnl_pct * 100, dynamic_sl * 100, self._stop_loss_pct * 100,
+                "STOP-LOSS triggered: %s P&L=%.1f%% <= %.1f%% [%s]",
+                token_side.upper(), pnl_pct * 100, dynamic_sl * 100, components,
             )
             self._triggered[token_side] = "stop_loss"
             await self._shared.exit_trigger_queue.put({
                 "token_side": token_side,
-                "reason": f"stop_loss ({pnl_pct:+.1%})",
+                "reason": f"stop_loss ({pnl_pct:+.1%}, dynamic SL={dynamic_sl:+.0%})",
                 "pnl_pct": pnl_pct,
                 "trigger_type": "stop_loss",
             })
 
-        elif pnl_pct >= self._take_profit_pct:
+        elif pnl_pct >= dynamic_tp:
             logger.info(
-                "TAKE-PROFIT triggered: %s position P&L=+%.1f%% >= +%.1f%%",
-                token_side.upper(), pnl_pct * 100, self._take_profit_pct * 100,
+                "TAKE-PROFIT triggered: %s P&L=+%.1f%% >= +%.1f%% (dynamic TP)",
+                token_side.upper(), pnl_pct * 100, dynamic_tp * 100,
             )
             self._triggered[token_side] = "take_profit"
             await self._shared.exit_trigger_queue.put({
                 "token_side": token_side,
-                "reason": f"take_profit ({pnl_pct:+.1%})",
+                "reason": f"take_profit ({pnl_pct:+.1%}, dynamic TP=+{dynamic_tp:.0%})",
                 "pnl_pct": pnl_pct,
                 "trigger_type": "take_profit",
             })
+
+    def _sl_components_str(self, token_side: str) -> str:
+        """Build a short string showing SL factor breakdown for logging."""
+        market = self._shared.current_market
+        parts = []
+
+        if market:
+            tr = market.time_remaining()
+            parts.append(f"time={tr:.0f}s")
+
+        rr = self._shared.reversal_rate
+        if rr > 0:
+            parts.append(f"rr={rr:.2f}")
+
+        regime = self._shared.regime
+        parts.append(f"regime={regime}")
+
+        vel_mag, favors = self._btc_velocity(token_side)
+        if vel_mag > 0.01:
+            parts.append(f"vel={'fav' if favors else 'agn'} {vel_mag:.1f}")
+
+        ctx = self._shared.entry_context.get(token_side)
+        if ctx:
+            parts.append(f"entry=${ctx.entry_price:.2f}")
+            parts.append(f"ml={ctx.ml_confidence}")
+
+        return ", ".join(parts)

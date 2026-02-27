@@ -52,6 +52,12 @@ monitor:
   btc_price_cache_ttl: 2.0
   adaptive_entry_enabled: true
   adaptive_entry_window: 10
+  dynamic_sl_enabled: true
+  dynamic_tp_enabled: true
+  sl_floor: -0.75          # never wider than -75%
+  sl_ceiling: -0.15        # never tighter than -15%
+  tp_floor: 0.20           # never below +20%
+  tp_ceiling: 1.20         # never above +120%
 
 logging:
   log_dir: "logs"

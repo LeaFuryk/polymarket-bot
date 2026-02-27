@@ -37,7 +37,7 @@ from polybot.models import (
 )
 from polybot.adaptive_entry import AdaptiveEntryTracker
 from polybot.prefilter import PreFilter
-from polybot.shared_state import PreFilterSnapshot
+from polybot.shared_state import EntryContext, PreFilterSnapshot
 from polybot.resolution import ResolutionTracker
 from polybot.risk.manager import RiskManager
 from polybot.shared_state import SharedState
@@ -896,6 +896,19 @@ class AIDecision:
                 self._bought_sides.setdefault(market.slug, set()).add(
                     decision.token_side.value.upper(),
                 )
+                # Store entry context for dynamic SL/TP
+                btc_move_now = 0.0
+                if candle_open_btc and snapshot.btc_price:
+                    btc_move_now = snapshot.btc_price.price_usd - candle_open_btc
+                self._shared.entry_context[decision.token_side.value] = EntryContext(
+                    entry_price=fill.fill_price,
+                    entry_time=time.time(),
+                    ml_up_probability=ml_prediction.up_probability if ml_prediction.model_trained else 0.5,
+                    ml_confidence=ml_prediction.confidence if ml_prediction.model_trained else "neutral",
+                    btc_move_at_entry=btc_move_now,
+                    reversal_rate_at_entry=self._shared.reversal_rate,
+                    confidence_at_entry=decision.confidence,
+                )
 
             if decision.action == Action.SELL and market:
                 self._exit_tracker.register_exit(
@@ -910,6 +923,10 @@ class AIDecision:
                 self._sold_sides.setdefault(market.slug, set()).add(
                     decision.token_side.value,
                 )
+                # Clear entry context for dynamic SL/TP
+                self._shared.entry_context.pop(decision.token_side.value, None)
+                self._shared.dynamic_sl.pop(decision.token_side.value, None)
+                self._shared.dynamic_tp.pop(decision.token_side.value, None)
 
         # Post-fill mark-to-market
         if up_mid is not None:

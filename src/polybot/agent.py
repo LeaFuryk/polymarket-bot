@@ -514,6 +514,12 @@ class TradingAgent:
         self._total_api_cost = self._ai_decision.total_api_cost
         self._last_cycle_api_cost = self._ai_decision.last_cycle_api_cost
 
+        # Sync adaptive entry signals → SharedState for dynamic SL/TP
+        if self._adaptive_entry is not None:
+            self._shared.reversal_rate = self._adaptive_entry.rolling_reversal_rate
+            self._shared.signal_type = self._adaptive_entry.signal_type
+            self._shared.regime = self._adaptive_entry.regime
+
     async def _discover_market(self) -> CandleMarket | None:
         """Discover the current candle market, handling rotation and outages."""
         new_market = await self._discovery.get_current_market()
@@ -743,6 +749,9 @@ class TradingAgent:
             self._shared.position_pnl_pct.clear()
             self._shared.prefilter_history.clear()
             self._shared.last_stop_loss = None
+            self._shared.entry_context.clear()
+            self._shared.dynamic_sl.clear()
+            self._shared.dynamic_tp.clear()
 
         finally:
             self._shared.rotation_in_progress = False
@@ -871,6 +880,10 @@ class TradingAgent:
             # Position P&L from position monitor
             position_pnl = dict(self._shared.position_pnl_pct)
 
+            # Dynamic SL/TP from position monitor
+            dynamic_sl = dict(self._shared.dynamic_sl)
+            dynamic_tp = dict(self._shared.dynamic_tp)
+
             # Trades list
             trades = []
             for t in self._session_trades:
@@ -962,6 +975,8 @@ class TradingAgent:
                 "btc": btc_info,
                 "positions": positions,
                 "position_pnl": position_pnl,
+                "dynamic_sl": dynamic_sl,
+                "dynamic_tp": dynamic_tp,
                 "trades": all_trades,
                 "resolutions": all_resolutions,
                 "risk": {

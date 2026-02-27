@@ -16,6 +16,19 @@ from polybot.models import CandleMarket
 
 
 @dataclass
+class EntryContext:
+    """Market conditions at entry (fill) time — used by dynamic SL/TP."""
+
+    entry_price: float = 0.0
+    entry_time: float = 0.0
+    ml_up_probability: float = 0.5
+    ml_confidence: str = "neutral"
+    btc_move_at_entry: float = 0.0
+    reversal_rate_at_entry: float = 0.0
+    confidence_at_entry: float = 0.0
+
+
+@dataclass
 class CandleMicrostructure:
     """End-of-candle microstructure summary for cross-candle memory."""
 
@@ -89,6 +102,14 @@ class SharedState:
         # Post-stop-loss cooldown: records last stop-loss exit on current candle
         self.last_stop_loss: dict | None = None
         # Format: {"token_side": "up", "pnl_pct": -0.25, "timestamp": 1234.0}
+
+        # Dynamic SL/TP context
+        self.entry_context: dict[str, EntryContext] = {}  # "up"/"down" → context
+        self.reversal_rate: float = 0.0  # from AdaptiveEntryTracker
+        self.signal_type: str = "UNCERTAIN"  # MOMENTUM/UNCERTAIN/CONTRARIAN
+        self.regime: str = "MODERATE"  # CALM/MODERATE/CHOPPY
+        self.dynamic_sl: dict[str, float] = {}  # for dashboard display
+        self.dynamic_tp: dict[str, float] = {}
 
         # Shutdown flag
         self.shutdown: bool = False
