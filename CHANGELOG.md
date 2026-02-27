@@ -4,6 +4,37 @@ All notable changes to this project will be documented in this file.
 
 ## [v0.5.0] — 2026-02-27
 
+### Dashboard Overhaul
+
+#### Backend — Data Pipeline Enrichment
+- **Screen tracking per trade** (`ai_decision.py`) — Each trade record now includes `screen_passed` field: `null` (no screen/prefilter), `false` (Haiku rejected), `true` (Haiku passed → Sonnet). Enables frontend to show which AI model handled each decision
+- **Candle snapshot timelines** (`agent.py`) — Dashboard JSON now includes `candle_snapshots` dict with downsampled per-candle data (every ~10s): winner token prices, BTC move, prefilter pass/fail, indicator values, orderbook state. Powers the heatmap, prefilter ticks, and input data views
+- **Archive snapshot enrichment** (`archive.py`) — `_enrich_iteration_summary()` reads candle snapshots from archived `polybot.db` so iteration detail views have full timeline data
+
+#### Frontend — Interactive PnL Chart
+- **Hover tooltips with crosshair** — `buildLargePnlChart()` now renders gridlines (horizontal at auto-scaled PnL levels, vertical every N candles), gradient area fill, and interactive hover with vertical/horizontal crosshair lines and a positioned DOM tooltip showing candle number and PnL value
+- **Win/loss dot coloring** — Each point on the PnL curve is colored green (win), red (loss), or gray (flat) based on the corresponding resolution
+- **Larger chart area** — SVG viewport 900x220 with 70px right margin for value labels, 280px container height
+
+#### Frontend — Consolidated Layout
+- **Dense Performance Statistics panel** — Merged Trade Quality, Resolution Stats, Calibration & Intelligence, and Account State into a single full-width panel with a compact multi-column grid layout (4+ columns). Eliminates wasted space from separate 2-column panel boxes
+- **Tighter spacing throughout** — Reduced all margins (0.75rem → 0.5rem), gaps (0.75rem → 0.5rem), padding (0.85rem → 0.6rem), and font sizes for a denser, more information-rich layout
+- **Active Indicators panel** — Compact tag list showing all enabled pre-filter indicators as color-coded badges
+
+#### Frontend — Enhanced Timeline
+- **Prefilter tick marks** — Small colored tick marks along the timeline track showing prefilter activity from snapshot data: green = passed (AI could be called), gray = failed (skipped)
+- **AI model badges** — Each trade dot gets a badge above it: "H" (cyan) = Haiku screen only, "S" (purple) = Sonnet decision, "P" (gray) = prefilter skip
+- **Winner price heatmap** — For resolved candles, a gradient bar below the timeline shows the winner token's price over time using dynamic per-candle scaling: green (cheapest observed) → yellow (midpoint) → red (most expensive), with price labels
+
+#### Frontend — Trade Detail Enhancements
+- **Model info row** — Each expanded trade shows which model handled it: "Haiku screen (rejected)", "Haiku + Sonnet", or "Sonnet (no screen)"
+- **Collapsible Input Data section** — "Show Input Data" toggle reveals a grid of the market state at decision time: BTC price, UP midpoint, spread, cash, portfolio value, fee, AI cost
+- **SL/TP display in positions panel** — Live session's Open Positions panel now shows dynamic stop-loss and take-profit thresholds with color-coded badges (red for SL, green for TP)
+
+#### Frontend — Layout Fix
+- **Replaced grid with flex layout** — `.content-grid`, `.live-row`, `.iv-grid` switched from CSS grid to flexbox so all panels use the full available width instead of being constrained to half-width columns
+- **Simplified media queries** — Removed redundant breakpoints since flex layout handles responsiveness natively
+
 ### iter_008 Analysis (pre-v0.5.0 code — baseline for AI engineering changes)
 - **10.4 hours, 128 candles, 95 traded** — longest session by far. 71.6% win rate, +$97 net after fees
 - **Recovered from -$96 max drawdown** in the first 2 hours to finish profitable — system resilience proven
