@@ -253,6 +253,9 @@ class TradingAgent:
         # Load BTC 5-min candle history
         await self._market_data.btc_feed.load_candle_history(200)
 
+        # Bootstrap adaptive entry from Binance if insufficient history
+        await self._adaptive_entry.bootstrap_from_binance()
+
         # Resolve any pending bets from previous sessions
         await self._resolve_pending_bets()
 
