@@ -180,6 +180,8 @@ class AIDecision:
 
         # Track sold sides per candle to block side-flips (sell A → buy B)
         self._sold_sides: dict[str, set[str]] = {}  # slug → {UP, DOWN}
+        # Track bought sides per candle to prevent double-entry on same side
+        self._bought_sides: dict[str, set[str]] = {}  # slug → {UP, DOWN}
 
         # Internal counters (synced to agent via shared references)
         self._cycle_count = 0
@@ -389,6 +391,15 @@ class AIDecision:
             forced_exit_side=token_side_str,
         )
 
+        # Safeguard #3: Record stop-loss exit for cooldown warning
+        trigger_type = exit_signal.get("trigger_type", "")
+        if trigger_type == "stop_loss":
+            self._shared.last_stop_loss = {
+                "token_side": token_side_str,
+                "pnl_pct": pnl_pct,
+                "timestamp": time.time(),
+            }
+
     async def _run_ai_decision(
         self,
         cycle: int,
@@ -496,6 +507,46 @@ class AIDecision:
         micro_ctx = _format_microstructure(self._shared.microstructure_history)
         if micro_ctx:
             indicators_text = indicators_text + "\n\n" + micro_ctx if indicators_text else micro_ctx
+
+        # Safeguard #1: Chainlink divergence warning
+        if snapshot.btc_price and snapshot.btc_price.price_divergence is not None:
+            divergence = snapshot.btc_price.price_divergence
+            if abs(divergence) > 100:
+                chainlink_warning = (
+                    f"\n\n## CHAINLINK DIVERGENCE WARNING\n"
+                    f"Chainlink vs Binance divergence: ${divergence:+.0f} — "
+                    f"resolution source may differ significantly.\n"
+                    f"Consider reducing confidence. Trades near candle boundaries are especially risky."
+                )
+                indicators_text = indicators_text + chainlink_warning if indicators_text else chainlink_warning
+
+        # Safeguard #6: Counter-trend accuracy context
+        trend_result = next(
+            (r for r in indicator_results if r.name == "Market Trend"), None,
+        )
+        if trend_result and abs(trend_result.value) >= 0.3:
+            weak_side = "DOWN" if trend_result.value > 0 else "UP"
+            trend_label = "BULLISH" if trend_result.value > 0 else "BEARISH"
+            counter_trend_advisory = (
+                f"\n\n## Counter-Trend Advisory\n"
+                f"Strong {trend_label} trend detected (score={trend_result.value:+.2f}). "
+                f"{weak_side} trades are counter-trend.\n"
+                f"Historical counter-trend accuracy: ~55-60% (vs ~75% trend-aligned).\n"
+                f"If going counter-trend, require higher conviction and use smaller size."
+            )
+            indicators_text = indicators_text + counter_trend_advisory if indicators_text else counter_trend_advisory
+
+        # Safeguard #3: Post-stop-loss cooldown warning
+        if self._shared.last_stop_loss is not None:
+            sl_info = self._shared.last_stop_loss
+            sl_warning = (
+                f"\n\n## POST-STOP-LOSS WARNING\n"
+                f"A stop-loss exit just occurred on this candle "
+                f"({sl_info['token_side'].upper()} at {sl_info['pnl_pct']:+.1%}).\n"
+                f"Re-entering immediately is high-risk — the price moved against you and may continue.\n"
+                f"If you choose to re-enter, use smaller size and higher conviction threshold."
+            )
+            indicators_text = indicators_text + sl_warning if indicators_text else sl_warning
 
         # Two-pass screening (entry only, not exits)
         has_position = (
@@ -667,6 +718,26 @@ class AIDecision:
                     confidence_drivers=decision.confidence_drivers,
                 )
 
+        # Safeguard #2: Single-entry-per-side — block buying same side twice on same candle
+        if decision.action == Action.BUY and market:
+            side_key = decision.token_side.value.upper()
+            if side_key in self._bought_sides.get(market.slug, set()):
+                logger.info(
+                    "Single-entry block: already bought %s on %s, overriding to HOLD",
+                    side_key, market.slug,
+                )
+                decision = TradingDecision(
+                    action=Action.HOLD,
+                    order_type=OrderType.MARKET,
+                    size=0.0,
+                    confidence=decision.confidence,
+                    reasoning=f"Single-entry: already bought {side_key} on this candle. Original: {decision.reasoning[:80]}",
+                    market_view=decision.market_view,
+                    token_side=decision.token_side,
+                    hypothetical_direction=decision.hypothetical_direction,
+                    confidence_drivers=decision.confidence_drivers,
+                )
+
         # Extended R/R position sizing (no hard block)
         if decision.action == Action.BUY:
             target_ob = down_ob if decision.token_side == TokenSide.DOWN else up_ob
@@ -820,6 +891,10 @@ class AIDecision:
                     confidence=decision.confidence,
                     token_side=decision.token_side.value,
                     entry_price=fill.fill_price,
+                )
+                # Safeguard #2: Track bought side to block double-entry
+                self._bought_sides.setdefault(market.slug, set()).add(
+                    decision.token_side.value.upper(),
                 )
 
             if decision.action == Action.SELL and market:

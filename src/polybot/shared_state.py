@@ -86,5 +86,9 @@ class SharedState:
         # Cross-candle microstructure memory (last 5 candles)
         self.microstructure_history: list[CandleMicrostructure] = []
 
+        # Post-stop-loss cooldown: records last stop-loss exit on current candle
+        self.last_stop_loss: dict | None = None
+        # Format: {"token_side": "up", "pnl_pct": -0.25, "timestamp": 1234.0}
+
         # Shutdown flag
         self.shutdown: bool = False

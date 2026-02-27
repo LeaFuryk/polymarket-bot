@@ -742,6 +742,7 @@ class TradingAgent:
             self._shared.candle_open_btc = None
             self._shared.position_pnl_pct.clear()
             self._shared.prefilter_history.clear()
+            self._shared.last_stop_loss = None
 
         finally:
             self._shared.rotation_in_progress = False

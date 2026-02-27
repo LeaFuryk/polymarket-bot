@@ -242,10 +242,19 @@ class ConfidenceCalibrator:
             if b.total == 0:
                 continue
             reliability = "reliable" if b.is_reliable else "insufficient data"
-            lines.append(
-                f"  {b.bin_lower:.2f}-{b.bin_upper:.2f}: "
-                f"{b.win_rate:.0%} win rate ({b.wins}W/{b.losses}L, {reliability})"
-            )
+            # Overconfidence warning: actual win rate significantly below stated confidence range
+            if b.is_reliable and b.win_rate < b.bin_lower:
+                lines.append(
+                    f"  {b.bin_lower:.2f}-{b.bin_upper:.2f}: "
+                    f"OVERCONFIDENT — actual {b.win_rate:.0%} win rate but you state "
+                    f"{b.bin_lower:.0%}-{b.bin_upper:.0%} confidence "
+                    f"({b.wins}W/{b.losses}L from {b.total} trades)"
+                )
+            else:
+                lines.append(
+                    f"  {b.bin_lower:.2f}-{b.bin_upper:.2f}: "
+                    f"{b.win_rate:.0%} win rate ({b.wins}W/{b.losses}L, {reliability})"
+                )
         if not lines and self._shadow_total == 0:
             return "No calibration data yet."
         parts = []

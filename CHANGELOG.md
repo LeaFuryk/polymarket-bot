@@ -2,6 +2,32 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v0.5.1] — 2026-02-27
+
+### Added — 8 Soft Safeguards for Better AI Decisions
+
+Based on iter_008 loss analysis (27 losses totaling -$583), implemented 8 safeguards — 7 soft (inject context/warnings into the AI prompt so it makes better decisions) and 1 hard (single-entry-per-side is position discipline, not market-dependent).
+
+1. **Chainlink divergence warning** — When Chainlink diverges >$100 from Binance, a warning block is injected into the AI's indicators text: "resolution source may differ significantly." The AI decides whether to reduce confidence or skip. Previously, 6/27 losses had divergence >$100 with no warning surfaced.
+
+2. **Single-entry-per-side enforcement** (code-level) — Prevents buying the same side twice on the same candle. Tracks `_bought_sides` per slug, overrides duplicate BUY to HOLD. The system prompt already said "do NOT buy more of the same token" but iter_008 showed 5 violations causing -$123 including the largest single loss (-$52.73). This is the ONE code-level enforcement.
+
+3. **Post-stop-loss cooldown signal** — After a stop-loss exit fires, a warning is injected into the next AI call on the same candle: "Re-entering immediately is high-risk — the price moved against you and may continue." Stored in `SharedState.last_stop_loss`, cleared on candle rotation. iter_008 had 5 post-stop-loss re-entries that all lost.
+
+4. **Corrected $50 threshold accuracy** — Fixed `trading_patterns.md`: the $50-$100 BTC move accuracy was listed as ~90% (from a smaller sample) but iter_008's 128 candles showed ~65-70%. Updated the table and added a caveat about accuracy varying by market conditions.
+
+5. **Drawdown awareness in prompt** — When the last 10 resolutions have net PnL < -$5, a "SESSION DRAWDOWN ALERT" is injected into the feedback context. The AI can adjust sizing and selectivity during losing streaks rather than trading blind to cumulative losses.
+
+6. **Counter-trend accuracy context** — When a strong market trend is detected (score >= 0.3), a "Counter-Trend Advisory" is injected before the AI call: "Historical counter-trend accuracy: ~55-60% (vs ~75% trend-aligned)." Previously the counter-trend sizing reduction existed but the AI didn't know *why* or the accuracy differential.
+
+7. **Calibration overconfidence warnings** — Enhanced `get_calibration_summary()` to flag bins where actual win rate is below the stated confidence range: "OVERCONFIDENT — actual 67% win rate but you state 70%-80% confidence (23W/11L from 34 trades)." iter_008 showed the 0.72-0.74 band claimed 73% but actually won 67%.
+
+8. **Per-side failure pattern surfacing** — Enhanced `build_feedback_context()` with: (a) side-specific accuracy warnings when UP or DOWN win rate < 50% over 3+ trades, (b) losing streak detection (3+ consecutive losses trigger "Increase selectivity" warning). iter_008 showed the AI acknowledged its own 0W/10L UP failure pattern and continued buying UP.
+
+### Changed
+- `SharedState` now includes `last_stop_loss` field for post-stop-loss cooldown tracking
+- `_handle_market_transition()` clears `last_stop_loss` on candle rotation
+
 ## [v0.5.0] — 2026-02-27
 
 ### iter_008 Analysis (pre-v0.5.0 code — baseline for AI engineering changes)

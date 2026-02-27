@@ -10,11 +10,11 @@ The size of the BTC move from candle open is the strongest predictor of outcome 
 |-----------------|---------------------|-------|
 | $0-$20          | ~54% | Near coin flip — direction is mostly noise |
 | $20-$50         | ~61% | Marginal edge, still unreliable |
-| $50-$100        | ~90% | Strong signal — direction becomes reliable |
+| $50-$100        | ~65-70% | Moderate edge — better than smaller moves but reversals still common |
 | $100-$200       | ~90% | Very strong signal |
 | $200+           | ~89% | Near-certain direction, but rare |
 
-Observation: The $50 threshold historically separates noise from signal. Moves below $50 at 60s elapsed have reversed ~40% of the time.
+Observation: The $50 threshold offers moderate improvement over smaller moves, but accuracy varies by market conditions. iter_008 (128 candles) showed at least 10 losses on $50+ moves, bringing the observed accuracy to ~65-70% — meaningful edge but far from certain. Moves below $50 at 60s elapsed have reversed ~40% of the time.
 
 ## Reversal Rates by Elapsed Time
 

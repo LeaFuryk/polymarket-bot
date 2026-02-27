@@ -97,13 +97,14 @@ All tasks are `asyncio.Task` in the same event loop (no OS threads). Safe for sh
 Waits for entry triggers (from MarketMonitor) or exit triggers (from PositionMonitor):
 
 1. **Pre-trade risk checks** — Daily loss halt, minimum liquidity
-2. **Build context** — Compact FeatureVector + BTC candle history + feedback context + computed indicators + ML prediction (with top 3 feature drivers) + BTC trajectory (velocity/peak-drawback) + cross-candle microstructure (spread/volatility trends). Ensemble disagreement (ML vs AI direction) is tracked
+2. **Build context** — Compact FeatureVector + BTC candle history + feedback context + computed indicators + ML prediction (with top 3 feature drivers) + BTC trajectory (velocity/peak-drawback) + cross-candle microstructure (spread/volatility trends) + soft safeguard warnings (Chainlink divergence >$100, post-stop-loss cooldown, counter-trend advisory, session drawdown alert, per-side failure patterns, calibration overconfidence). Ensemble disagreement (ML vs AI direction) is tracked
 3. **Two-pass screening** — Haiku screens first (entry only, not exits). Screening reason is passed to Sonnet as a "Pre-Screening Note". Pass-through rate tracked for tuning
 4. **Claude decides** — Full Sonnet decision with structured JSON output
 5. **Confidence gate** — Override BUY to HOLD if confidence < 0.55
-6. **Calibration gate** — Override BUY to HOLD if calibrated win rate < break-even
+6. **Calibration gate** — Override BUY to HOLD if calibrated win rate < break-even (with overconfidence warnings per bin)
 7. **Anti-hedge guard** — Blocks BUY if opposite side has shares
 7b. **Anti-flip guard** — Blocks buying the opposite side after a SELL on the same candle (prevents whipsaw). Same-side re-entry allowed
+7c. **Single-entry-per-side** — Blocks buying the same side twice on the same candle (code-enforced position discipline)
 8. **Position sizing** — Gentle R/R scale (0.75x-1.0x, since data shows cheap entries are often contrarian traps). Multiplied by BTC move magnitude scaling (80%/90%/100%) and counter-trend reduction (50-70%). Minimum 40 shares (20 for counter-trend)
 8. **Post-trade risk checks** — Position size, concentration, cash, spread (BUY only)
 9. **Execute + log** — Simulate fill, update portfolio, write TradeRecord
@@ -361,7 +362,7 @@ Each candle is tagged with an `iteration` label (e.g., `iter_003`) so you can tr
 
 With 500+ candles accumulated, you can statistically validate every assumption in the codebase — momentum continuation rates, reversal frequencies, optimal entry timing — instead of guessing.
 
-A comprehensive statistical analysis (159+ candles across 8 iterations) found: BTC moves >$50 have ~65-70% directional accuracy (originally estimated at ~90% from a smaller sample, but iter_008's 128 candles showed at least 10 losses on $50+ moves); two EV peaks at 30-45s and 120-165s; cheap entries (R/R 1.5-3.0) are often contrarian traps; and streaks of 3+ continue ~62% of the time. Findings are loaded into `data/knowledge/trading_patterns.md` as soft guidance for the AI.
+A comprehensive statistical analysis (287+ candles across 8 iterations) found: BTC moves >$50 have ~65-70% directional accuracy (originally estimated at ~90% from a smaller sample, corrected after iter_008's 128 candles showed at least 10 losses on $50+ moves); two EV peaks at 30-45s and 120-165s; cheap entries (R/R 1.5-3.0) are often contrarian traps; and streaks of 3+ continue ~62% of the time. Findings are loaded into `data/knowledge/trading_patterns.md` as soft guidance for the AI.
 
 ### Analysis Report
 
