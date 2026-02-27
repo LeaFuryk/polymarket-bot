@@ -361,7 +361,7 @@ Each candle is tagged with an `iteration` label (e.g., `iter_003`) so you can tr
 
 With 500+ candles accumulated, you can statistically validate every assumption in the codebase — momentum continuation rates, reversal frequencies, optimal entry timing — instead of guessing.
 
-A comprehensive statistical analysis (159 candles, 4 iterations) found: BTC moves >$50 at 60s have ~90% directional accuracy; two EV peaks at 30-45s and 120-165s; cheap entries (R/R 1.5-3.0) are often contrarian traps; and streaks of 3+ continue ~62% of the time. Findings are loaded into `data/knowledge/trading_patterns.md` as soft guidance for the AI.
+A comprehensive statistical analysis (159+ candles across 8 iterations) found: BTC moves >$50 have ~65-70% directional accuracy (originally estimated at ~90% from a smaller sample, but iter_008's 128 candles showed at least 10 losses on $50+ moves); two EV peaks at 30-45s and 120-165s; cheap entries (R/R 1.5-3.0) are often contrarian traps; and streaks of 3+ continue ~62% of the time. Findings are loaded into `data/knowledge/trading_patterns.md` as soft guidance for the AI.
 
 ### Analysis Report
 
