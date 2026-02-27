@@ -199,6 +199,9 @@ class AIDecision:
         self.last_risk_status: str = "OK"
         self.last_token_side: str = ""
 
+        # Per-cycle screen tracking (None=no screen, True=passed, False=rejected)
+        self._last_screen_passed: bool | None = None
+
         # Ensemble disagreement tracking
         self._screen_calls: int = 0
         self._screen_passes: int = 0  # Haiku said "trade"
@@ -265,6 +268,7 @@ class AIDecision:
 
     async def _handle_entry_trigger(self) -> None:
         """Handle an entry opportunity trigger from the market monitor."""
+        self._last_screen_passed = None  # Reset per cycle
         self._cycle_count += 1
         cycle = self._cycle_count
         logger.info("=== AI Decision Cycle %d (trigger: %s) ===", cycle, self._shared.ai_trigger_reason)
@@ -563,12 +567,14 @@ class AIDecision:
             self._screen_calls += 1
 
             if not should_trade:
+                self._last_screen_passed = False
                 self.last_action = f"HOLD (screen: {screen_reason[:60]})"
                 self.last_reasoning = screen_reason
                 self._log_cycle(cycle, snapshot, risk_blocked=False, risk_reason="")
                 self._record_ai_call_time()
                 return
 
+            self._last_screen_passed = True
             self._screen_passes += 1
             # Pass screening reasoning to Sonnet — free "second opinion" context
             indicators_text += f"\n\n## Pre-Screening Note (fast model)\n{screen_reason}"
@@ -986,6 +992,8 @@ class AIDecision:
         if market:
             record.candle_slug = market.slug
             record.extra["time_remaining"] = market.time_remaining()
+
+        record.extra["screen_passed"] = self._last_screen_passed
 
         if decision:
             record.action = decision.action
