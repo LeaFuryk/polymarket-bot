@@ -55,54 +55,15 @@ class BtcPriceFeed:
         # Separate cache for 24h change from CoinGecko (updates less frequently)
         self._24h_change_pct: float = 0.0
         self._24h_change_time: float = 0.0
-        # Chainlink WS feed (primary when active — matches resolution source)
+        # Chainlink WS feed (cross-reference only — too unreliable for primary use)
         from polybot.market_data.chainlink_ws import ChainlinkWSFeed
         self._chainlink_ws: ChainlinkWSFeed | None = chainlink_ws
 
     @property
     def candles(self) -> list[BtcCandle]:
-        """Merged candles: Chainlink WS (preferred) + Binance backfill (older).
-
-        When a Chainlink candle exists for the same time bucket as a Binance
-        candle, the Chainlink version wins (it matches resolution source).
-        """
+        """Binance 5-min candles for trend analysis (up to 200)."""
         now = time.time()
-
-        # Get Chainlink WS candles (if available)
-        chainlink_candles: list[BtcCandle] = []
-        if self._chainlink_ws is not None:
-            chainlink_candles = self._chainlink_ws.completed_candles
-
-        if not chainlink_candles:
-            # No Chainlink candles yet — pure Binance backfill
-            return [c for c in self._candles if c.close_time < now]
-
-        # Build lookup of Chainlink candles by open_time
-        cl_by_time = {c.open_time: c for c in chainlink_candles}
-
-        # Merge: for each time slot, prefer Chainlink over Binance
-        merged: list[BtcCandle] = []
-        seen_times: set[float] = set()
-
-        # Start with Binance backfill, replacing with Chainlink where available
-        for c in self._candles:
-            if c.close_time >= now:
-                continue
-            if c.open_time in cl_by_time:
-                merged.append(cl_by_time[c.open_time])
-            else:
-                merged.append(c)
-            seen_times.add(c.open_time)
-
-        # Add any Chainlink candles not in Binance history
-        for c in chainlink_candles:
-            if c.open_time not in seen_times and c.close_time < now:
-                merged.append(c)
-
-        # Sort by open_time
-        merged.sort(key=lambda c: c.open_time)
-
-        return merged[-200:]
+        return [c for c in self._candles if c.close_time < now][-200:]
 
     # --- 5-min candle history (Binance — for trend analysis only) ---
 
@@ -317,27 +278,23 @@ class BtcPriceFeed:
     # --- Main price method ---
 
     async def get_price(self) -> BtcPrice | None:
-        """Get current BTC/USD price. Chainlink WS primary, Binance fallback, CoinGecko last resort.
+        """Get current BTC/USD price. Binance primary, CoinGecko fallback.
 
-        Priority: Chainlink WS (matches resolution source) → Binance → CoinGecko → stale cache.
-        When on Chainlink WS, we skip the expensive on-chain RPC call entirely.
+        Chainlink WS is used only for cross-reference divergence display,
+        NOT as a price source — it disconnects too frequently and causes
+        source mixing that corrupts BTC move calculations.
         """
         now = time.time()
         if self._cache and (now - self._cache_time) < self._cache_ttl:
             return self._cache
 
-        # 1. Try Chainlink WS (matches resolution source exactly)
-        if self._chainlink_ws and self._chainlink_ws.is_active:
-            price_usd = self._chainlink_ws.price
-            source = "chainlink_ws"
-        else:
-            # 2. Binance (fast, reliable)
-            price_usd = await self._fetch_binance_price()
-            source = "binance"
+        # 1. Binance (fast, reliable, consistent)
+        price_usd = await self._fetch_binance_price()
+        source = "binance"
 
         if price_usd is None:
-            # 3. CoinGecko fallback
-            logger.warning("Primary sources unavailable, falling back to CoinGecko")
+            # 2. CoinGecko fallback
+            logger.warning("Binance unavailable, falling back to CoinGecko")
             price_usd = await self._fetch_coingecko_price()
             source = "coingecko"
 
@@ -345,27 +302,25 @@ class BtcPriceFeed:
             logger.error("All BTC price sources failed")
             return self._cache  # return stale cache
 
-        # Cross-reference divergence
-        if source == "chainlink_ws":
-            # On Chainlink WS: compare vs Binance (informational only — no resolution risk)
-            binance_price = await self._fetch_binance_price()
-            divergence = (binance_price - price_usd) if binance_price else None
-            chainlink_display = price_usd  # WS IS the chainlink price
-            if divergence is not None:
-                logger.debug(
-                    "Price cross-ref: Chainlink WS=$%.2f Binance=$%.2f divergence=$%.2f",
-                    price_usd, binance_price, divergence,
-                )
+        # Cross-reference: Chainlink WS (if active) or RPC for divergence display
+        chainlink_display = None
+        divergence = None
+        if self._chainlink_ws and self._chainlink_ws.is_active:
+            cl_price = self._chainlink_ws.price
+            if cl_price:
+                chainlink_display = cl_price
+                divergence = price_usd - cl_price
         else:
-            # On Binance: compare vs Chainlink RPC (resolution risk)
             chainlink_rpc = await self._fetch_chainlink_price()
-            divergence = (price_usd - chainlink_rpc) if chainlink_rpc else None
-            chainlink_display = chainlink_rpc
-            if divergence is not None:
-                logger.debug(
-                    "Price cross-ref: Binance=$%.2f Chainlink=$%.2f divergence=$%.2f",
-                    price_usd, chainlink_rpc, divergence,
-                )
+            if chainlink_rpc:
+                chainlink_display = chainlink_rpc
+                divergence = price_usd - chainlink_rpc
+
+        if divergence is not None:
+            logger.debug(
+                "Price cross-ref: Binance=$%.2f Chainlink=$%.2f divergence=$%.2f",
+                price_usd, chainlink_display, divergence,
+            )
 
         # Get 24h change from CoinGecko (non-blocking, cached separately)
         change_24h = await self._fetch_coingecko_24h_change()

@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v0.5.1] — 2026-02-27
+
+### Bug Fixes
+- **Fix rotation loop crash** — `ResolutionRecord.pnl` → `ResolutionRecord.total_pnl` in adaptive reflection threshold calculation (`agent.py:763`). Was crashing the rotation loop every ~10s.
+- **Suppress stop-loss when BTC favors position** — SL now checks if BTC direction still supports the bet before triggering. Prevents cutting winning positions on orderbook noise (e.g., UP token dips but BTC is still above open).
+- **Demote Chainlink WS to cross-reference only** — Chainlink WS was too unreliable as primary price source (80 disconnects, 179 connection errors, HTTP 429 rate limits in one session). Caused 3/13 winner mismatches from mixed Chainlink/Binance prices. Now: Binance is always the primary price source (consistent open-to-close), Chainlink WS is kept only for divergence display and resolution verification where it already works well. Candle history (200 candles for indicators) now uses Binance exclusively.
+- **Fix adaptive entry duplicate recordings** — Added dedup check in `record_outcome()`. The rotation loop crash was causing the same candle to be recorded 38x, flooding the rolling window. Cleaned existing JSONL data.
+
 ## [v0.5.0] — 2026-02-27
 
 ### Dashboard Overhaul

@@ -377,6 +377,11 @@ class AdaptiveEntryTracker:
             winner_ask_at_20=winner_ask_at_20,
         )
 
+        # Dedup — skip if this slug was already recorded
+        if any(h.slug == slug for h in self._history[-self._window * 2:]):
+            logger.debug("Adaptive entry: skipping duplicate slug %s", slug)
+            return
+
         self._history.append(outcome)
         self._save_record(outcome)
         self._recompute()
