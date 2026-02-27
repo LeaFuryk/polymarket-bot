@@ -94,6 +94,37 @@ def _compute_btc_trajectory(history: list[PreFilterSnapshot]) -> str | None:
     return "\n".join(parts)
 
 
+def _format_microstructure(history: list) -> str | None:
+    """Format cross-candle microstructure summary for the AI prompt.
+
+    Takes SharedState.microstructure_history (list of CandleMicrostructure).
+    Returns None if insufficient data (< 2 candles).
+    """
+    if len(history) < 2:
+        return None
+
+    recent = history[-1]
+    prev = history[-2]
+
+    # Spread trend
+    spread_up_delta = recent.avg_spread_up - prev.avg_spread_up
+    spread_down_delta = recent.avg_spread_down - prev.avg_spread_down
+    spread_dir = "widening" if (spread_up_delta + spread_down_delta) > 0.002 else "narrowing" if (spread_up_delta + spread_down_delta) < -0.002 else "stable"
+
+    # Volatility trend (BTC range per candle)
+    ranges = [h.btc_range for h in history]
+    avg_range = sum(ranges) / len(ranges)
+    range_dir = "increasing" if recent.btc_range > avg_range * 1.2 else "decreasing" if recent.btc_range < avg_range * 0.8 else "stable"
+
+    parts = [
+        f"## Cross-Candle Microstructure (last {len(history)} candles)",
+        f"- Spreads: {spread_dir} (UP avg {recent.avg_spread_up:.2%}, DOWN avg {recent.avg_spread_down:.2%})",
+        f"- BTC intra-candle range: ${recent.btc_range:.0f} ({range_dir}, avg ${avg_range:.0f})",
+    ]
+
+    return "\n".join(parts)
+
+
 class AIDecision:
     """Event-driven AI decision maker."""
 
@@ -165,6 +196,13 @@ class AIDecision:
         self.last_reasoning: str = ""
         self.last_risk_status: str = "OK"
         self.last_token_side: str = ""
+
+        # Ensemble disagreement tracking
+        self._screen_calls: int = 0
+        self._screen_passes: int = 0  # Haiku said "trade"
+        self._sonnet_trades: int = 0  # Sonnet actually traded after Haiku pass
+        self._ml_sonnet_agree: int = 0  # ML and Sonnet picked same direction
+        self._ml_sonnet_total: int = 0  # total decisions where both had a direction
 
     @property
     def total_api_cost(self) -> float:
@@ -454,6 +492,11 @@ class AIDecision:
         if trajectory_ctx:
             indicators_text = indicators_text + "\n\n" + trajectory_ctx if indicators_text else trajectory_ctx
 
+        # Cross-candle microstructure memory
+        micro_ctx = _format_microstructure(self._shared.microstructure_history)
+        if micro_ctx:
+            indicators_text = indicators_text + "\n\n" + micro_ctx if indicators_text else micro_ctx
+
         # Two-pass screening (entry only, not exits)
         has_position = (
             self._portfolio.up_position.shares > 0
@@ -466,6 +509,7 @@ class AIDecision:
             self._portfolio.cash -= screen_cost
             self._total_api_cost += screen_cost
             self._last_cycle_api_cost = screen_cost
+            self._screen_calls += 1
 
             if not should_trade:
                 self.last_action = f"HOLD (screen: {screen_reason[:60]})"
@@ -474,6 +518,7 @@ class AIDecision:
                 self._record_ai_call_time()
                 return
 
+            self._screen_passes += 1
             # Pass screening reasoning to Sonnet — free "second opinion" context
             indicators_text += f"\n\n## Pre-Screening Note (fast model)\n{screen_reason}"
 
@@ -488,6 +533,21 @@ class AIDecision:
         self._total_api_cost += api_cost
         self._last_cycle_api_cost = api_cost
         logger.info("API cost: $%.4f (session total: $%.4f)", api_cost, self._total_api_cost)
+
+        # Ensemble tracking: ML vs Sonnet direction agreement
+        if decision.action == Action.BUY and ml_prediction.model_trained:
+            self._sonnet_trades += 1
+            ml_dir = "up" if ml_prediction.up_probability > 0.5 else "down"
+            sonnet_dir = decision.token_side.value
+            self._ml_sonnet_total += 1
+            if ml_dir == sonnet_dir:
+                self._ml_sonnet_agree += 1
+            else:
+                logger.info(
+                    "Ensemble disagreement: ML=%s (%.0f%%) vs Sonnet=%s (conf=%.2f)",
+                    ml_dir, ml_prediction.up_probability * 100,
+                    sonnet_dir, decision.confidence,
+                )
 
         # Force token_side on exit triggers: don't trust AI's token_side for SELLs
         # This prevents the anti-flip guard from tracking the wrong side

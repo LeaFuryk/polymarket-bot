@@ -97,8 +97,8 @@ All tasks are `asyncio.Task` in the same event loop (no OS threads). Safe for sh
 Waits for entry triggers (from MarketMonitor) or exit triggers (from PositionMonitor):
 
 1. **Pre-trade risk checks** — Daily loss halt, minimum liquidity
-2. **Build context** — FeatureVector + BTC candle history + feedback context + computed indicators + ML prediction (with feature drivers) + BTC trajectory (velocity/peak-drawback)
-3. **Two-pass screening** — Haiku screens first (entry only, not exits). Screening reason is passed to Sonnet as a "Pre-Screening Note"
+2. **Build context** — Compact FeatureVector + BTC candle history + feedback context + computed indicators + ML prediction (with top 3 feature drivers) + BTC trajectory (velocity/peak-drawback) + cross-candle microstructure (spread/volatility trends). Ensemble disagreement (ML vs AI direction) is tracked
+3. **Two-pass screening** — Haiku screens first (entry only, not exits). Screening reason is passed to Sonnet as a "Pre-Screening Note". Pass-through rate tracked for tuning
 4. **Claude decides** — Full Sonnet decision with structured JSON output
 5. **Confidence gate** — Override BUY to HOLD if confidence < 0.55
 6. **Calibration gate** — Override BUY to HOLD if calibrated win rate < break-even
@@ -112,6 +112,7 @@ Waits for entry triggers (from MarketMonitor) or exit triggers (from PositionMon
 
 1. **Mark-to-market** — Update position values using cached snapshot
 2. **Compute P&L %** — For each open position (UP and DOWN independently)
+3. **Time-weighted stop-loss** — Stop-loss tightens as candle nears expiry: -60% at 240s, -40% at 120s, -30% at 60s, -20% at 30s
 3. **Check thresholds** — Stop-loss at -60%, take-profit at +80% (configurable)
 4. **Trigger exit** — Push exit signal to AIDecision with reason and current P&L (respects AI cooldown; emergencies ≤-30% bypass)
 

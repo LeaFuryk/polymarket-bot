@@ -94,15 +94,38 @@ class PositionMonitor:
             self._shared.position_pnl_pct.pop("down", None)
             self._triggered.pop("down", None)
 
+    def _dynamic_stop_loss(self) -> float:
+        """Compute time-weighted stop-loss: tighter as candle nears expiry.
+
+        With 240s+ left: use configured stop-loss (e.g., -60%) — let it breathe.
+        With 120s left:  ~midpoint between configured and tight.
+        With 60s left:   -30% (losses unlikely to recover with so little time).
+        With 30s left:   -20% (almost certainly staying there).
+        """
+        market = self._shared.current_market
+        if market is None:
+            return self._stop_loss_pct
+
+        time_remaining = market.time_remaining()
+        if time_remaining >= 240:
+            return self._stop_loss_pct
+
+        # Linear interpolation: from configured stop at 240s to -0.20 at 0s
+        # time_factor goes from 1.0 (240s) to 0.0 (0s)
+        time_factor = max(0.0, min(1.0, time_remaining / 240.0))
+        tight_stop = -0.20
+        return tight_stop + (self._stop_loss_pct - tight_stop) * time_factor
+
     async def _check_thresholds(self, token_side: str, pnl_pct: float) -> None:
         """Check if P&L has hit stop-loss or take-profit thresholds."""
         if token_side in self._triggered:
             return  # Already triggered for this position
 
-        if pnl_pct <= self._stop_loss_pct:
+        dynamic_sl = self._dynamic_stop_loss()
+        if pnl_pct <= dynamic_sl:
             logger.warning(
-                "STOP-LOSS triggered: %s position P&L=%.1f%% <= %.1f%%",
-                token_side.upper(), pnl_pct * 100, self._stop_loss_pct * 100,
+                "STOP-LOSS triggered: %s position P&L=%.1f%% <= %.1f%% (dynamic SL, base=%.0f%%)",
+                token_side.upper(), pnl_pct * 100, dynamic_sl * 100, self._stop_loss_pct * 100,
             )
             self._triggered[token_side] = "stop_loss"
             await self._shared.exit_trigger_queue.put({

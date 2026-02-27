@@ -16,6 +16,19 @@ from polybot.models import CandleMarket
 
 
 @dataclass
+class CandleMicrostructure:
+    """End-of-candle microstructure summary for cross-candle memory."""
+
+    timestamp: float = 0.0
+    avg_spread_up: float = 0.0
+    avg_spread_down: float = 0.0
+    avg_depth: float = 0.0
+    avg_imbalance: float = 1.0  # bid/ask ratio (>1 = bid-heavy)
+    btc_range: float = 0.0  # high - low of BTC move within candle
+    btc_final_move: float = 0.0
+
+
+@dataclass
 class PreFilterSnapshot:
     """Records market state every second from the market monitor."""
 
@@ -69,6 +82,9 @@ class SharedState:
         # Session resolution stats (synced from agent for indicator computation)
         self.session_wins: int = 0
         self.session_losses: int = 0
+
+        # Cross-candle microstructure memory (last 5 candles)
+        self.microstructure_history: list[CandleMicrostructure] = []
 
         # Shutdown flag
         self.shutdown: bool = False

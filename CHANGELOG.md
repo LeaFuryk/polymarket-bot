@@ -10,8 +10,14 @@ All notable changes to this project will be documented in this file.
 - **ML scorer feature contributions in prompt** — The ML baseline line now shows the top 3 features driving the prediction (e.g., "drivers: btc_vs_open: +0.25, streak_signed: +0.18, reversal_rate: -0.12"). This lets the AI understand WHY the ML predicts a direction, not just the probability, enabling it to agree or disagree with the ML's logic.
 - **Adaptive reflection frequency** — Reflection now triggers every 5 resolutions (~25 min) when the bot is losing (recent 5-candle PnL < -$10), instead of the fixed 10-resolution interval (~50 min). This doubles feedback speed during drawdowns while keeping normal pace during profitable periods.
 
+- **Cross-candle microstructure memory** — At each candle rotation, a microstructure summary (avg spreads, BTC intra-candle range) is saved before clearing prefilter history. The AI now sees spread trends (widening/narrowing/stable) and volatility trends (increasing/decreasing) across the last 5 candles. Previously each candle was treated independently with no market microstructure context.
+- **Time-weighted stop-loss** — Stop-loss now tightens as the candle nears expiry. With 240s+ left: -60% (configured default). With 120s: ~-40%. With 60s: ~-30%. With 30s: ~-20%. A -40% position with 30 seconds left is almost certainly not recovering — cut it early. Linear interpolation from configured stop at 240s to -20% at 0s.
+- **Ensemble disagreement tracking** — Tracks Haiku pass-through rate (what % of screenings reach Sonnet), Sonnet trade rate (what % of Haiku passes result in actual trades), and ML-Sonnet directional agreement rate. Disagreements are logged with both model predictions. All stats exposed to dashboard JSON for monitoring.
+- **Prompt token reduction** — Moved static explanations (what Chainlink is, why 24h change isn't predictive, spread advice) from per-cycle feature vector into system prompt. Compacted orderbook, positions, portfolio, and risk sections from verbose multi-line to data-dense single-line formats. ~20-25% token reduction per Sonnet call.
+
 ### Changed
 - **Calibration bins widened from 5% to 10%** — With 5%-wide bins, the calibrator needed ~75+ trades to populate any single bin (MIN_SAMPLES=15). Most bins had 1-5 samples after 7 iterations and zero reliable calibration. Changed to 10%-wide bins with MIN_SAMPLES=10 — reaches reliability ~3x faster. Trade-off: lower resolution (can't distinguish 0.62 from 0.67), but the AI doesn't have that precision anyway.
+- **Temperature raised from 0.0 to 0.1** — Mild exploration for the decision model (Sonnet). Introduces slight variety in reasoning paths without compromising coherence. Screening (Haiku) stays at 0.0 for deterministic filtering. Avoids systematic biases from always picking the same highest-probability output.
 
 ## [v0.4.1] — 2026-02-26
 
