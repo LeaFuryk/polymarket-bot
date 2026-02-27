@@ -408,8 +408,8 @@ body::after {
 
 /* ═══ CONTENT GRID ═══ */
 .content-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+  display: flex;
+  flex-direction: column;
   gap: 0.75rem;
 }
 
@@ -423,7 +423,7 @@ body::after {
 }
 .panel:hover { border-color: var(--border-default); }
 
-.panel-full { grid-column: 1 / -1; }
+.panel-full { width: 100%; }
 
 .panel-header {
   display: flex;
@@ -445,10 +445,14 @@ body::after {
 
 /* ═══ LIVE ROW: Market + BTC + Positions ═══ */
 .live-row {
-  display: grid;
-  grid-template-columns: 2fr 1fr 1.5fr;
+  display: flex;
+  flex-wrap: wrap;
   gap: 0.75rem;
   margin-bottom: 0.75rem;
+}
+.live-row > .panel {
+  flex: 1 1 280px;
+  min-width: 0;
 }
 
 .market-title {
@@ -766,7 +770,7 @@ body::after {
 .res-b.flat { background: rgba(255,255,255,0.04); color: var(--text-muted); }
 
 /* ═══ PNL CHART ═══ */
-.chart-wrap { width: 100%; height: 170px; position: relative; }
+.chart-wrap { width: 100%; height: 240px; position: relative; overflow: hidden; }
 .chart-wrap svg { width: 100%; height: 100%; }
 .chart-line { fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .chart-area { opacity: 0.12; }
@@ -831,12 +835,8 @@ body::after {
   .app { flex-direction: column; }
 }
 
-@media (max-width: 1200px) {
-  .live-row { grid-template-columns: 1fr 1fr; }
-  .content-grid { grid-template-columns: 1fr; }
-}
 @media (max-width: 700px) {
-  .live-row { grid-template-columns: 1fr; }
+  .live-row > .panel { flex: 1 1 100%; }
   .metrics-row { grid-template-columns: repeat(2, 1fr); }
 }
 
@@ -985,11 +985,11 @@ body::after {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 1rem 1.25rem;
+  padding: 0.75rem 1rem;
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius);
-  margin-bottom: 0.75rem;
+  margin-bottom: 0.5rem;
 }
 .iv-header-left { display: flex; align-items: center; gap: 1rem; }
 .iv-label { font: 700 1.3rem/1 var(--display); color: var(--cyan); }
@@ -1019,60 +1019,96 @@ body::after {
 .iv-metrics {
   display: grid;
   grid-template-columns: repeat(6, 1fr);
-  gap: 0.5rem;
-  margin-bottom: 0.75rem;
+  gap: 0.4rem;
+  margin-bottom: 0.5rem;
 }
 
 .iv-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.75rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
 }
-.iv-full { grid-column: 1 / -1; }
+.iv-grid > .iv-section {
+  flex: 1 1 calc(50% - 0.25rem);
+  min-width: 280px;
+}
+.iv-full { flex: 1 1 100%; }
+/* If an iv-section is the last child and would be alone (odd), make it full-width */
+.iv-grid > .iv-section:last-child:nth-child(odd) { flex: 1 1 100%; }
 
 .iv-section {
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius);
-  padding: 0.85rem;
+  padding: 0.6rem;
 }
 .iv-section-title {
   font: 600 0.7rem/1 var(--mono);
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--text-muted);
-  margin-bottom: 0.6rem;
-  padding-bottom: 0.4rem;
+  margin-bottom: 0.4rem;
+  padding-bottom: 0.3rem;
   border-bottom: 1px solid var(--border-subtle);
 }
 
-.iv-pnl-chart { width: 100%; height: 120px; }
+.iv-pnl-chart { width: 100%; height: 280px; overflow: hidden; }
 .iv-pnl-chart svg { width: 100%; height: 100%; }
 
 .iv-stat-row {
   display: flex;
   justify-content: space-between;
-  padding: 0.3rem 0;
+  padding: 0.2rem 0;
   border-bottom: 1px solid var(--border-subtle);
-  font-size: 0.78rem;
+  font-size: 0.72rem;
 }
 .iv-stat-row:last-child { border-bottom: none; }
-.iv-stat-label { color: var(--text-secondary); }
+.iv-stat-label { color: var(--text-secondary); font-size: 0.65rem; }
 .iv-stat-val { font-weight: 600; font-family: var(--display); }
 
-.da-stat { display: flex; flex-direction: column; gap: 0.1rem; }
-.da-stat-label { font-size: 0.55rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
-.da-stat-val { font-size: 0.85rem; font-weight: 700; font-family: var(--display); }
+/* Dense stat grid for consolidated panels */
+.iv-stats-dense {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(195px, 1fr));
+  gap: 0.2rem;
+}
+.iv-stat-dense {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.18rem 0.4rem;
+  background: var(--bg-inset);
+  border-radius: 3px;
+  font-size: 0.7rem;
+}
+.iv-stat-dense .iv-stat-label { color: var(--text-secondary); font-size: 0.6rem; }
+.iv-stat-dense .iv-stat-val { font-weight: 600; font-family: var(--display); font-size: 0.72rem; }
+.iv-stats-sub {
+  margin-top: 0.4rem;
+  padding-top: 0.35rem;
+  border-top: 1px solid var(--border-subtle);
+}
+.iv-stats-sub-title {
+  font-size: 0.55rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 0.2rem;
+}
+
+.da-stat { display: flex; flex-direction: column; gap: 0.05rem; }
+.da-stat-label { font-size: 0.52rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.da-stat-val { font-size: 0.8rem; font-weight: 700; font-family: var(--display); }
 
 .iv-obs-card {
-  padding: 0.55rem 0.65rem;
+  padding: 0.35rem 0.5rem;
   background: var(--bg-inset);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-sm);
-  margin-bottom: 0.4rem;
+  margin-bottom: 0.25rem;
 }
 .iv-obs-card:last-child { margin-bottom: 0; }
-.iv-obs-top { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.25rem; }
+.iv-obs-top { display: flex; align-items: center; gap: 0.4rem; margin-bottom: 0.15rem; }
 .iv-obs-badge {
   font-size: 0.58rem;
   font-weight: 700;
@@ -1171,28 +1207,28 @@ body::after {
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius);
-  padding: 0.85rem;
-  margin-bottom: 0.75rem;
+  padding: 0.6rem;
+  margin-bottom: 0.5rem;
 }
 .iv-changes-title {
   font: 600 0.7rem/1 var(--mono);
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--text-muted);
-  margin-bottom: 0.6rem;
-  padding-bottom: 0.4rem;
+  margin-bottom: 0.4rem;
+  padding-bottom: 0.3rem;
   border-bottom: 1px solid var(--border-subtle);
 }
 .iv-changes-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: 0.4rem;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 0.25rem;
 }
 .iv-change-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0.4rem 0.55rem;
+  padding: 0.25rem 0.4rem;
   background: var(--bg-inset);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-sm);
@@ -1233,7 +1269,7 @@ body::after {
 
 @media (max-width: 900px) {
   .iv-metrics { grid-template-columns: repeat(3, 1fr); }
-  .iv-grid { grid-template-columns: 1fr; }
+  .iv-grid > .iv-section { flex: 1 1 100%; }
   .iv-changes-grid { grid-template-columns: 1fr 1fr; }
 }
 
@@ -1298,6 +1334,171 @@ body::after {
 /* Win/loss row tinting */
 .candle-row.row-win { border-left: 2px solid var(--green); }
 .candle-row.row-loss { border-left: 2px solid var(--red); }
+
+/* ═══ INTERACTIVE PNL CHART ═══ */
+.pnl-chart-container { position: relative; width: 100%; height: 100%; overflow: hidden; }
+.pnl-chart-container svg { width: 100%; height: 100%; display: block; }
+.pnl-tooltip {
+  position: absolute;
+  display: none;
+  pointer-events: none;
+  z-index: 100;
+  background: var(--bg-raised);
+  border: 1px solid var(--border-bright);
+  border-radius: var(--radius-sm);
+  padding: 0.45rem 0.6rem;
+  font: 400 0.7rem/1.4 var(--mono);
+  color: var(--text-primary);
+  box-shadow: 0 6px 16px rgba(0,0,0,0.5);
+  white-space: nowrap;
+}
+.pnl-tooltip .tt-label { color: var(--text-muted); font-size: 0.6rem; }
+.pnl-tooltip .tt-value { font-weight: 600; margin-left: 0.3rem; }
+
+/* ═══ PREFILTER TICKS ON TIMELINE ═══ */
+.tl-ticks {
+  position: absolute;
+  top: 36px; left: 0; right: 0;
+  height: 8px;
+  pointer-events: none;
+}
+.tl-tick {
+  position: absolute;
+  width: 2px; height: 6px;
+  border-radius: 1px;
+  top: 0;
+}
+.tl-tick.pass { background: var(--green); opacity: 0.5; }
+.tl-tick.fail { background: var(--text-muted); opacity: 0.25; }
+
+/* ═══ AI MODEL BADGES ═══ */
+.tl-model-badge {
+  position: absolute;
+  font: 700 0.45rem/1 var(--mono);
+  padding: 0.08rem 0.15rem;
+  border-radius: 2px;
+  transform: translateX(-50%);
+  top: -16px;
+  z-index: 5;
+  letter-spacing: 0.04em;
+}
+.tl-model-badge.haiku { background: var(--cyan-soft); color: var(--cyan); }
+.tl-model-badge.sonnet { background: rgba(167,139,250,0.15); color: var(--purple); }
+.tl-model-badge.prefilter { background: rgba(255,255,255,0.05); color: var(--text-muted); }
+
+/* ═══ WINNER PRICE HEATMAP ═══ */
+.tl-heatmap {
+  position: relative;
+  height: 10px;
+  margin-top: 4px;
+  border-radius: 3px;
+  overflow: hidden;
+  display: flex;
+}
+.hm-seg {
+  flex: 1;
+  min-width: 0;
+}
+.tl-heatmap-labels {
+  display: flex;
+  justify-content: space-between;
+  font: 400 0.5rem/1 var(--mono);
+  color: var(--text-muted);
+  margin-top: 1px;
+}
+
+/* ═══ BET DETAIL / INPUT DATA ═══ */
+.td-input-toggle {
+  font: 500 0.68rem/1 var(--mono);
+  color: var(--cyan);
+  cursor: pointer;
+  padding: 0.3rem 0;
+  margin-top: 0.3rem;
+  user-select: none;
+}
+.td-input-toggle:hover { color: var(--text-primary); }
+.td-input-data {
+  margin-top: 0.3rem;
+  padding: 0.5rem;
+  background: var(--bg-base);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+}
+.td-input-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 0.35rem;
+}
+.td-input-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.05rem;
+}
+.td-input-label {
+  font-size: 0.55rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+.td-input-val {
+  font: 500 0.72rem/1.2 var(--mono);
+  color: var(--text-primary);
+}
+
+/* ═══ SL/TP DISPLAY ═══ */
+.sl-tp-row {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.4rem;
+  padding-top: 0.4rem;
+  border-top: 1px solid var(--border-subtle);
+}
+.sl-label {
+  font: 600 0.7rem/1 var(--mono);
+  color: var(--red);
+  padding: 0.15rem 0.35rem;
+  background: var(--red-soft);
+  border-radius: 3px;
+}
+.tp-label {
+  font: 600 0.7rem/1 var(--mono);
+  color: var(--green);
+  padding: 0.15rem 0.35rem;
+  background: var(--green-soft);
+  border-radius: 3px;
+}
+
+/* ═══ INDICATOR GRID ═══ */
+.indicator-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 0.4rem;
+}
+.ind-item {
+  padding: 0.4rem 0.5rem;
+  background: var(--bg-inset);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+}
+.ind-name {
+  font: 600 0.62rem/1 var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  display: block;
+  margin-bottom: 0.15rem;
+}
+.ind-value {
+  font: 600 0.8rem/1.2 var(--display);
+  display: block;
+}
+.ind-label {
+  font: 400 0.55rem/1.3 var(--mono);
+  color: var(--text-tertiary);
+  display: block;
+  margin-top: 0.1rem;
+}
 </style>
 </head>
 <body>
@@ -1799,6 +2000,7 @@ function render(d) {
       $('liveRow').innerHTML = '';
       try {
         $('contentGrid').innerHTML = renderIterationView(it, prev, next);
+        attachPnlChartHovers();
       } catch (e) {
         console.error('Iteration render error:', e);
         $('contentGrid').innerHTML = `<div class="panel panel-full" style="padding:2rem;text-align:center">
@@ -2008,6 +2210,22 @@ function render(d) {
           ${downShares > 0 ? `<div class="pos-worth ${downPL >= 0 ? 'v-green' : 'v-red'}">${pnlSign(downPL)}$${fmtNum(Math.abs(downPL), 2)} unrealized</div>` : ''}
         </div>
       </div>
+      ${(() => {
+        const dsl = d.dynamic_sl || {};
+        const dtp = d.dynamic_tp || {};
+        const slKeys = Object.keys(dsl);
+        const tpKeys = Object.keys(dtp);
+        if (slKeys.length === 0 && tpKeys.length === 0) return '';
+        let slTpH = '<div class="sl-tp-row">';
+        for (const k of slKeys) {
+          slTpH += `<span class="sl-label" data-tip="Dynamic stop-loss for ${k} position">SL ${k.toUpperCase()}: ${(dsl[k] * 100).toFixed(0)}%</span>`;
+        }
+        for (const k of tpKeys) {
+          slTpH += `<span class="tp-label" data-tip="Dynamic take-profit for ${k} position">TP ${k.toUpperCase()}: +${(dtp[k] * 100).toFixed(0)}%</span>`;
+        }
+        slTpH += '</div>';
+        return slTpH;
+      })()}
     </div>`;
 
     $('liveRow').innerHTML = lh;
@@ -2024,7 +2242,7 @@ function render(d) {
   // Candle timelines (full width)
   cg += `<div class="panel panel-full" data-tip="Each row is a 5-minute BTC candle market. Click a row to expand and see the bot's trades plotted on a timeline. Green dots = BUY, red = SELL, gray = HOLD.">
     <div class="panel-header">Candle Timelines</div>
-    <div class="candle-list" id="candleList">${buildCandleTimelines(fd.trades, fd.resolutions, d.current_market)}</div>
+    <div class="candle-list" id="candleList">${buildCandleTimelines(fd.trades, fd.resolutions, d.current_market, d.candle_snapshots)}</div>
   </div>`;
 
   // Resolutions
@@ -2218,6 +2436,7 @@ function render(d) {
   }
 
   $('contentGrid').innerHTML = cg;
+  attachPnlChartHovers();
 }
 
 // ═══ ITERATION DETAIL VIEW ═══
@@ -2286,9 +2505,9 @@ function renderIterationView(it, prev, next) {
 
   // ── PnL Curve (full-width) ──
   if (ra.cumulative_pnl?.length > 1) {
-    h += `<div class="iv-section iv-full" style="margin-bottom:0.75rem">
+    h += `<div class="iv-section iv-full" style="margin-bottom:0.5rem">
       <div class="iv-section-title">Cumulative PnL Curve</div>
-      <div class="iv-pnl-chart">${buildLargePnlChart(ra.cumulative_pnl)}</div>
+      <div class="iv-pnl-chart">${buildLargePnlChart(ra.cumulative_pnl, it.resolutions_detail)}</div>
     </div>`;
   }
 
@@ -2300,16 +2519,22 @@ function renderIterationView(it, prev, next) {
 
   h += `<div class="iv-grid">`;
 
-  // ── Trade Quality Panel ──
-  h += `<div class="iv-section">
-    <div class="iv-section-title">Trade Quality</div>`;
+  // ── Consolidated Performance Statistics Panel (full-width, dense grid) ──
+  const rr = ra.avg_loss_pnl ? Math.abs(ra.avg_win_pnl / ra.avg_loss_pnl) : 0;
+  const hasCal = cal.bins?.length > 0;
+  const hasExit = ex.total_exits > 0;
+  const sc = (lbl, val, cls='') => `<div class="iv-stat-dense"><span class="iv-stat-label">${lbl}</span><span class="iv-stat-val ${cls}">${val}</span></div>`;
+
+  h += `<div class="iv-section iv-full">
+    <div class="iv-section-title">Performance Statistics</div>`;
+
+  // Entry Price Distribution bar (compact)
   const totalFills = (ta.cheap_entries||0) + (ta.mid_entries||0) + (ta.expensive_entries||0);
   if (totalFills > 0) {
     const cheapPct = (ta.cheap_entries / totalFills * 100);
     const midPct = (ta.mid_entries / totalFills * 100);
     const expPct = (ta.expensive_entries / totalFills * 100);
-    h += `<div style="margin-bottom:0.5rem">
-      <div style="font-size:0.6rem;color:var(--text-muted);margin-bottom:0.15rem">Entry Price Distribution</div>
+    h += `<div style="margin-bottom:0.35rem">
       <div class="iter-entry-bar">
         <div class="iter-entry-seg cheap" style="width:${cheapPct}%"></div>
         <div class="iter-entry-seg mid" style="width:${midPct}%"></div>
@@ -2322,69 +2547,68 @@ function renderIterationView(it, prev, next) {
       </div>
     </div>`;
   }
-  h += `<div class="iv-stat-row"><span class="iv-stat-label">Avg Fill Price</span><span class="iv-stat-val ${ta.avg_fill_price < 0.50 ? 'v-green' : ta.avg_fill_price > 0.65 ? 'v-red' : 'v-amber'}">${fmt$(ta.avg_fill_price, 3)}</span></div>`;
-  h += `<div class="iv-stat-row"><span class="iv-stat-label">Avg Confidence</span><span class="iv-stat-val">${(ta.avg_confidence*100).toFixed(0)}%</span></div>`;
-  h += `<div class="iv-stat-row"><span class="iv-stat-label">Hold Rate</span><span class="iv-stat-val">${(ta.hold_rate*100).toFixed(0)}%</span></div>`;
-  h += `<div class="iv-stat-row"><span class="iv-stat-label">Total Buys</span><span class="iv-stat-val">${ta.total_buys||0}</span></div>`;
-  h += `<div class="iv-stat-row"><span class="iv-stat-label">Total Sells</span><span class="iv-stat-val">${ta.total_sells||0}</span></div>`;
-  h += `<div class="iv-stat-row"><span class="iv-stat-label">Total Holds</span><span class="iv-stat-val">${ta.total_holds||0}</span></div>`;
-  h += `</div>`;
 
-  // ── Resolution Stats Panel ──
-  h += `<div class="iv-section">
-    <div class="iv-section-title">Resolution Stats</div>`;
-  h += `<div class="iv-stat-row"><span class="iv-stat-label">Avg BTC Move</span><span class="iv-stat-val">$${ra.avg_btc_move||0}</span></div>`;
-  h += `<div class="iv-stat-row"><span class="iv-stat-label">Max BTC Move</span><span class="iv-stat-val">$${ra.max_btc_move||0}</span></div>`;
-  h += `<div class="iv-stat-row"><span class="iv-stat-label">Avg Win PnL</span><span class="iv-stat-val v-green">${fmt$(ra.avg_win_pnl, 3)}</span></div>`;
-  h += `<div class="iv-stat-row"><span class="iv-stat-label">Avg Loss PnL</span><span class="iv-stat-val v-red">${fmt$(ra.avg_loss_pnl, 3)}</span></div>`;
-  h += `<div class="iv-stat-row"><span class="iv-stat-label">Biggest Win</span><span class="iv-stat-val v-green">${fmt$(ra.biggest_win, 3)}</span></div>`;
-  h += `<div class="iv-stat-row"><span class="iv-stat-label">Biggest Loss</span><span class="iv-stat-val v-red">${fmt$(ra.biggest_loss, 3)}</span></div>`;
-  const rr = ra.avg_loss_pnl ? Math.abs(ra.avg_win_pnl / ra.avg_loss_pnl) : 0;
-  h += `<div class="iv-stat-row"><span class="iv-stat-label">Risk/Reward</span><span class="iv-stat-val ${rr >= 1 ? 'v-green' : 'v-red'}">${rr.toFixed(2)}</span></div>`;
-  h += `</div>`;
-
-  // ── Calibration & Intelligence Panel ──
-  const hasCal = cal.bins?.length > 0;
-  const hasExit = ex.total_exits > 0;
-  if (hasCal || hasExit) {
-    h += `<div class="iv-section">
-      <div class="iv-section-title">Calibration & Intelligence</div>`;
-    if (cal.shadow_accuracy != null) {
-      h += `<div class="iv-stat-row"><span class="iv-stat-label">Shadow Accuracy</span><span class="iv-stat-val ${cal.shadow_accuracy >= 0.7 ? 'v-green' : 'v-amber'}">${(cal.shadow_accuracy*100).toFixed(0)}%${iterDelta(cal.shadow_accuracy, prev?.calibration?.shadow_accuracy, fmtP)}</span></div>`;
-    }
-    if (hasExit) {
-      h += `<div class="iv-stat-row"><span class="iv-stat-label">Good Exit Rate</span><span class="iv-stat-val ${ex.good_exit_rate >= 0.5 ? 'v-green' : 'v-red'}">${(ex.good_exit_rate*100).toFixed(0)}%</span></div>`;
-      h += `<div class="iv-stat-row"><span class="iv-stat-label">Exit Value Saved</span><span class="iv-stat-val v-green">${fmt$(ex.total_saved, 2)}</span></div>`;
-      h += `<div class="iv-stat-row"><span class="iv-stat-label">Exit Value Missed</span><span class="iv-stat-val v-red">${fmt$(ex.total_missed, 2)}</span></div>`;
-    }
-    if (hasCal) {
-      const bins = cal.bins.filter(b => b.wins + b.losses > 0);
-      if (bins.length > 0) {
-        h += `<div style="margin-top:0.5rem;padding-top:0.4rem;border-top:1px solid var(--border-subtle)">
-          <div style="font-size:0.6rem;color:var(--text-muted);margin-bottom:0.3rem">Confidence Calibration</div>
-          <div class="iv-cal-bins">`;
-        for (const b of bins) {
-          const bwr = b.win_rate;
-          const barH = Math.max(5, bwr * 46);
-          const col = bwr >= 0.55 ? 'var(--green)' : bwr >= 0.45 ? 'var(--amber)' : 'var(--red)';
-          const op = b.reliable ? '1' : '0.45';
-          h += `<div class="iv-cal-bin" style="height:${barH}px;background:${col};opacity:${op}" title="${b.range}: ${(bwr*100).toFixed(0)}% (${b.wins}W/${b.losses}L)"></div>`;
-        }
-        h += `</div></div>`;
-      }
-    }
-    h += `</div>`;
+  // Dense stat grid — all key metrics in one compact grid
+  h += `<div class="iv-stats-dense">`;
+  // Trade Quality
+  h += sc('Avg Fill', fmt$(ta.avg_fill_price, 3), ta.avg_fill_price < 0.50 ? 'v-green' : ta.avg_fill_price > 0.65 ? 'v-red' : 'v-amber');
+  h += sc('Avg Confidence', (ta.avg_confidence*100).toFixed(0) + '%');
+  h += sc('Hold Rate', (ta.hold_rate*100).toFixed(0) + '%');
+  h += sc('Buys / Sells', `${ta.total_buys||0} / ${ta.total_sells||0}`);
+  h += sc('Total Holds', ta.total_holds||0);
+  // Resolution Stats
+  h += sc('Avg BTC Move', '$' + (ra.avg_btc_move||0));
+  h += sc('Max BTC Move', '$' + (ra.max_btc_move||0));
+  h += sc('Avg Win PnL', fmt$(ra.avg_win_pnl, 3), 'v-green');
+  h += sc('Avg Loss PnL', fmt$(ra.avg_loss_pnl, 3), 'v-red');
+  h += sc('Biggest Win', fmt$(ra.biggest_win, 3), 'v-green');
+  h += sc('Biggest Loss', fmt$(ra.biggest_loss, 3), 'v-red');
+  h += sc('Risk/Reward', rr.toFixed(2), rr >= 1 ? 'v-green' : 'v-red');
+  // Calibration & Intelligence
+  if (cal.shadow_accuracy != null) h += sc('Shadow Accuracy', (cal.shadow_accuracy*100).toFixed(0) + '%' + iterDelta(cal.shadow_accuracy, prev?.calibration?.shadow_accuracy, fmtP), cal.shadow_accuracy >= 0.7 ? 'v-green' : 'v-amber');
+  if (hasExit) {
+    h += sc('Good Exit Rate', (ex.good_exit_rate*100).toFixed(0) + '%', ex.good_exit_rate >= 0.5 ? 'v-green' : 'v-red');
+    h += sc('Exit Saved', fmt$(ex.total_saved, 2), 'v-green');
+    h += sc('Exit Missed', fmt$(ex.total_missed, 2), 'v-red');
   }
-
-  // ── Cash & Portfolio Panel ──
+  // Account State
   if (it.final_cash != null) {
-    h += `<div class="iv-section">
-      <div class="iv-section-title">Account State</div>
-      <div class="iv-stat-row"><span class="iv-stat-label">Final Cash</span><span class="iv-stat-val" style="color:var(--cyan)">${fmt$(it.final_cash, 2)}</span></div>
-      <div class="iv-stat-row"><span class="iv-stat-label">Final Portfolio</span><span class="iv-stat-val" style="color:var(--blue)">${fmt$(it.final_portfolio_value, 2)}</span></div>
-      <div class="iv-stat-row"><span class="iv-stat-label">Trading Fees</span><span class="iv-stat-val v-red">${fmt$(it.total_fees, 2)}</span></div>
-      <div class="iv-stat-row"><span class="iv-stat-label">AI Cost</span><span class="iv-stat-val v-amber">${fmt$(it.ai_cost, 2)}</span></div>
-    </div>`;
+    h += sc('Final Cash', fmt$(it.final_cash, 2), 'v-cyan');
+    h += sc('Portfolio', fmt$(it.final_portfolio_value, 2), 'v-blue');
+    h += sc('Fees', fmt$(it.total_fees, 2), 'v-red');
+    h += sc('AI Cost', fmt$(it.ai_cost, 2), 'v-amber');
+  }
+  h += `</div>`;
+
+  // Calibration bins visualization (compact sub-section)
+  if (hasCal) {
+    const bins = cal.bins.filter(b => b.wins + b.losses > 0);
+    if (bins.length > 0) {
+      h += `<div class="iv-stats-sub">
+        <div class="iv-stats-sub-title">Confidence Calibration</div>
+        <div class="iv-cal-bins">`;
+      for (const b of bins) {
+        const bwr = b.win_rate;
+        const barH = Math.max(5, bwr * 40);
+        const col = bwr >= 0.55 ? 'var(--green)' : bwr >= 0.45 ? 'var(--amber)' : 'var(--red)';
+        const op = b.reliable ? '1' : '0.45';
+        h += `<div class="iv-cal-bin" style="height:${barH}px;background:${col};opacity:${op}" title="${b.range}: ${(bwr*100).toFixed(0)}% (${b.wins}W/${b.losses}L)"></div>`;
+      }
+      h += `</div></div>`;
+    }
+  }
+  h += `</div>`;
+
+  // ── Active Indicators (compact tag list, full-width) ──
+  const indList = it.enabled_indicators || [];
+  if (indList.length > 0) {
+    h += `<div class="iv-section iv-full">
+      <div class="iv-section-title">Active Indicators (${indList.length})</div>
+      <div style="display:flex;flex-wrap:wrap;gap:0.25rem">`;
+    for (const name of indList) {
+      h += `<span style="font:500 0.58rem/1 var(--mono);padding:0.15rem 0.35rem;background:var(--cyan-soft);color:var(--cyan);border-radius:3px">${esc(name)}</span>`;
+    }
+    h += `</div></div>`;
   }
 
   // ── AI Observations (full-width) ──
@@ -2458,9 +2682,9 @@ function _buildDeepAnalysisInner(da) {
   let h = '';
 
   // ── Summary Banner ──
-  h += `<div class="iv-section iv-full" style="margin-bottom:0.75rem">
+  h += `<div class="iv-section iv-full" style="margin-bottom:0.5rem">
     <div class="iv-section-title">Deep Analysis</div>
-    <div style="display:flex;gap:1.2rem;flex-wrap:wrap;margin-bottom:0.75rem">
+    <div style="display:flex;gap:0.8rem;flex-wrap:wrap;margin-bottom:0.35rem">
       <div class="da-stat"><span class="da-stat-label">Profit Factor</span><span class="da-stat-val v-green">${f(s.profit_factor, 2)}x</span></div>`;
 
   // Support both field name conventions (iter_004 vs iter_006+)
@@ -2592,7 +2816,7 @@ function _buildDeepAnalysisInner(da) {
 
   // ── Weird Losses (full-width) ──
   if (da.weird_losses?.length) {
-    h += `<div class="iv-section iv-full" style="margin-top:0.75rem">
+    h += `<div class="iv-section iv-full" style="margin-top:0.5rem">
       <div class="iv-section-title" style="color:var(--amber)">Investigated: Correct Predictions That Lost Money</div>`;
     for (const wl of da.weird_losses) {
       h += `<div style="background:var(--bg-inset);border:1px solid var(--border-subtle);border-radius:var(--radius-sm);padding:0.5rem;margin-bottom:0.4rem">
@@ -2611,7 +2835,7 @@ function _buildDeepAnalysisInner(da) {
 
   // ── What Went Well / Wrong (full-width, iter_006+ format) ──
   if (da.what_went_well?.length || da.what_went_wrong?.length) {
-    h += `<div class="iv-section iv-full" style="margin-top:0.75rem">
+    h += `<div class="iv-section iv-full" style="margin-top:0.5rem">
       <div class="iv-section-title">Key Findings</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">`;
     if (da.what_went_well?.length) {
@@ -2635,7 +2859,7 @@ function _buildDeepAnalysisInner(da) {
 
   // ── Fixes Verified (full-width, iter_006+ format) ──
   if (da.fixes_verified && Object.keys(da.fixes_verified).length) {
-    h += `<div class="iv-section iv-full" style="margin-top:0.75rem">
+    h += `<div class="iv-section iv-full" style="margin-top:0.5rem">
       <div class="iv-section-title">Fixes Verified</div>
       <div style="display:flex;flex-direction:column;gap:0.3rem">`;
     for (const [fix, status] of Object.entries(da.fixes_verified)) {
@@ -2650,7 +2874,7 @@ function _buildDeepAnalysisInner(da) {
 
   // ── Actionable Fixes (full-width) ──
   if (da.actionable_fixes?.length) {
-    h += `<div class="iv-section iv-full" style="margin-top:0.75rem">
+    h += `<div class="iv-section iv-full" style="margin-top:0.5rem">
       <div class="iv-section-title">Actionable Improvements (ranked by impact)</div>
       <div style="display:flex;flex-direction:column;gap:0.35rem">`;
     for (let i = 0; i < da.actionable_fixes.length; i++) {
@@ -2754,38 +2978,141 @@ function buildChangesPanel(it, prev) {
   </div>`;
 }
 
-function buildLargePnlChart(pnls) {
+function buildLargePnlChart(pnls, resolutions) {
   if (!pnls || pnls.length < 2) return '';
-  const W = 800, H = 120, pad = { t: 10, r: 50, b: 18, l: 10 };
+  const chartId = 'pnl-' + Math.random().toString(36).slice(2, 8);
+  const W = 900, H = 220, pad = { t: 24, r: 70, b: 22, l: 14 };
   const pW = W - pad.l - pad.r, pH = H - pad.t - pad.b;
   const mn = Math.min(0, ...pnls), mx = Math.max(0, ...pnls);
   const rng = mx - mn || 1;
   const x = i => pad.l + (i / (pnls.length - 1)) * pW;
   const y = v => pad.t + pH - ((v - mn) / rng) * pH;
-  const pts = pnls.map((v, i) => x(i).toFixed(1) + ',' + y(v).toFixed(1)).join(' ');
   const zy = y(0);
   const lastV = pnls[pnls.length - 1];
   const col = lastV >= 0 ? 'var(--green)' : 'var(--red)';
+  const colHex = lastV >= 0 ? '#22c55e' : '#ef4444';
+
+  // Gridlines
+  let grids = '';
+  const gridStep = rng > 100 ? 50 : rng > 50 ? 25 : rng > 20 ? 10 : 5;
+  const gridStart = Math.ceil(mn / gridStep) * gridStep;
+  for (let gv = gridStart; gv <= mx; gv += gridStep) {
+    const gy = y(gv);
+    grids += `<line x1="${pad.l}" y1="${gy.toFixed(1)}" x2="${W-pad.r}" y2="${gy.toFixed(1)}" stroke="var(--border-subtle)" stroke-width="0.5"/>`;
+    grids += `<text x="${W-pad.r+4}" y="${(gy+3).toFixed(1)}" fill="var(--text-muted)" font-size="9" font-family="var(--mono)">${gv >= 0 ? '+' : ''}${gv.toFixed(0)}</text>`;
+  }
+  // Vertical gridlines every N candles
+  const vStep = pnls.length > 50 ? 10 : pnls.length > 20 ? 5 : 2;
+  for (let vi = vStep; vi < pnls.length; vi += vStep) {
+    grids += `<line x1="${x(vi).toFixed(1)}" y1="${pad.t}" x2="${x(vi).toFixed(1)}" y2="${H-pad.b}" stroke="var(--border-subtle)" stroke-width="0.3"/>`;
+  }
+
+  // Smooth polyline
+  const pts = pnls.map((v, i) => x(i).toFixed(1) + ',' + y(v).toFixed(1)).join(' ');
   const aPts = pts + ` ${x(pnls.length-1).toFixed(1)},${zy.toFixed(1)} ${x(0).toFixed(1)},${zy.toFixed(1)}`;
 
-  let lbls = `<text class="chart-lbl" x="${W-pad.r+5}" y="${pad.t+4}" text-anchor="start" fill="var(--text-muted)" font-size="10">${mx.toFixed(2)}</text>`;
-  lbls += `<text class="chart-lbl" x="${W-pad.r+5}" y="${H-pad.b}" text-anchor="start" fill="var(--text-muted)" font-size="10">${mn.toFixed(2)}</text>`;
-  if (mn < 0 && mx > 0) lbls += `<text class="chart-lbl" x="${W-pad.r+5}" y="${zy+4}" text-anchor="start" fill="var(--text-muted)" font-size="10">0</text>`;
-  lbls += `<text x="${x(pnls.length-1).toFixed(1)}" y="${(y(lastV) - 6).toFixed(1)}" text-anchor="end" fill="${col}" font-size="11" font-weight="600">${lastV >= 0 ? '+' : ''}${lastV.toFixed(2)}</text>`;
+  // Gradient defs
+  const gradId = 'grad-' + chartId;
+  const defs = `<defs>
+    <linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="${colHex}" stop-opacity="0.25"/>
+      <stop offset="100%" stop-color="${colHex}" stop-opacity="0.02"/>
+    </linearGradient>
+  </defs>`;
 
-  const circles = pnls.map((v,i) => {
-    if (i === 0 || i === pnls.length - 1 || (pnls.length > 10 && i % Math.ceil(pnls.length / 12) !== 0)) {
-      if (i !== 0 && i !== pnls.length - 1) return '';
+  // Dots — colored by win/loss from resolutions
+  const circles = pnls.map((v, i) => {
+    let dotCol = col;
+    if (resolutions && i > 0 && i <= resolutions.length) {
+      const rpnl = resolutions[i-1]?.pnl ?? 0;
+      dotCol = rpnl > 0.001 ? 'var(--green)' : rpnl < -0.001 ? 'var(--red)' : 'var(--text-muted)';
     }
-    return `<circle cx="${x(i).toFixed(1)}" cy="${y(v).toFixed(1)}" r="3" fill="${col}" stroke="var(--bg-surface)" stroke-width="1.5"/>`;
+    return `<circle cx="${x(i).toFixed(1)}" cy="${y(v).toFixed(1)}" r="3.5" fill="${dotCol}" stroke="var(--bg-surface)" stroke-width="1.5" class="pnl-dot" data-idx="${i}"/>`;
   }).join('');
 
-  return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
-    <line x1="${pad.l}" y1="${zy}" x2="${W-pad.r}" y2="${zy}" stroke="var(--text-muted)" stroke-width="0.5" stroke-dasharray="3 3"/>
-    <polygon points="${aPts}" fill="${col}" opacity="0.12"/>
-    <polyline points="${pts}" fill="none" stroke="${col}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-    ${circles}${lbls}
+  // Zero line
+  const zeroLine = (mn < 0 && mx > 0) ? `<line x1="${pad.l}" y1="${zy}" x2="${W-pad.r}" y2="${zy}" stroke="var(--text-muted)" stroke-width="0.7" stroke-dasharray="4 3"/>` : '';
+
+  // Current value label — positioned in the right margin area
+  const valY = Math.max(pad.t + 12, Math.min(H - pad.b - 4, y(lastV)));
+  const valLbl = `<text x="${W - 4}" y="${(valY).toFixed(1)}" text-anchor="end" fill="${col}" font-size="13" font-weight="700" font-family="var(--display)">${lastV >= 0 ? '+' : ''}$${Math.abs(lastV).toFixed(2)}</text>`;
+
+  // Hover overlay
+  const overlay = `<rect x="${pad.l}" y="${pad.t}" width="${pW}" height="${pH}" fill="transparent" class="pnl-overlay" data-chart="${chartId}"/>`;
+  // Crosshair elements (hidden by default)
+  const crosshair = `<line class="pnl-xhair-v" x1="0" y1="${pad.t}" x2="0" y2="${H-pad.b}" stroke="var(--text-muted)" stroke-width="0.5" stroke-dasharray="2 2" style="display:none"/>
+    <line class="pnl-xhair-h" x1="${pad.l}" y1="0" x2="${W-pad.r}" y2="0" stroke="var(--text-muted)" stroke-width="0.5" stroke-dasharray="2 2" style="display:none"/>
+    <circle class="pnl-xhair-dot" cx="0" cy="0" r="5" fill="${col}" stroke="var(--bg-base)" stroke-width="2" style="display:none"/>`;
+
+  const svg = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" data-chart-id="${chartId}">
+    ${defs}${grids}${zeroLine}
+    <polygon points="${aPts}" fill="url(#${gradId})"/>
+    <polyline points="${pts}" fill="none" stroke="${col}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+    ${circles}${valLbl}${crosshair}${overlay}
   </svg>`;
+
+  // Store chart metadata for hover handler
+  const meta = JSON.stringify({ pnls, W, H, pad: JSON.stringify(pad), mn, mx, rng, col });
+
+  return `<div class="pnl-chart-container" data-chart-id="${chartId}" data-meta='${meta.replace(/'/g, "&#39;")}'>
+    ${svg}
+    <div class="pnl-tooltip" id="tt-${chartId}"></div>
+  </div>`;
+}
+
+// Attach PnL chart hover handlers (called after DOM insert)
+function attachPnlChartHovers() {
+  document.querySelectorAll('.pnl-overlay').forEach(overlay => {
+    const chartId = overlay.getAttribute('data-chart');
+    const container = document.querySelector(`.pnl-chart-container[data-chart-id="${chartId}"]`);
+    if (!container || container._hoverAttached) return;
+    container._hoverAttached = true;
+
+    const meta = JSON.parse(container.getAttribute('data-meta'));
+    const padObj = JSON.parse(meta.pad);
+    const pnls = meta.pnls;
+    const pW = meta.W - padObj.l - padObj.r;
+    const pH = meta.H - padObj.t - padObj.b;
+    const tooltip = document.getElementById('tt-' + chartId);
+    const svg = container.querySelector('svg');
+    const xhV = svg.querySelector('.pnl-xhair-v');
+    const xhH = svg.querySelector('.pnl-xhair-h');
+    const xhDot = svg.querySelector('.pnl-xhair-dot');
+
+    const xFromIdx = i => padObj.l + (i / (pnls.length - 1)) * pW;
+    const yFromVal = v => padObj.t + pH - ((v - meta.mn) / meta.rng) * pH;
+
+    overlay.addEventListener('mousemove', e => {
+      const rect = svg.getBoundingClientRect();
+      const scaleX = meta.W / rect.width;
+      const mouseX = (e.clientX - rect.left) * scaleX;
+      const nearestIdx = Math.round(((mouseX - padObj.l) / pW) * (pnls.length - 1));
+      const idx = Math.max(0, Math.min(pnls.length - 1, nearestIdx));
+      const cx = xFromIdx(idx);
+      const cy = yFromVal(pnls[idx]);
+
+      xhV.setAttribute('x1', cx); xhV.setAttribute('x2', cx); xhV.style.display = '';
+      xhH.setAttribute('y1', cy); xhH.setAttribute('y2', cy); xhH.style.display = '';
+      xhDot.setAttribute('cx', cx); xhDot.setAttribute('cy', cy); xhDot.style.display = '';
+
+      // Position tooltip in DOM coordinates
+      const domX = cx / meta.W * rect.width;
+      const domY = cy / meta.H * rect.height;
+      const val = pnls[idx];
+      const sign = val >= 0 ? '+' : '';
+      tooltip.innerHTML = `<span class="tt-label">Candle #${idx}</span><br><span class="tt-value" style="color:${val >= 0 ? 'var(--green)' : 'var(--red)'}">${sign}$${Math.abs(val).toFixed(2)}</span>`;
+      tooltip.style.display = 'block';
+      tooltip.style.left = Math.min(domX + 12, rect.width - 120) + 'px';
+      tooltip.style.top = (domY - 40) + 'px';
+    });
+
+    overlay.addEventListener('mouseleave', () => {
+      xhV.style.display = 'none';
+      xhH.style.display = 'none';
+      xhDot.style.display = 'none';
+      tooltip.style.display = 'none';
+    });
+  });
 }
 
 function renderSessionHistoryMd(md) {
@@ -2816,8 +3143,9 @@ function renderSessionHistoryMd(md) {
 }
 
 // ═══ CANDLE TIMELINES ═══
-function buildCandleTimelines(trades, resolutions, currentMarket) {
+function buildCandleTimelines(trades, resolutions, currentMarket, candleSnapshots) {
   if (!trades.length) return '<div class="empty"><div class="empty-icon">~</div>No trades yet</div>';
+  const cs = candleSnapshots || {};
 
   const candleMap = new Map();
   for (const t of trades) {
@@ -2842,6 +3170,7 @@ function buildCandleTimelines(trades, resolutions, currentMarket) {
     const isLive = slug === liveSlug;
     const collapsed = !isLive;
     const polyUrl = 'https://polymarket.com/event/' + slug;
+    const snap = cs[slug]; // candle snapshot data
 
     // Badge
     let badge;
@@ -2898,8 +3227,46 @@ function buildCandleTimelines(trades, resolutions, currentMarket) {
       regimeBar = `<div class="tl-regime-bar ${rClass}"></div>`;
     }
 
-    // Dots + entry price labels
+    // Prefilter tick marks from snapshot data
+    let pfTicks = '';
+    if (snap?.points?.length) {
+      pfTicks = '<div class="tl-ticks">';
+      for (const pt of snap.points) {
+        const tr = pt.tr || 0;
+        const pct = Math.min(100, Math.max(0, ((CANDLE_DUR - tr) / CANDLE_DUR) * 100));
+        const cls = pt.pf ? 'pass' : 'fail';
+        pfTicks += `<div class="tl-tick ${cls}" style="left:${pct.toFixed(1)}%"></div>`;
+      }
+      pfTicks += '</div>';
+    }
+
+    // Winner price heatmap for resolved candles
+    let heatmapH = '';
+    if (snap?.points?.length && snap.winner) {
+      const winner = snap.winner;
+      const prices = snap.points.map(pt => winner === 'up' ? pt.up : pt.dn).filter(v => v != null);
+      if (prices.length > 1) {
+        const pMin = Math.min(...prices);
+        const pMax = Math.max(...prices);
+        const pRng = pMax - pMin || 0.001;
+        const segs = snap.points.map(pt => {
+          const p = winner === 'up' ? pt.up : pt.dn;
+          if (p == null) return '';
+          const ratio = (p - pMin) / pRng; // 0=cheapest, 1=most expensive
+          // Green(cheap) → Yellow(mid) → Red(expensive)
+          const r = Math.round(ratio < 0.5 ? ratio * 2 * 239 : 239);
+          const g = Math.round(ratio < 0.5 ? 197 + (1 - ratio * 2) * 0 : 197 * (1 - (ratio - 0.5) * 2));
+          const b2 = Math.round(ratio < 0.5 ? 94 * (1 - ratio * 2) : 0);
+          return `<div class="hm-seg" style="background:rgb(${r},${g},${b2})"></div>`;
+        }).join('');
+        heatmapH = `<div class="tl-heatmap">${segs}</div>
+          <div class="tl-heatmap-labels"><span>$${pMin.toFixed(2)} (cheap)</span><span>$${pMax.toFixed(2)} (expensive)</span></div>`;
+      }
+    }
+
+    // Dots + entry price labels + model badges
     let entryLabels = '';
+    let modelBadges = '';
     const dots = data.trades.map((t, i) => {
       const tr = t.time_remaining_at_trade || 0;
       const pct = Math.min(100, Math.max(0, ((CANDLE_DUR - tr) / CANDLE_DUR) * 100));
@@ -2913,10 +3280,23 @@ function buildCandleTimelines(trades, resolutions, currentMarket) {
       if (t.action === 'BUY' && !t.risk_blocked && t.fill_price != null) {
         entryLabels += `<span class="tl-entry-price" style="left:${pct.toFixed(1)}%">$${t.fill_price.toFixed(2)}</span>`;
       }
+      // Model badge above dot
+      const sp = t.screen_passed;
+      let badgeLbl, badgeCls;
+      if (sp === null && t.action === 'HOLD' && !t.risk_blocked) {
+        badgeLbl = 'P'; badgeCls = 'prefilter';
+      } else if (sp === false) {
+        badgeLbl = 'H'; badgeCls = 'haiku';
+      } else {
+        badgeLbl = 'S'; badgeCls = 'sonnet';
+      }
+      if (!t.risk_blocked) {
+        modelBadges += `<span class="tl-model-badge ${badgeCls}" style="left:${pct.toFixed(1)}%">${badgeLbl}</span>`;
+      }
       return `<div class="tl-dot ${cls}" style="left:${pct.toFixed(1)}%" data-did="${did}" onclick="toggleDetail(this,event)">${lbl}</div>`;
     }).join('');
 
-    // Details
+    // Details with input data toggle
     const details = data.trades.map((t, i) => {
       const did = `dot-${ci}-${i}`;
       const conf = t.confidence || 0;
@@ -2924,19 +3304,43 @@ function buildCandleTimelines(trades, resolutions, currentMarket) {
       const tr = t.time_remaining_at_trade || 0;
       const el = CANDLE_DUR - tr;
       const sc = t.token_side === 'up' ? 'var(--green)' : 'var(--red)';
-      const sz = t.action === 'HOLD' ? '--' : t.size.toFixed(1);
+      const sz = t.action === 'HOLD' ? '--' : (t.size != null ? t.size.toFixed(1) : '--');
       const fp = t.fill_price != null ? '$' + t.fill_price.toFixed(4) : '--';
       const bl = t.risk_blocked;
       let brRow = '';
       if (bl) brRow = `<div class="td-row"><span class="td-lbl">Blocked</span><span class="td-val" style="color:var(--amber)">${esc(t.risk_block_reason || 'Risk check')}</span></div>`;
       const al = bl ? 'BLOCKED ' + t.action : t.action;
       const ac = bl ? 'var(--amber)' : (t.action === 'BUY' ? 'var(--green)' : t.action === 'SELL' ? 'var(--red)' : 'var(--text-muted)');
+
+      // Model info
+      const sp = t.screen_passed;
+      let modelInfo = '';
+      if (sp === false) modelInfo = '<div class="td-row"><span class="td-lbl">Model</span><span class="td-val" style="color:var(--cyan)">Haiku screen (rejected)</span></div>';
+      else if (sp === true) modelInfo = '<div class="td-row"><span class="td-lbl">Model</span><span class="td-val" style="color:var(--purple)">Haiku + Sonnet</span></div>';
+      else if (sp === null && (t.action === 'BUY' || t.action === 'SELL')) modelInfo = '<div class="td-row"><span class="td-lbl">Model</span><span class="td-val" style="color:var(--purple)">Sonnet (no screen)</span></div>';
+
+      // Input data section (collapsible)
+      let inputDataH = '';
+      const inputId = `inp-${did}`;
+      inputDataH += `<div class="td-input-toggle" onclick="toggleInputData('${inputId}')">Show Input Data &#9660;</div>`;
+      inputDataH += `<div class="td-input-data" id="${inputId}" style="display:none"><div class="td-input-grid">`;
+      // Basic trade context
+      if (t.btc_price_usd) inputDataH += `<div class="td-input-item"><span class="td-input-label">BTC Price</span><span class="td-input-val">$${Number(t.btc_price_usd).toLocaleString()}</span></div>`;
+      if (t.midpoint) inputDataH += `<div class="td-input-item"><span class="td-input-label">UP Mid</span><span class="td-input-val">$${Number(t.midpoint).toFixed(4)}</span></div>`;
+      if (t.spread_pct != null) inputDataH += `<div class="td-input-item"><span class="td-input-label">Spread</span><span class="td-input-val">${(Number(t.spread_pct)*100).toFixed(1)}%</span></div>`;
+      if (t.cash != null) inputDataH += `<div class="td-input-item"><span class="td-input-label">Cash</span><span class="td-input-val">$${Number(t.cash).toFixed(2)}</span></div>`;
+      if (t.portfolio_value != null) inputDataH += `<div class="td-input-item"><span class="td-input-label">Portfolio</span><span class="td-input-val">$${Number(t.portfolio_value).toFixed(2)}</span></div>`;
+      if (t.fee != null) inputDataH += `<div class="td-input-item"><span class="td-input-label">Fee</span><span class="td-input-val">$${Number(t.fee).toFixed(4)}</span></div>`;
+      if (t.ai_cost != null) inputDataH += `<div class="td-input-item"><span class="td-input-label">AI Cost</span><span class="td-input-val">$${Number(t.ai_cost).toFixed(4)}</span></div>`;
+      inputDataH += `</div></div>`;
+
       return `<div class="tl-detail" id="det-${did}">
         <div class="td-row"><span class="td-lbl">Time</span><span class="td-val">${t.timestamp ? shortTime(t.timestamp) : '--'} — ${Math.round(el)}s/${CANDLE_DUR}s (${Math.round(tr)}s left)</span></div>
         <div class="td-row"><span class="td-lbl">Action</span><span class="td-val"><strong style="color:${ac}">${al}</strong> <span style="color:${sc}">${t.token_side.toUpperCase()}</span></span></div>
-        ${brRow}
+        ${brRow}${modelInfo}
         <div class="td-row"><span class="td-lbl">Size</span><span class="td-val">${sz} shares @ ${fp}</span></div>
         <div class="td-row"><span class="td-lbl">Conf</span><span class="td-val">${cw}%<span class="conf-bar"><span class="conf-fill" style="width:${cw}%;background:${confColor(conf)}"></span></span></span></div>
+        ${inputDataH}
         <div class="td-reasoning">${esc(t.reasoning || 'No reasoning')}</div>
       </div>`;
     }).join('');
@@ -2953,13 +3357,16 @@ function buildCandleTimelines(trades, resolutions, currentMarket) {
         <div class="tl-wrap">
           <div class="tl-line"></div>
           ${regimeBar}
+          ${pfTicks}
           <div class="tl-end start"></div>
           <div class="tl-end finish ${endCls}"></div>
           ${btcLabel}
           <div class="tl-labels"><span>0:00</span><span>5:00</span></div>
+          ${modelBadges}
           ${dots}
           ${entryLabels}
         </div>
+        ${heatmapH}
         ${details}
       </div>
     </div>`;
@@ -2981,6 +3388,15 @@ function toggleDetail(dot, e) {
   row.querySelectorAll('.tl-detail').forEach(d => d.classList.remove('vis'));
   row.querySelectorAll('.tl-dot').forEach(d => d.classList.remove('sel'));
   if (!wasVis) { det.classList.add('vis'); dot.classList.add('sel'); }
+}
+
+function toggleInputData(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const isHidden = el.style.display === 'none';
+  el.style.display = isHidden ? 'block' : 'none';
+  const toggle = el.previousElementSibling;
+  if (toggle) toggle.innerHTML = isHidden ? 'Hide Input Data &#9650;' : 'Show Input Data &#9660;';
 }
 
 // ═══ RESOLUTIONS TABLE ═══
@@ -3005,26 +3421,8 @@ function buildChart(resolutions) {
   if (resolutions.length < 2) return '<div class="empty"><div class="empty-icon">~</div>Need 2+ resolutions</div>';
   const ser = [0]; let cum = 0;
   for (const r of resolutions) { cum += r.pnl; ser.push(cum); }
-  const W = 340, H = 150;
-  const pad = { t: 8, r: 40, b: 18, l: 8 };
-  const pW = W - pad.l - pad.r, pH = H - pad.t - pad.b;
-  const mn = Math.min(0, ...ser), mx = Math.max(0, ...ser);
-  const rng = mx - mn || 1;
-  const x = i => pad.l + (i / (ser.length - 1)) * pW;
-  const y = v => pad.t + pH - ((v - mn) / rng) * pH;
-  const pts = ser.map((v, i) => x(i).toFixed(1) + ',' + y(v).toFixed(1)).join(' ');
-  const aPts = pts + ' ' + x(ser.length-1).toFixed(1)+','+y(0).toFixed(1)+' '+x(0).toFixed(1)+','+y(0).toFixed(1);
-  const col = cum >= 0 ? 'var(--green)' : 'var(--red)';
-  const zy = y(0);
-  let lbls = `<text class="chart-lbl" x="${W-pad.r+5}" y="${pad.t+3}" text-anchor="start">${mx.toFixed(2)}</text>`;
-  lbls += `<text class="chart-lbl" x="${W-pad.r+5}" y="${H-pad.b}" text-anchor="start">${mn.toFixed(2)}</text>`;
-  if (mn < 0 && mx > 0) lbls += `<text class="chart-lbl" x="${W-pad.r+5}" y="${zy+3}" text-anchor="start">0</text>`;
-  const circles = ser.map((v,i) => `<circle cx="${x(i).toFixed(1)}" cy="${y(v).toFixed(1)}" r="2.5" fill="${col}" stroke="var(--bg-surface)" stroke-width="1.5"/>`).join('');
-  return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
-    <line class="chart-zero" x1="${pad.l}" y1="${zy}" x2="${W-pad.r}" y2="${zy}"/>
-    <polygon class="chart-area" points="${aPts}" fill="${col}"/>
-    <polyline class="chart-line" points="${pts}" stroke="${col}"/>
-    ${circles}${lbls}</svg>`;
+  // Reuse the interactive chart builder (scaled down)
+  return buildLargePnlChart(ser, resolutions);
 }
 
 // ═══ ITERATION ANALYSIS CARDS ═══
