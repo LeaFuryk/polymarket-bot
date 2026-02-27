@@ -19,8 +19,11 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from dataclasses import dataclass
 from pathlib import Path
+
+import httpx
 
 logger = logging.getLogger(__name__)
 
@@ -94,6 +97,142 @@ class AdaptiveEntryTracker:
                 )
         except Exception:
             logger.warning("Could not load adaptive entry data", exc_info=True)
+
+    async def bootstrap_from_binance(self) -> None:
+        """Pre-compute reversal rate from Binance 1-min klines on startup.
+
+        Fetches recent 1-min candles, groups them into 5-min Polymarket-aligned
+        buckets, and determines the reversal pattern — giving the adaptive entry
+        system a warm start instead of waiting ~50 min for real data.
+
+        Only runs if current history < window. Real Polymarket observations
+        naturally push out these bootstrapped entries as the session progresses.
+        """
+        if len(self._history) >= self._window:
+            logger.info(
+                "Adaptive entry already has %d records (window=%d), skipping bootstrap",
+                len(self._history), self._window,
+            )
+            return
+
+        needed = self._window - len(self._history)
+        # Fetch extra 1-min klines to cover needed 5-min buckets + 1 buffer
+        fetch_1m = (needed + 2) * 5
+
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(
+                    "https://api.binance.com/api/v3/klines",
+                    params={
+                        "symbol": "BTCUSDT",
+                        "interval": "1m",
+                        "limit": fetch_1m,
+                    },
+                )
+                resp.raise_for_status()
+                raw_klines = resp.json()
+        except Exception:
+            logger.warning("Bootstrap from Binance failed — will use defaults", exc_info=True)
+            return
+
+        if not raw_klines:
+            return
+
+        # Parse 1-min klines: (open_time_s, open, high, low, close)
+        klines_1m = []
+        for k in raw_klines:
+            klines_1m.append((
+                float(k[0]) / 1000,  # open_time in seconds
+                float(k[1]),         # open
+                float(k[2]),         # high
+                float(k[3]),         # low
+                float(k[4]),         # close
+            ))
+
+        # Group into 5-min buckets aligned to 300s boundaries
+        buckets: dict[int, list] = {}
+        for ot, o, h, l, c in klines_1m:
+            bucket_key = int(ot) // 300 * 300
+            buckets.setdefault(bucket_key, []).append((ot, o, h, l, c))
+
+        # Sort buckets by time, drop the last one (likely in-progress)
+        sorted_keys = sorted(buckets.keys())
+        if sorted_keys:
+            sorted_keys.pop()  # drop in-progress
+
+        # Skip buckets that overlap with existing history slugs
+        existing_slugs = {o.slug for o in self._history}
+
+        bootstrapped = 0
+        for bk in sorted_keys:
+            if bootstrapped >= needed:
+                break
+
+            mins = sorted(buckets[bk], key=lambda x: x[0])
+            if len(mins) < 3:
+                continue  # incomplete bucket
+
+            btc_open = mins[0][1]  # open of first 1-min candle
+            btc_close = mins[-1][4]  # close of last 1-min candle
+            final_move = btc_close - btc_open
+
+            if abs(final_move) < 1.0:
+                # Essentially flat candle — skip (no meaningful direction)
+                continue
+
+            winner = "up" if final_move > 0 else "down"
+
+            # Find initial direction: first 1-min candle where price moved $20+ from open
+            direction_at_20 = ""
+            for _, _, hi, lo, _ in mins:
+                up_move = hi - btc_open
+                down_move = btc_open - lo
+                if up_move >= 20.0:
+                    direction_at_20 = "up"
+                    break
+                if down_move >= 20.0:
+                    direction_at_20 = "down"
+                    break
+
+            if not direction_at_20:
+                # BTC never moved $20 — use the first 1-min candle direction
+                first_close = mins[0][4]
+                direction_at_20 = "up" if first_close >= btc_open else "down"
+
+            reversed_flag = direction_at_20 != winner
+
+            # Estimate winner_ask_at_20 (no Polymarket data available)
+            # Use conservative defaults based on observed patterns
+            winner_ask_at_20 = 0.40 if reversed_flag else 0.55
+
+            slug = f"bootstrap-{bk}"
+            if slug in existing_slugs:
+                continue
+
+            outcome = CandleOutcome(
+                slug=slug,
+                winner=winner,
+                btc_open=round(btc_open, 2),
+                btc_close=round(btc_close, 2),
+                direction_at_20=direction_at_20,
+                reversed=reversed_flag,
+                winner_ask_at_20=winner_ask_at_20,
+            )
+            self._history.append(outcome)
+            bootstrapped += 1
+
+        if bootstrapped > 0:
+            self._recompute()
+            logger.info(
+                "Bootstrapped %d candles from Binance 1-min klines → "
+                "reversal_rate=%.0f%%, signal=%s, btc_thresh=$%.0f",
+                bootstrapped,
+                self.rolling_reversal_rate * 100,
+                self._signal_type,
+                self.btc_threshold,
+            )
+        else:
+            logger.info("Binance bootstrap: no usable candles found")
 
     def _save_record(self, outcome: CandleOutcome) -> None:
         """Append a candle outcome to JSONL."""
