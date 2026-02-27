@@ -357,6 +357,20 @@ class KnowledgeManager:
         lines.append(f"Session: {session_wins}W/{session_losses}L ({win_rate:.0f}% win rate) | PnL: ${session_pnl:+.4f}")
         lines.append("")
 
+        # Safeguard #5: Drawdown awareness — rolling drawdown from recent resolutions
+        if resolutions:
+            recent_10 = resolutions[-10:]
+            rolling_pnl = sum(r.total_pnl for r in recent_10)
+            if rolling_pnl < -5.0:
+                lines.append(
+                    f"## SESSION DRAWDOWN ALERT\n"
+                    f"Last {len(recent_10)} resolutions: ${rolling_pnl:+.2f} net.\n"
+                    f"Consider being more selective — prioritize high-conviction setups and smaller sizes."
+                )
+                if session_pnl < 0:
+                    lines.append(f"Session overall: ${session_pnl:+.2f}")
+                lines.append("")
+
         # Recent trade decisions with outcomes (so AI can learn from its own mistakes)
         if recent_trades:
             # Filter to trades with fills (BUY/SELL) and match to resolutions
@@ -373,6 +387,34 @@ class KnowledgeManager:
                 up_wins = sum(1 for t in up_trades if res_by_slug.get(t.candle_slug, None) and res_by_slug[t.candle_slug].winner == "up")
                 down_wins = sum(1 for t in down_trades if res_by_slug.get(t.candle_slug, None) and res_by_slug[t.candle_slug].winner == "down")
                 lines.append(f"Your trade record: UP buys {up_wins}W/{len(up_trades)-up_wins}L | DOWN buys {down_wins}W/{len(down_trades)-down_wins}L")
+
+                # Safeguard #8: Per-side accuracy warnings
+                up_total = len(up_trades)
+                down_total = len(down_trades)
+                up_wr = up_wins / up_total if up_total >= 3 else None
+                down_wr = down_wins / down_total if down_total >= 3 else None
+
+                if up_wr is not None and up_wr < 0.50:
+                    lines.append(f"  !! Your UP accuracy is low ({up_wr:.0%}) — be extra cautious on UP trades")
+                if down_wr is not None and down_wr < 0.50:
+                    lines.append(f"  !! Your DOWN accuracy is low ({down_wr:.0%}) — be extra cautious on DOWN trades")
+
+                # Safeguard #8: Losing streak detection from resolved trades
+                resolved_buys = [
+                    t for t in filled_trades
+                    if t.action.value == "BUY" and res_by_slug.get(t.candle_slug)
+                ]
+                if resolved_buys:
+                    streak = 0
+                    for t in reversed(resolved_buys):
+                        res = res_by_slug[t.candle_slug]
+                        if t.token_side.value != res.winner:
+                            streak += 1
+                        else:
+                            break
+                    if streak >= 3:
+                        lines.append(f"  !! You are on a {streak}-trade losing streak. Increase selectivity.")
+
                 lines.append("")
                 lines.append("Your recent trades and outcomes:")
                 lines.append("| Token | Entry | Conf | Winner | Result |")
