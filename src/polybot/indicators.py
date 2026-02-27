@@ -755,28 +755,12 @@ def _chainlink_divergence(
     if not snap.btc_price or snap.btc_price.chainlink_price is None:
         return None
 
-    price_source = snap.btc_price.price_source
     divergence = snap.btc_price.price_divergence or 0.0
     abs_div = abs(divergence)
     chainlink = snap.btc_price.chainlink_price
     pct = divergence / chainlink * 100 if chainlink else 0
 
-    # When using Chainlink WS, we ARE the resolution source — no risk
-    if price_source == "chainlink_ws":
-        if abs_div > 50:
-            signal = "HIGH Binance divergence"
-        elif abs_div > 20:
-            signal = "moderate Binance divergence"
-        else:
-            signal = "aligned"
-        label = f"${abs_div:.0f} Binance divergence (ALIGNED — using Chainlink WS)"
-        return IndicatorResult(
-            name="Chainlink Divergence",
-            value=divergence,
-            label=label,
-        )
-
-    # On Binance: divergence = resolution risk
+    # Binance vs Chainlink divergence = resolution risk
     if abs_div > 50:
         signal = "HIGH divergence — resolution risk"
     elif abs_div > 20:

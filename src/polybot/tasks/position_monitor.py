@@ -298,6 +298,22 @@ class PositionMonitor:
 
     # --- Threshold Check ---
 
+    def _btc_favors_position(self, token_side: str) -> bool:
+        """Check if current BTC direction favors the position.
+
+        UP position wins when BTC is above open, DOWN when below.
+        If BTC favors the bet, a token price drop is likely orderbook
+        noise — not a real loss — so stop-loss should be suppressed.
+        """
+        history = list(self._shared.prefilter_history)
+        if not history:
+            return False  # no data → don't suppress
+        btc_move = history[-1].btc_move_from_open
+        if token_side == "up":
+            return btc_move > 0
+        else:
+            return btc_move < 0
+
     async def _check_thresholds(self, token_side: str, pnl_pct: float) -> None:
         """Check if P&L has hit stop-loss or take-profit thresholds."""
         if token_side in self._triggered:
@@ -307,6 +323,15 @@ class PositionMonitor:
         dynamic_tp = self._dynamic_take_profit(token_side)
 
         if pnl_pct <= dynamic_sl:
+            # Suppress SL if BTC direction still favors the position —
+            # the token price drop is orderbook noise, not a real loss
+            if self._btc_favors_position(token_side):
+                logger.info(
+                    "SL suppressed: %s P&L=%.1f%% hit SL %.1f%% but BTC favors position",
+                    token_side.upper(), pnl_pct * 100, dynamic_sl * 100,
+                )
+                return
+
             # Build component breakdown for log
             components = self._sl_components_str(token_side)
             logger.warning(

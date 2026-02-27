@@ -760,7 +760,7 @@ class TradingAgent:
                 self._save_agent_state()
 
                 # Adaptive reflection: faster when losing, normal when profitable
-                recent_pnl = sum(r.pnl for r in self._recent_resolutions[-5:])
+                recent_pnl = sum(r.total_pnl for r in self._recent_resolutions[-5:])
                 reflection_threshold = 5 if recent_pnl < -10.0 else 10
 
                 if self._resolutions_since_reflection >= reflection_threshold:
