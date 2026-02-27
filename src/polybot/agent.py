@@ -457,6 +457,57 @@ class TradingAgent:
             if sh_file.exists():
                 summary["session_history"] = sh_file.read_text()
 
+            # Candle snapshot timelines from archived database
+            db_path = archive_dir / "logs" / "polybot.db"
+            if db_path.exists():
+                import sqlite3
+                try:
+                    conn = sqlite3.connect(str(db_path))
+                    cursor = conn.execute("""
+                        SELECT c.slug, c.winner, c.btc_open,
+                               s.time_remaining, s.up_mid, s.down_mid,
+                               s.btc_move_from_open, s.prefilter_passed, s.prefilter_reasons,
+                               s.indicators_json, s.up_spread_pct, s.down_spread_pct,
+                               s.up_bid_depth, s.down_bid_depth, s.btc_price
+                        FROM snapshots s
+                        JOIN candles c ON s.candle_id = c.candle_id
+                        ORDER BY c.candle_id, s.timestamp
+                    """)
+                    candle_snapshots: dict = {}
+                    current_slug = None
+                    sample_counter = 0
+                    for row in cursor:
+                        slug = row[0]
+                        if slug != current_slug:
+                            current_slug = slug
+                            sample_counter = 0
+                            candle_snapshots[slug] = {
+                                "winner": row[1],
+                                "btc_open": row[2],
+                                "points": [],
+                            }
+                        sample_counter += 1
+                        if sample_counter % 10 == 0:
+                            candle_snapshots[slug]["points"].append({
+                                "tr": round(row[3], 0),
+                                "up": round(row[4], 4) if row[4] else None,
+                                "dn": round(row[5], 4) if row[5] else None,
+                                "btc_mv": round(row[6], 1) if row[6] else None,
+                                "pf": row[7],
+                                "pfr": row[8],
+                                "ind": row[9],
+                                "u_sp": round(row[10], 2) if row[10] else None,
+                                "d_sp": round(row[11], 2) if row[11] else None,
+                                "u_dep": round(row[12], 1) if row[12] else None,
+                                "d_dep": round(row[13], 1) if row[13] else None,
+                                "btc": round(row[14], 2) if row[14] else None,
+                            })
+                    conn.close()
+                    if candle_snapshots:
+                        summary["candle_snapshots"] = candle_snapshots
+                except Exception:
+                    pass
+
     def _compute_iteration_label(self) -> str:
         """Determine current iteration label from archive count."""
         archive_dir = Path.cwd() / "archive"
@@ -910,6 +961,7 @@ class TradingAgent:
                     "realized_pnl": t.realized_pnl,
                     "unrealized_pnl": t.unrealized_pnl,
                     "ai_cost": t.ai_cost,
+                    "screen_passed": t.extra.get("screen_passed"),
                 }
                 trades.append(trade_entry)
 
@@ -943,6 +995,51 @@ class TradingAgent:
             all_time_losses = sum(1 for r in all_resolutions if r.get("pnl", 0) < -0.001)
             all_time_total = all_time_wins + all_time_losses
             all_time_win_rate = (all_time_wins / all_time_total * 100) if all_time_total > 0 else 0.0
+
+            # Build candle snapshot timelines from datastore
+            candle_snapshots: dict = {}
+            if self._datastore and self._datastore._conn:
+                try:
+                    cursor = self._datastore._conn.execute("""
+                        SELECT c.slug, c.winner, c.btc_open,
+                               s.time_remaining, s.up_mid, s.down_mid,
+                               s.btc_move_from_open, s.prefilter_passed, s.prefilter_reasons,
+                               s.indicators_json, s.up_spread_pct, s.down_spread_pct,
+                               s.up_bid_depth, s.down_bid_depth, s.btc_price
+                        FROM snapshots s
+                        JOIN candles c ON s.candle_id = c.candle_id
+                        ORDER BY c.candle_id, s.timestamp
+                    """)
+                    current_slug = None
+                    sample_counter = 0
+                    for row in cursor:
+                        slug = row[0]
+                        if slug != current_slug:
+                            current_slug = slug
+                            sample_counter = 0
+                            candle_snapshots[slug] = {
+                                "winner": row[1],
+                                "btc_open": row[2],
+                                "points": [],
+                            }
+                        sample_counter += 1
+                        if sample_counter % 10 == 0:  # downsample ~every 10s
+                            candle_snapshots[slug]["points"].append({
+                                "tr": round(row[3], 0),
+                                "up": round(row[4], 4) if row[4] else None,
+                                "dn": round(row[5], 4) if row[5] else None,
+                                "btc_mv": round(row[6], 1) if row[6] else None,
+                                "pf": row[7],
+                                "pfr": row[8],
+                                "ind": row[9],
+                                "u_sp": round(row[10], 2) if row[10] else None,
+                                "d_sp": round(row[11], 2) if row[11] else None,
+                                "u_dep": round(row[12], 1) if row[12] else None,
+                                "d_dep": round(row[13], 1) if row[13] else None,
+                                "btc": round(row[14], 2) if row[14] else None,
+                            })
+                except Exception:
+                    logger.debug("Failed to build candle snapshots", exc_info=True)
 
             data = {
                 "updated_at": datetime.now(timezone.utc).isoformat(),
@@ -1055,6 +1152,7 @@ class TradingAgent:
                     "last_outage_duration": self._last_outage_duration,
                 },
                 "iterations": self._iteration_summaries,
+                "candle_snapshots": candle_snapshots,
             }
 
             dashboard_path.write_text(json.dumps(data, indent=2) + "\n")
