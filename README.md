@@ -104,7 +104,7 @@ Waits for entry triggers (from MarketMonitor) or exit triggers (from PositionMon
 6. **Calibration gate** — Override BUY to HOLD if calibrated win rate < break-even
 7. **Anti-hedge guard** — Blocks BUY if opposite side has shares
 7b. **Anti-flip guard** — Blocks buying the opposite side after a SELL on the same candle (prevents whipsaw). Same-side re-entry allowed
-8. **Position sizing** — Flattened R/R scale: 100% at R/R >= 2.0, 80% at 1.0, 55% at 0.5, 20% minimum. Multiplied by BTC move magnitude scaling (80%/90%/100%). Minimum 40 shares enforced
+8. **Position sizing** — Gentle R/R scale (0.75x-1.0x, since data shows cheap entries are often contrarian traps). Multiplied by BTC move magnitude scaling (80%/90%/100%) and counter-trend reduction (50-70%). Minimum 40 shares (20 for counter-trend)
 8. **Post-trade risk checks** — Position size, concentration, cash, spread (BUY only)
 9. **Execute + log** — Simulate fill, update portfolio, write TradeRecord
 
@@ -360,6 +360,8 @@ Each candle is tagged with an `iteration` label (e.g., `iter_003`) so you can tr
 
 With 500+ candles accumulated, you can statistically validate every assumption in the codebase — momentum continuation rates, reversal frequencies, optimal entry timing — instead of guessing.
 
+A comprehensive statistical analysis (159 candles, 4 iterations) found: BTC moves >$50 at 60s have ~90% directional accuracy; two EV peaks at 30-45s and 120-165s; cheap entries (R/R 1.5-3.0) are often contrarian traps; and streaks of 3+ continue ~62% of the time. Findings are loaded into `data/knowledge/trading_patterns.md` as soft guidance for the AI.
+
 ### Analysis Report
 
 ```bash
@@ -481,7 +483,7 @@ The most direct levers are in `config/default.yaml`:
 - **`temperature`** — Currently 0.0 (deterministic); slight increase (0.1-0.3) may help exploration
 - **`risk.max_position_pct`** — Increase for more aggressive sizing, decrease for safety
 - **`risk.daily_loss_limit_pct`** — Tighter stop-loss or wider runway
-- **`risk.min_reward_risk_ratio`** — Minimum risk/reward ratio (kept for reference). No hard block — position size scales with R/R quality: 100% at R/R >= 2.0, 80% at 1.0, 55% at 0.5, 20% minimum
+- **`risk.min_reward_risk_ratio`** — Minimum risk/reward ratio (kept for reference). No hard block — gentle R/R scale: 100% at R/R >= 1.0, 75% minimum (data shows cheap entries are often contrarian traps with low win rates)
 
 ### Add new indicators
 
