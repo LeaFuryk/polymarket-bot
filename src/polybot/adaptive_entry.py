@@ -196,24 +196,28 @@ class AdaptiveEntryTracker:
 
             winner = "up" if final_move > 0 else "down"
 
-            # Find initial direction: first 1-min candle where price moved $20+ from open
+            # Find initial direction: first 1-min candle where price moved past
+            # the fakeout noise floor (same threshold as record_outcome)
             direction_at_20 = ""
             for _, _, hi, lo, _ in mins:
                 up_move = hi - btc_open
                 down_move = btc_open - lo
-                if up_move >= 20.0:
+                if up_move >= self.btc_threshold:
                     direction_at_20 = "up"
                     break
-                if down_move >= 20.0:
+                if down_move >= self.btc_threshold:
                     direction_at_20 = "down"
                     break
 
             if not direction_at_20:
-                # BTC never moved $20 — use the first 1-min candle direction
+                # BTC never moved past threshold — use the first 1-min candle direction
                 first_close = mins[0][4]
                 direction_at_20 = "up" if first_close >= btc_open else "down"
 
             reversed_flag = direction_at_20 != winner
+            # Near-zero moves are timing noise, not real reversals
+            if abs(final_move) < 5.0:
+                reversed_flag = False
 
             # Estimate winner_ask_at_20 (no Polymarket data available)
             # Use conservative defaults based on observed patterns
