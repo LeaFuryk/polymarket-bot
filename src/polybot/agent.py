@@ -45,6 +45,7 @@ from polybot.models import (
 from polybot.resolution import ResolutionTracker
 from polybot.risk.manager import RiskManager
 from polybot.shared_state import CandleMicrostructure, SharedState
+from polybot.execution.live import LiveExecutionEngine
 from polybot.simulator.engine import ExecutionSimulator
 from polybot.simulator.orderbook import SimulatedOrderBook
 from polybot.simulator.portfolio import Portfolio
@@ -136,6 +137,19 @@ class TradingAgent:
         self._orderbook = SimulatedOrderBook(config.simulator)
         self._portfolio = Portfolio(config.agent.initial_cash)
         self._risk = RiskManager(config.risk, config.agent.initial_cash)
+
+        # Live trading engine (created if mode == "live")
+        self._live_mode = config.trading.mode == "live"
+        self._live_engine: LiveExecutionEngine | None = None
+        self._shadow_portfolio: Portfolio | None = None
+
+        if self._live_mode:
+            self._live_engine = LiveExecutionEngine(config.trading, config.api)
+            self._shadow_portfolio = Portfolio(config.agent.initial_cash)
+            logger.warning(
+                "LIVE TRADING MODE — real CLOB orders will be placed%s",
+                " (DRY RUN)" if config.trading.dry_run else "",
+            )
         self._trade_log = TradeLog(config.logging)
 
         # Resolution tracking
@@ -247,6 +261,24 @@ class TradingAgent:
         # Open persistent market history store
         self._market_history.open()
 
+        # Live trading startup validation
+        if self._live_mode and self._live_engine:
+            tc = self._config.trading
+            if not tc.private_key:
+                logger.critical("LIVE MODE: no private_key configured — aborting")
+                return
+            if not (tc.api_key and tc.api_secret and tc.api_passphrase):
+                logger.critical("LIVE MODE: missing API credentials — run scripts/generate_api_key.py first")
+                return
+            initial_balance = await self._live_engine.sync_balance()
+            if initial_balance <= 0:
+                logger.critical("LIVE MODE: wallet balance is $%.2f — aborting", initial_balance)
+                return
+            logger.info(
+                "LIVE MODE: wallet balance $%.2f, max_order=$%.0f, kill_switch=-$%.0f, dry_run=%s",
+                initial_balance, tc.max_order_size_usd, tc.max_session_loss_usd, tc.dry_run,
+            )
+
         # Start Chainlink WebSocket feed (primary BTC price — matches resolution)
         await self._chainlink_ws.start()
 
@@ -294,6 +326,8 @@ class TradingAgent:
             recent_trades=self._recent_trades,
             session_trades=self._session_trades,
             pending_ml_features=self._pending_ml_features,
+            live_engine=self._live_engine,
+            shadow_portfolio=self._shadow_portfolio,
         )
 
         if self._datastore is not None:
@@ -313,6 +347,10 @@ class TradingAgent:
             asyncio.create_task(self._rotation_loop(), name="rotation_loop"),
             asyncio.create_task(self._dashboard_loop(), name="dashboard_loop"),
         ]
+        if self._live_mode and self._live_engine:
+            tasks.append(
+                asyncio.create_task(self._balance_sync_loop(), name="balance_sync")
+            )
         if self._datastore is not None:
             tasks.append(
                 asyncio.create_task(self._datastore.writer_loop(), name="datastore_writer")
@@ -551,6 +589,24 @@ class TradingAgent:
             await asyncio.sleep(2.0)
         logger.info("DashboardLoop stopped")
 
+    async def _balance_sync_loop(self) -> None:
+        """Periodically syncs wallet balance and checks kill switch (live mode only)."""
+        logger.info("BalanceSyncLoop started")
+        while not self._shared.shutdown:
+            try:
+                if self._live_engine:
+                    balance = await self._live_engine.sync_balance()
+                    killed = self._live_engine.check_kill_switch(self._session_resolution_pnl)
+                    if killed:
+                        logger.critical("Kill switch triggered — initiating shutdown")
+                        self._shared.shutdown = True
+                        break
+                    logger.debug("Wallet balance: $%.2f", balance)
+            except Exception:
+                logger.exception("BalanceSyncLoop error")
+            await asyncio.sleep(60.0)
+        logger.info("BalanceSyncLoop stopped")
+
     def _sync_from_ai_decision(self) -> None:
         """Sync dashboard state from the AIDecision task."""
         if self._ai_decision is None:
@@ -636,6 +692,12 @@ class TradingAgent:
             # Update shared state
             self._shared.current_market = new_market
 
+            # Set token IDs on live engine for CLOB orders
+            if self._live_engine:
+                self._live_engine.set_current_token_ids(
+                    new_market.up_token_id, new_market.down_token_id,
+                )
+
             logger.info("Active market: %s (ends in %.0fs)", new_market.title, new_market.time_remaining())
 
             # Record BTC price at candle open
@@ -677,6 +739,10 @@ class TradingAgent:
             if cancelled:
                 logger.info("Cancelled %d pending orders on market rotation", cancelled)
 
+            # Cancel live CLOB orders on rotation
+            if self._live_mode and self._live_engine:
+                await self._live_engine.cancel_all_orders()
+
             # Resolve candle winner
             if self._current_market is not None:
                 btc_snapshot = await self._market_data.btc_feed.get_price()
@@ -690,6 +756,14 @@ class TradingAgent:
                 resolution.total_pnl = resolution_pnl
                 resolution.up_pnl = self._portfolio.up_position.realized_pnl
                 resolution.down_pnl = self._portfolio.down_position.realized_pnl
+
+                # Shadow portfolio resolution (live mode)
+                if self._shadow_portfolio is not None:
+                    shadow_pnl = self._shadow_portfolio.resolve_market(resolution.winner)
+                    logger.info(
+                        "Shadow paper PnL: $%.4f | Live PnL: $%.4f | Diff: $%.4f",
+                        shadow_pnl, resolution_pnl, resolution_pnl - shadow_pnl,
+                    )
 
                 self._trade_log.write_resolution(resolution)
                 self._last_resolution = resolution
@@ -782,6 +856,8 @@ class TradingAgent:
 
             # Reset positions and triggers for new market
             self._portfolio.reset_positions()
+            if self._shadow_portfolio is not None:
+                self._shadow_portfolio.reset_positions()
             if self._position_monitor:
                 self._position_monitor.reset_triggers()
 
@@ -1154,6 +1230,22 @@ class TradingAgent:
                 "iterations": self._iteration_summaries,
                 "candle_snapshots": candle_snapshots,
             }
+
+            # Live trading section (only in live mode)
+            if self._live_mode and self._live_engine:
+                shadow_pnl = 0.0
+                if self._shadow_portfolio:
+                    shadow_pnl = self._shadow_portfolio.cash - self._config.agent.initial_cash
+                data["live_trading"] = {
+                    "mode": self._config.trading.mode,
+                    "dry_run": self._config.trading.dry_run,
+                    "wallet_balance": self._live_engine.wallet_balance,
+                    "kill_switch_active": self._live_engine.kill_switch_active,
+                    "max_order_size_usd": self._config.trading.max_order_size_usd,
+                    "max_session_loss_usd": self._config.trading.max_session_loss_usd,
+                    "shadow_paper_pnl": shadow_pnl,
+                    "execution_cost": self._session_resolution_pnl - shadow_pnl,
+                }
 
             dashboard_path.write_text(json.dumps(data, indent=2) + "\n")
 

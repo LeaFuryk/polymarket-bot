@@ -4,6 +4,64 @@ All notable changes to this project will be documented in this file.
 
 ## [v0.5.1] — 2026-02-27
 
+### Added — Live Polymarket CLOB Trading
+
+The bot can now place real money trades on Polymarket via the CLOB API, while running a shadow paper simulator in parallel for comparison.
+
+**Two modes** (configurable, defaults to paper):
+- `mode: "paper"` (default) — paper simulator only, exactly how it works today. No changes to existing behavior.
+- `mode: "live"` — real FOK market orders via py-clob-client Level 2 + shadow paper simulator running side-by-side.
+
+**New files:**
+- `src/polybot/execution/__init__.py` + `live.py` — `LiveExecutionEngine` wrapping py-clob-client for real CLOB orders
+- `scripts/generate_api_key.py` — Standalone script to derive CLOB API credentials from a wallet private key
+
+**LiveExecutionEngine** (`execution/live.py`):
+- Creates Level 2 `ClobClient` with wallet + API credentials
+- Submits FOK (fill-or-kill) market orders — fills entirely or rejects, no partial fills or stuck orders
+- Stale price mitigation: re-fetches orderbook before every order, skips if price drifted >3% since AI decision
+- Returns the same `SimulatedFill` type as `ExecutionSimulator` — Portfolio, risk, indicators, AI, dashboard all unchanged
+- `dry_run` mode: signs orders but doesn't post (for testing auth flow)
+
+**Safety layers (defense in depth):**
+
+| Layer | What | Where |
+|-------|------|-------|
+| 1 | Config default `mode: paper` | `config.py` |
+| 2 | Dry run mode (sign, don't post) | `LiveExecutionEngine` |
+| 3 | Max order size ($50 hard cap) | `LiveExecutionEngine.execute()` |
+| 4 | Min wallet balance check ($5) | `LiveExecutionEngine.execute()` |
+| 5 | Session kill switch ($40 loss → shutdown) | `_balance_sync_loop()` |
+| 6 | Stale price drift check (3% max) | `LiveExecutionEngine.execute()` |
+| 7 | Existing risk manager (unchanged) | `RiskManager` |
+| 8 | FOK orders (no partial fills) | CLOB API |
+| 9 | Startup credential + balance validation | `agent.py` |
+
+**Shadow paper tracking (live mode):**
+- Both `LiveExecutionEngine` AND `ExecutionSimulator` run on every trade
+- Real fill → applied to real `Portfolio`. Paper fill → applied to `_shadow_portfolio`
+- Trade logs include `paper_fill_price` and `paper_total_cost` for comparison
+- Dashboard shows `live_trading` section: wallet balance, kill switch status, shadow PnL, execution cost diff
+- At candle resolution, logs both: `Shadow paper PnL: $X | Live PnL: $Y | Diff: $Z`
+
+**Config additions** (`TradingConfig`):
+- `mode`, `private_key`, `api_key/secret/passphrase`, `chain_id`
+- `max_order_size_usd` (50), `max_session_loss_usd` (40), `min_wallet_balance_usd` (5)
+- `max_price_drift_pct` (0.03), `dry_run` (false)
+- All overridable via `POLYBOT_TRADING_*` env vars
+
+**New async task**: `_balance_sync_loop()` — checks USDC wallet balance every 60s, runs kill switch check
+
+### iter_009 Analysis (first test of v0.5.0 AI engineering + soft safeguards)
+- **1.2 hours, 53 candles, 12 traded** — short session. 41.7% win rate (5W/7L), -$37.15 PnL, -$39.17 net after fees ($0.97) and AI cost ($1.04)
+- **Losses on UP candles dominate**: 5/7 losses were on UP-winning candles where the bot bet UP but got stopped out before resolution. Only 2/7 losses on DOWN candles
+- **Stop-loss triggering too aggressively on winners**: candles 1772204700 and 1772203200 were ultimately won by the side the bot bet on, but dynamic SL exited at -36%/-44% mid-candle. Both would have been profitable if held
+- **Largest loss (-$43.42)** on candle 1772205300: bet DOWN at $0.773 with 0.78 confidence on a -$124 BTC move, but candle resolved UP ($-20 close). Classic reversal — strong signal reversed in final minutes
+- **High entry prices**: avg fill $0.69 across all BUYs. 5 entries at >$0.70 (up to $0.911) — expensive entries with low R/R. The "cheap entries are traps" lesson overcorrected to accepting expensive entries
+- **Avg loss ($14.50) is 1.13x avg win ($12.87)** — improved from iter_008's 2.1x ratio. The dynamic SL/TP is cutting losses closer to wins, but winning too infrequently
+- **Low trade frequency**: only 12/53 candles traded (22.6%). The adaptive entry threshold + prefilter + cooldown is being very selective, but the selections aren't winning
+- **Key problems to address**: (1) dynamic SL ejecting positions that ultimately win — need wider SL or BTC-direction check before SL fires, (2) expensive entries reducing R/R, (3) reversal detection on strong signals needs improvement
+
 ### Bug Fixes
 - **Fix rotation loop crash** — `ResolutionRecord.pnl` → `ResolutionRecord.total_pnl` in adaptive reflection threshold calculation (`agent.py:763`). Was crashing the rotation loop every ~10s.
 - **Suppress stop-loss when BTC favors position** — SL now checks if BTC direction still supports the bet before triggering. Prevents cutting winning positions on orderbook noise (e.g., UP token dips but BTC is still above open).

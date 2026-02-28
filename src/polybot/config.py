@@ -93,6 +93,20 @@ class LoggingConfig(BaseModel):
     dashboard_refresh_rate: int = 2
 
 
+class TradingConfig(BaseModel):
+    mode: str = "paper"  # "paper" (default, paper-only) or "live" (real CLOB + shadow paper)
+    private_key: str = ""  # Polygon wallet private key
+    api_key: str = ""  # CLOB API key
+    api_secret: str = ""  # CLOB API secret
+    api_passphrase: str = ""  # CLOB API passphrase
+    chain_id: int = 137  # Polygon mainnet
+    max_order_size_usd: float = 50.0  # hard cap per order
+    max_session_loss_usd: float = 40.0  # kill switch threshold
+    min_wallet_balance_usd: float = 5.0  # refuse BUY below this
+    max_price_drift_pct: float = 0.03  # 3% — skip if price drifted since AI decision
+    dry_run: bool = False  # sign orders but don't post (for testing)
+
+
 class AppConfig(BaseModel):
     market: MarketConfig = Field(default_factory=MarketConfig)
     api: ApiConfig = Field(default_factory=ApiConfig)
@@ -102,6 +116,7 @@ class AppConfig(BaseModel):
     risk: RiskConfig = Field(default_factory=RiskConfig)
     monitor: MonitorConfig = Field(default_factory=MonitorConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
+    trading: TradingConfig = Field(default_factory=TradingConfig)
 
 
 def _apply_env_overrides(config: AppConfig) -> None:
@@ -118,11 +133,22 @@ def _apply_env_overrides(config: AppConfig) -> None:
         "POLYBOT_RISK_DAILY_LOSS_LIMIT_PCT": (config.risk, "daily_loss_limit_pct", float),
         "POLYBOT_KNOWLEDGE_DIR": (config.logging, "knowledge_dir", str),
         "POLYBOT_ETHEREUM_RPC_URL": (config.api, "ethereum_rpc_url", str),
+        "POLYBOT_TRADING_MODE": (config.trading, "mode", str),
+        "POLYBOT_TRADING_PRIVATE_KEY": (config.trading, "private_key", str),
+        "POLYBOT_TRADING_API_KEY": (config.trading, "api_key", str),
+        "POLYBOT_TRADING_API_SECRET": (config.trading, "api_secret", str),
+        "POLYBOT_TRADING_API_PASSPHRASE": (config.trading, "api_passphrase", str),
+        "POLYBOT_TRADING_DRY_RUN": (config.trading, "dry_run", bool),
+        "POLYBOT_TRADING_MAX_ORDER_SIZE_USD": (config.trading, "max_order_size_usd", float),
+        "POLYBOT_TRADING_MAX_SESSION_LOSS_USD": (config.trading, "max_session_loss_usd", float),
     }
     for env_key, (section, attr, typ) in env_map.items():
         val = os.environ.get(env_key)
         if val is not None:
-            setattr(section, attr, typ(val))
+            if typ is bool:
+                setattr(section, attr, val.lower() in ("true", "1", "yes"))
+            else:
+                setattr(section, attr, typ(val))
 
 
 def load_config(config_path: str | Path | None = None) -> AppConfig:
