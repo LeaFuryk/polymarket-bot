@@ -1,16 +1,20 @@
 """Adaptive entry threshold tracker — learns optimal BTC move threshold and max entry price.
 
 Tracks rolling candle outcomes to calibrate:
-- BTC move threshold ($20–$50, V-shaped) based on rolling reversal rate
+- BTC move threshold ($20–$100) based on fakeout magnitudes from recent candles
 - Max entry price cap based on recent winner ask prices
 
-V-shaped threshold formula: peaks at 50% reversal (max uncertainty → $50),
-low at extremes (strong signal either momentum or contrarian → $20).
-  threshold = max(20, min(50, 50 - abs(rate - 0.5) * 60))
+Fakeout-based threshold: for each candle, measures how far BTC moved in the
+*wrong direction* (peak move opposite to the eventual winner) before the winner
+was decided. Sets the threshold above typical fakeouts so the bot only enters
+on signals stronger than recent noise.
 
-At 0% reversals → $20 (strong momentum, direction reliable).
-At 50% → $50 (coin flip, need big BTC moves for any signal).
-At 80% → $32 (strong reversal, contrarian edge — enter early, bet opposite).
+  threshold = P75(last 10 fakeout magnitudes) + $5 margin, clamped to [$20, $100]
+
+Small fakeouts [0..25] → threshold ~$25 (clean signals, enter early).
+Large fakeouts [10..80] → threshold ~$57 (noisy market, wait for confirmation).
+
+Falls back to V-shaped formula when peak data is unavailable (old JSONL records).
 
 Data is persisted to JSONL for cross-session continuity.
 """
@@ -43,6 +47,8 @@ class CandleOutcome:
     direction_at_20: str  # BTC direction when move first crossed $20
     reversed: bool  # did the $20 direction disagree with the winner?
     winner_ask_at_20: float  # ask price for the winning side at the $20 cross
+    peak_up_move: float = 0.0  # max positive btc_move_from_open during candle
+    peak_down_move: float = 0.0  # max abs(negative btc_move_from_open) during candle
 
 
 class AdaptiveEntryTracker:
@@ -61,6 +67,12 @@ class AdaptiveEntryTracker:
         self.btc_threshold: float = DEFAULT_BTC_THRESHOLD
         self.max_entry_price: float = DEFAULT_MAX_ENTRY
         self._signal_type: str = "UNCERTAIN"  # MOMENTUM / CONTRARIAN / UNCERTAIN
+
+        # Fakeout statistics (computed in _recompute)
+        self._fakeout_p75: float = 0.0
+        self._fakeout_max: float = 0.0
+        self._fakeout_median: float = 0.0
+        self._using_fakeout: bool = False  # True when peak data is available
 
         # Load persisted data
         self._load()
@@ -83,6 +95,8 @@ class AdaptiveEntryTracker:
                     direction_at_20=r["direction_at_20"],
                     reversed=r["reversed"],
                     winner_ask_at_20=r["winner_ask_at_20"],
+                    peak_up_move=r.get("peak_up_move", 0.0),
+                    peak_down_move=r.get("peak_down_move", 0.0),
                 )
                 self._history.append(outcome)
 
@@ -209,6 +223,12 @@ class AdaptiveEntryTracker:
             if slug in existing_slugs:
                 continue
 
+            # Approximate peak moves from 1-min high/low
+            bucket_high = max(hi for _, _, hi, _, _ in mins)
+            bucket_low = min(lo for _, _, _, lo, _ in mins)
+            peak_up_move = max(0.0, bucket_high - btc_open)
+            peak_down_move = max(0.0, btc_open - bucket_low)
+
             outcome = CandleOutcome(
                 slug=slug,
                 winner=winner,
@@ -217,6 +237,8 @@ class AdaptiveEntryTracker:
                 direction_at_20=direction_at_20,
                 reversed=reversed_flag,
                 winner_ask_at_20=winner_ask_at_20,
+                peak_up_move=round(peak_up_move, 2),
+                peak_down_move=round(peak_down_move, 2),
             )
             self._history.append(outcome)
             bootstrapped += 1
@@ -246,6 +268,8 @@ class AdaptiveEntryTracker:
                     "direction_at_20": outcome.direction_at_20,
                     "reversed": outcome.reversed,
                     "winner_ask_at_20": round(outcome.winner_ask_at_20, 4),
+                    "peak_up_move": round(outcome.peak_up_move, 2),
+                    "peak_down_move": round(outcome.peak_down_move, 2),
                 }) + "\n")
         except Exception:
             logger.warning("Could not save adaptive entry record", exc_info=True)
@@ -270,17 +294,43 @@ class AdaptiveEntryTracker:
         reversals = sum(1 for c in window if c.reversed)
         reversal_rate = reversals / len(window)
 
-        # V-shaped BTC threshold: peaks at 50% reversal (max uncertainty),
-        # low at extremes (momentum or contrarian edge).
-        # deviation=0 at 50% → threshold=$50 (coin flip, need big moves)
-        # deviation=0.5 at 0% or 100% → threshold=$20 (predictable, enter early)
-        deviation = abs(reversal_rate - 0.5)
-        self.btc_threshold = max(20.0, min(50.0, 50.0 - deviation * 60.0))
+        # Fakeout-based BTC threshold: compute per-candle fakeout magnitude
+        # (peak move in the *wrong* direction before the winner was decided)
+        fakeout_magnitudes = []
+        for c in window:
+            if c.peak_up_move > 0 or c.peak_down_move > 0:
+                # Fakeout = peak in wrong direction
+                if c.winner == "up":
+                    fakeout_magnitudes.append(c.peak_down_move)
+                else:
+                    fakeout_magnitudes.append(c.peak_up_move)
+
+        if fakeout_magnitudes:
+            # Percentile-based threshold from actual fakeout data
+            sorted_fakeouts = sorted(fakeout_magnitudes)
+            n = len(sorted_fakeouts)
+            p75_idx = int(n * 0.75)
+            p50_idx = int(n * 0.50)
+            self._fakeout_p75 = sorted_fakeouts[min(p75_idx, n - 1)]
+            self._fakeout_median = sorted_fakeouts[min(p50_idx, n - 1)]
+            self._fakeout_max = sorted_fakeouts[-1]
+            self._using_fakeout = True
+
+            # Threshold = P75 + $5 margin, clamped to [$20, $100]
+            self.btc_threshold = max(20.0, min(100.0, self._fakeout_p75 + 5.0))
+        else:
+            # Fallback: V-shaped formula for old records without peak data
+            self._using_fakeout = False
+            self._fakeout_p75 = 0.0
+            self._fakeout_median = 0.0
+            self._fakeout_max = 0.0
+            deviation = abs(reversal_rate - 0.5)
+            self.btc_threshold = max(20.0, min(50.0, 50.0 - deviation * 60.0))
 
         # Signal type for logging/dashboard
-        if reversal_rate > 0.55:
+        if reversal_rate > 0.60:
             self._signal_type = "CONTRARIAN"
-        elif reversal_rate < 0.35:
+        elif reversal_rate < 0.40:
             self._signal_type = "MOMENTUM"
         else:
             self._signal_type = "UNCERTAIN"
@@ -293,12 +343,13 @@ class AdaptiveEntryTracker:
         else:
             self.max_entry_price = DEFAULT_MAX_ENTRY
 
+        method = "fakeout" if self._using_fakeout else "v-shaped"
         logger.info(
             "Adaptive entry updated: reversal_rate=%.0f%% (%d/%d) → "
-            "signal=%s, btc_thresh=$%.0f (dev=%.2f), "
+            "signal=%s, btc_thresh=$%.0f (%s, P75=$%.0f), "
             "avg_winner_ask=$%.3f → max_entry=$%.2f",
             reversal_rate * 100, reversals, len(window),
-            self._signal_type, self.btc_threshold, deviation,
+            self._signal_type, self.btc_threshold, method, self._fakeout_p75,
             avg_winner_ask if winner_asks else 0,
             self.max_entry_price,
         )
@@ -367,6 +418,16 @@ class AdaptiveEntryTracker:
 
         reversed_flag = direction_at_20 != winner
 
+        # Compute peak up/down moves from prefilter history
+        peak_up_move = 0.0
+        peak_down_move = 0.0
+        for snap in prefilter_history:
+            move = snap.btc_move_from_open
+            if move > peak_up_move:
+                peak_up_move = move
+            if move < 0 and abs(move) > peak_down_move:
+                peak_down_move = abs(move)
+
         outcome = CandleOutcome(
             slug=slug,
             winner=winner,
@@ -375,6 +436,8 @@ class AdaptiveEntryTracker:
             direction_at_20=direction_at_20,
             reversed=reversed_flag,
             winner_ask_at_20=winner_ask_at_20,
+            peak_up_move=peak_up_move,
+            peak_down_move=peak_down_move,
         )
 
         # Dedup — skip if this slug was already recorded
@@ -388,8 +451,9 @@ class AdaptiveEntryTracker:
 
         logger.info(
             "Adaptive entry recorded: %s winner=%s, dir@$20=%s, reversed=%s, "
-            "winner_ask@$20=$%.3f",
+            "winner_ask@$20=$%.3f, peak_up=$%.0f, peak_down=$%.0f",
             slug, winner, direction_at_20, reversed_flag, winner_ask_at_20,
+            peak_up_move, peak_down_move,
         )
 
     @property
@@ -405,7 +469,7 @@ class AdaptiveEntryTracker:
 
     @property
     def signal_type(self) -> str:
-        """Signal type: MOMENTUM (<35%), UNCERTAIN (35-55%), CONTRARIAN (>55%)."""
+        """Signal type: MOMENTUM (<40%), UNCERTAIN (40-60%), CONTRARIAN (>60%)."""
         return self._signal_type
 
     @property
@@ -421,17 +485,28 @@ class AdaptiveEntryTracker:
         """Whether we have enough candles for adaptive thresholds."""
         return len(self._history) >= self._window
 
+    @property
+    def fakeout_stats(self) -> dict:
+        """Fakeout statistics for dashboard display."""
+        return {
+            "using_fakeout": self._using_fakeout,
+            "fakeout_p75": round(self._fakeout_p75, 1),
+            "fakeout_max": round(self._fakeout_max, 1),
+            "fakeout_median": round(self._fakeout_median, 1),
+        }
+
     def get_summary(self) -> str:
         """Generate a human-readable summary for logging/dashboard."""
         window = self._history[-self._window:]
         if not window:
             return "Adaptive entry: no history yet"
         reversal_rate = self.rolling_reversal_rate
+        method = f"fakeout P75=${self._fakeout_p75:.0f}" if self._using_fakeout else "v-shaped fallback"
         return (
             f"Adaptive entry (last {len(window)} candles): "
             f"reversal_rate={reversal_rate:.0%}, "
             f"signal={self._signal_type}, "
-            f"btc_thresh=${self.btc_threshold:.0f}, "
+            f"btc_thresh=${self.btc_threshold:.0f} ({method}), "
             f"max_entry=${self.max_entry_price:.2f}"
         )
 
@@ -456,7 +531,14 @@ class AdaptiveEntryTracker:
             f"- BTC move threshold: ${self.btc_threshold:.0f}",
         ]
 
-        if rate > 0.55:
+        if self._using_fakeout:
+            lines.append(
+                f"- Fakeout noise: P75=${self._fakeout_p75:.0f}, "
+                f"max=${self._fakeout_max:.0f}, median=${self._fakeout_median:.0f} "
+                f"(threshold set above typical fakeout magnitudes)"
+            )
+
+        if rate > 0.60:
             lines.extend([
                 "",
                 f"⚠ **High reversal rate ({rate:.0%})**: The initial BTC direction (first $20 move) "
@@ -464,6 +546,17 @@ class AdaptiveEntryTracker:
                 f"opposite to the current BTC move — may be the better entry. "
                 f"When reversals dominated, the winning side's average ask was "
                 f"${self._avg_reversal_winner_ask():.2f} at the $20 cross.",
+            ])
+        elif rate >= 0.40:
+            # UNCERTAIN regime (40-60%): coin-flip market, direction is unreliable
+            lines.extend([
+                "",
+                f"⚠ **Uncertain market ({rate:.0%} reversal)**: Direction is essentially a coin flip. "
+                f"Do NOT try to predict direction — buy whichever side has the CHEAPEST ask price. "
+                f"At ~50% accuracy, only cheap entries (high R/R) are profitable after fees. "
+                f"Compare UP ask vs DOWN ask and pick the lower one. "
+                f"An entry at $0.35 profits $0.65 on a win and loses $0.35 on a loss — "
+                f"even at 50% that's +$0.15 per trade. An entry at $0.60 loses -$0.10 per trade at 50%.",
             ])
         elif rate < 0.25:
             lines.extend([

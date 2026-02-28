@@ -1391,16 +1391,48 @@ body::after {
   position: absolute;
   top: 36px; left: 0; right: 0;
   height: 8px;
-  pointer-events: none;
 }
 .tl-tick {
   position: absolute;
   width: 2px; height: 6px;
   border-radius: 1px;
   top: 0;
+  padding: 0 3px;
+  margin-left: -3px;
+  background-clip: content-box;
+  cursor: pointer;
 }
-.tl-tick.pass { background: var(--green); opacity: 0.5; }
-.tl-tick.fail { background: var(--text-muted); opacity: 0.25; }
+.tl-tick.pass { background-color: var(--green); opacity: 0.5; }
+.tl-tick.fail { background-color: var(--text-muted); opacity: 0.25; }
+.tl-tick.fail.cheap { background-color: var(--amber); opacity: 0.55; }
+.tl-tick:hover { opacity: 1 !important; transform: scaleY(1.6); }
+
+/* ═══ PREFILTER POPOVER ═══ */
+.pf-popover {
+  position: absolute;
+  z-index: 600;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.5rem 0.6rem;
+  font: 400 0.6rem/1.5 var(--mono);
+  color: var(--text-main);
+  min-width: 220px;
+  max-width: 280px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+  pointer-events: auto;
+  display: none;
+}
+.pf-popover.vis { display: block; }
+.pf-popover .pf-header { font-weight: 600; margin-bottom: 0.3rem; font-size: 0.65rem; }
+.pf-popover .pf-header.pass { color: var(--green); }
+.pf-popover .pf-header.fail { color: var(--red); }
+.pf-popover .pf-header.cheap-fail { color: var(--amber); }
+.pf-popover .pf-row { display: flex; justify-content: space-between; gap: 0.5rem; }
+.pf-popover .pf-lbl { color: var(--text-muted); }
+.pf-popover .pf-val { text-align: right; }
+.pf-popover .pf-sep { border-top: 1px solid var(--border); margin: 0.25rem 0; }
+.pf-popover .pf-cheap { color: var(--green); font-weight: 600; }
 
 /* ═══ AI MODEL BADGES ═══ */
 .tl-model-badge {
@@ -2427,9 +2459,9 @@ function render(d) {
     const revPct = (ae.reversal_rate * 100).toFixed(0);
     const regime = ae.regime || (ae.reversal_rate < 0.20 ? 'calm' : ae.reversal_rate < 0.40 ? 'moderate' : 'choppy');
     const regimeLabel = regime === 'CALM' || regime === 'calm' ? 'Calm Market' : regime === 'CHOPPY' || regime === 'choppy' ? 'Choppy' : 'Moderate';
-    const signalType = ae.signal_type || (ae.reversal_rate > 0.55 ? 'CONTRARIAN' : ae.reversal_rate < 0.35 ? 'MOMENTUM' : 'UNCERTAIN');
+    const signalType = ae.signal_type || (ae.reversal_rate > 0.60 ? 'CONTRARIAN' : ae.reversal_rate < 0.40 ? 'MOMENTUM' : 'UNCERTAIN');
     const signalColor = signalType === 'CONTRARIAN' ? 'var(--blue, #60a5fa)' : signalType === 'MOMENTUM' ? 'var(--green)' : 'var(--amber)';
-    const threshColor = ae.btc_threshold <= 25 ? 'var(--green)' : ae.btc_threshold >= 40 ? 'var(--red)' : 'var(--amber)';
+    const threshColor = ae.btc_threshold <= 25 ? 'var(--green)' : ae.btc_threshold >= 60 ? 'var(--red)' : 'var(--amber)';
     const entryColor = ae.max_entry_price <= 0.45 ? 'var(--green)' : ae.max_entry_price >= 0.60 ? 'var(--red)' : 'var(--amber)';
     const revColor = ae.reversal_rate < 0.20 ? 'var(--green)' : ae.reversal_rate >= 0.40 ? 'var(--red)' : 'var(--amber)';
     const histLabel = ae.has_enough_history
@@ -2449,7 +2481,7 @@ function render(d) {
       </div>`;
     } else {
       aeInner = `<div class="risk-grid">
-        <div class="risk-cell" data-tip="BTC must move this much from candle open before AI is triggered. Lower = more aggressive (trusts early signals).">
+        <div class="risk-cell" data-tip="BTC must move this much from candle open before AI is triggered. Derived from fakeout magnitudes (P75 + $5 margin) — set above typical noise so only strong signals trigger entry. Range: $20–$100.">
           <div class="risk-lbl">BTC Threshold</div>
           <div class="risk-val" style="color:${threshColor}">$${ae.btc_threshold.toFixed(0)}${ae.btc_threshold % 1 !== 0 ? ' (' + ae.btc_threshold.toFixed(1) + ')' : ''}</div>
         </div>
@@ -2470,6 +2502,12 @@ function render(d) {
           <span style="color:var(--text-muted)">Signal</span>
           <span style="color:${signalColor};font-weight:600">${signalType}</span>
         </div>
+        ${ae.using_fakeout ? `<div style="margin-top:0.25rem;padding:0.15rem 0.5rem;border-radius:4px;background:color-mix(in srgb,var(--blue, #60a5fa) 15%,transparent);border:1px solid color-mix(in srgb,var(--blue, #60a5fa) 30%,transparent);display:inline-flex;align-items:center;gap:0.4rem;font-size:0.7rem">
+          <span style="color:var(--text-muted)">Fakeout</span>
+          <span style="color:var(--blue, #60a5fa);font-weight:600">P75=$${ae.fakeout_p75.toFixed(0)}</span>
+          <span style="color:var(--text-muted)">max=$${ae.fakeout_max.toFixed(0)}</span>
+          <span style="color:var(--text-muted)">med=$${ae.fakeout_median.toFixed(0)}</span>
+        </div>` : ''}
         <div class="ae-sub">${histLabel}</div>
       </div>`;
       // Market trend badge (if available)
@@ -3221,6 +3259,7 @@ function renderSessionHistoryMd(md) {
 // ═══ CANDLE TIMELINES ═══
 function buildCandleTimelines(trades, resolutions, currentMarket, candleSnapshots) {
   if (!trades.length) return '<div class="empty"><div class="empty-icon">~</div>No trades yet</div>';
+  _pfSnapData = {};
   const cs = candleSnapshots || {};
 
   const candleMap = new Map();
@@ -3247,6 +3286,7 @@ function buildCandleTimelines(trades, resolutions, currentMarket, candleSnapshot
     const collapsed = !isLive;
     const polyUrl = 'https://polymarket.com/event/' + slug;
     const snap = cs[slug]; // candle snapshot data
+    if (snap?.points?.length) _pfSnapData[ci] = snap.points;
 
     // Badge
     let badge;
@@ -3303,15 +3343,19 @@ function buildCandleTimelines(trades, resolutions, currentMarket, candleSnapshot
       regimeBar = `<div class="tl-regime-bar ${rClass}"></div>`;
     }
 
-    // Prefilter tick marks from snapshot data
+    // Prefilter tick marks from snapshot data (interactive)
     let pfTicks = '';
+    const pfTickId = `pfticks-${ci}`;
     if (snap?.points?.length) {
-      pfTicks = '<div class="tl-ticks">';
-      for (const pt of snap.points) {
+      pfTicks = `<div class="tl-ticks" id="${pfTickId}">`;
+      for (let pi = 0; pi < snap.points.length; pi++) {
+        const pt = snap.points[pi];
         const tr = pt.tr || 0;
         const pct = Math.min(100, Math.max(0, ((CANDLE_DUR - tr) / CANDLE_DUR) * 100));
-        const cls = pt.pf ? 'pass' : 'fail';
-        pfTicks += `<div class="tl-tick ${cls}" style="left:${pct.toFixed(1)}%"></div>`;
+        const minAsk = Math.min(pt.u_ask || 1, pt.d_ask || 1);
+        const isCheap = !pt.pf && minAsk < 0.35;
+        const cls = pt.pf ? 'pass' : (isCheap ? 'fail cheap' : 'fail');
+        pfTicks += `<div class="tl-tick ${cls}" style="left:${pct.toFixed(1)}%" data-pt-idx="${pi}" data-ci="${ci}"></div>`;
       }
       pfTicks += '</div>';
     }
@@ -3479,6 +3523,120 @@ function toggleInputData(id) {
   const toggle = el.previousElementSibling;
   if (toggle) toggle.innerHTML = isHidden ? 'Hide Input Data &#9650;' : 'Show Input Data &#9660;';
 }
+
+// ═══ PREFILTER TICK POPOVER ═══
+let _pfSnapData = {};  // { ci_index: [points array] }
+let _pfPopEl = null;
+let _pfPopTimer = null;
+let _pfHideTimer = null;
+
+function initPfPopover() {
+  if (_pfPopEl) return;
+  _pfPopEl = document.createElement('div');
+  _pfPopEl.className = 'pf-popover';
+  document.body.appendChild(_pfPopEl);
+  _pfPopEl.addEventListener('mouseenter', () => clearTimeout(_pfHideTimer));
+  _pfPopEl.addEventListener('mouseleave', () => hidePfPopover());
+}
+
+function showPfPopover(tick) {
+  clearTimeout(_pfHideTimer);
+  clearTimeout(_pfPopTimer);
+  _pfPopTimer = setTimeout(() => {
+    initPfPopover();
+    const ci = tick.getAttribute('data-ci');
+    const pi = parseInt(tick.getAttribute('data-pt-idx'));
+    const pts = _pfSnapData[ci];
+    if (!pts || !pts[pi]) return;
+    const pt = pts[pi];
+
+    const passed = !!pt.pf;
+    const minAsk = Math.min(pt.u_ask || 1, pt.d_ask || 1);
+    const isCheap = minAsk < 0.35;
+    const cheapSide = (pt.u_ask || 1) <= (pt.d_ask || 1) ? 'UP' : 'DN';
+
+    // Header
+    let hdrCls, hdrTxt;
+    if (passed) {
+      hdrCls = 'pass';
+      hdrTxt = '&#9679; PASS';
+    } else {
+      hdrCls = isCheap ? 'cheap-fail' : 'fail';
+      hdrTxt = '&#10007; FAIL' + (pt.pfr ? ': ' + esc(pt.pfr) : '');
+    }
+
+    // Time
+    const tr = pt.tr || 0;
+    const elapsed = Math.round(CANDLE_DUR - tr);
+    const timeStr = Math.floor(elapsed / 60) + ':' + String(Math.floor(elapsed % 60)).padStart(2, '0');
+
+    // BTC
+    const btcStr = pt.btc ? '$' + Number(pt.btc).toLocaleString(undefined, {maximumFractionDigits: 0}) : '--';
+    const mvSign = (pt.btc_mv || 0) >= 0 ? '+' : '';
+    const mvCol = (pt.btc_mv || 0) >= 0 ? 'var(--green)' : 'var(--red)';
+
+    // Build rows
+    let h = `<div class="pf-header ${hdrCls}">${hdrTxt}</div><div class="pf-sep"></div>`;
+    h += `<div class="pf-row"><span class="pf-lbl">Time</span><span class="pf-val">${timeStr} elapsed (${Math.round(tr)}s left)</span></div>`;
+
+    // UP ask + R/R
+    const uAsk = pt.u_ask != null ? '$' + pt.u_ask.toFixed(2) : '--';
+    const uRR = pt.rr_u != null ? pt.rr_u.toFixed(2) : '--';
+    const uCheap = cheapSide === 'UP' && isCheap;
+    h += `<div class="pf-row"><span class="pf-lbl">UP ask</span><span class="pf-val${uCheap ? ' pf-cheap' : ''}">${uAsk}  R/R ${uRR}${uCheap ? ' cheap' : ''}</span></div>`;
+
+    // DN ask + R/R
+    const dAsk = pt.d_ask != null ? '$' + pt.d_ask.toFixed(2) : '--';
+    const dRR = pt.rr_d != null ? pt.rr_d.toFixed(2) : '--';
+    const dCheap = cheapSide === 'DN' && isCheap;
+    h += `<div class="pf-row"><span class="pf-lbl">DN ask</span><span class="pf-val${dCheap ? ' pf-cheap' : ''}">${dAsk}  R/R ${dRR}${dCheap ? ' cheap' : ''}</span></div>`;
+
+    h += `<div class="pf-sep"></div>`;
+    h += `<div class="pf-row"><span class="pf-lbl">BTC</span><span class="pf-val">${btcStr}  <span style="color:${mvCol}">${mvSign}$${Math.abs(pt.btc_mv || 0).toFixed(0)}</span></span></div>`;
+
+    // Spreads
+    if (pt.u_sp != null || pt.d_sp != null) {
+      h += `<div class="pf-row"><span class="pf-lbl">Spread</span><span class="pf-val">UP ${pt.u_sp != null ? pt.u_sp.toFixed(1) + '%' : '--'}  DN ${pt.d_sp != null ? pt.d_sp.toFixed(1) + '%' : '--'}</span></div>`;
+    }
+    // Depth
+    if (pt.u_dep != null || pt.d_dep != null) {
+      h += `<div class="pf-row"><span class="pf-lbl">Depth</span><span class="pf-val">UP $${pt.u_dep != null ? (pt.u_dep/1000).toFixed(1) + 'k' : '--'}  DN $${pt.d_dep != null ? (pt.d_dep/1000).toFixed(1) + 'k' : '--'}</span></div>`;
+    }
+    // Streak
+    if (pt.stk != null && pt.stk !== 0) {
+      h += `<div class="pf-row"><span class="pf-lbl">Streak</span><span class="pf-val">${pt.stk} ${(pt.stk_d || '').toUpperCase()} candles</span></div>`;
+    }
+
+    _pfPopEl.innerHTML = h;
+    _pfPopEl.classList.add('vis');
+
+    // Position near tick
+    const rect = tick.getBoundingClientRect();
+    const popW = _pfPopEl.offsetWidth;
+    let left = rect.left + rect.width / 2 - popW / 2;
+    if (left < 4) left = 4;
+    if (left + popW > window.innerWidth - 4) left = window.innerWidth - popW - 4;
+    _pfPopEl.style.left = left + 'px';
+    _pfPopEl.style.top = (rect.top - _pfPopEl.offsetHeight - 6 + window.scrollY) + 'px';
+  }, 200);
+}
+
+function hidePfPopover() {
+  clearTimeout(_pfPopTimer);
+  _pfHideTimer = setTimeout(() => {
+    if (_pfPopEl) _pfPopEl.classList.remove('vis');
+  }, 150);
+}
+
+// Delegate hover events for prefilter ticks
+document.addEventListener('mouseover', e => {
+  const tick = e.target.closest('.tl-tick');
+  if (tick) showPfPopover(tick);
+});
+document.addEventListener('mouseout', e => {
+  const tick = e.target.closest('.tl-tick');
+  if (tick) hidePfPopover();
+});
 
 // ═══ RESOLUTIONS TABLE ═══
 function buildResTable(resolutions) {
