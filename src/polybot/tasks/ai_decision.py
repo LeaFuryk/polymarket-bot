@@ -1111,6 +1111,16 @@ class AIDecision:
                 record.extra["hypothetical_direction"] = decision.hypothetical_direction
             if decision.confidence_drivers:
                 record.extra["confidence_drivers"] = decision.confidence_drivers
+            # Capture opposite-side context for side-selection learning
+            if decision.action.value == "BUY":
+                if decision.token_side.value == "up":
+                    opp_ask = snapshot.down_orderbook.best_ask
+                else:
+                    opp_ask = snapshot.orderbook.best_ask
+                if opp_ask is not None:
+                    record.extra["opposite_ask"] = round(opp_ask, 4)
+                record.extra["signal_type"] = self._shared.signal_type
+                record.extra["reversal_rate"] = round(self._shared.reversal_rate, 2)
 
         if fill:
             record.fill_price = fill.fill_price

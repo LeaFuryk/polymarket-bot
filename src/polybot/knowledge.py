@@ -37,6 +37,8 @@ Bad: "NEVER trade above 0.40" or "ALWAYS wait for confirmation"
 ## Recent Trades (with fills)
 {trades_table}
 
+{side_selection_analysis}
+
 ## Active Observations (with age and expiry)
 {active_observations}
 
@@ -49,14 +51,15 @@ Bad: "NEVER trade above 0.40" or "ALWAYS wait for confirmation"
 
 1. Look at the scorecard delta — did things get better or worse? Why?
 2. Look at individual resolutions + trades — what patterns explain wins/losses?
-3. Produce 1-5 NEW descriptive observations. Each must be:
+3. Pay attention to Side Selection Analysis — did the bot pick the wrong side when a cheap entry existed?
+4. Produce 1-5 NEW descriptive observations. Each must be:
    - Descriptive, not imperative (what happened, not what to do)
    - Based on evidence from the data above
    - Categorized: "pattern", "bias", "edge", or "regime"
    - Given an expiry (default 30 resolutions, shorter for uncertain observations)
-4. Review active observations — if any are contradicted by new data, expire them by ID.
-5. Write a one-line session entry summarizing this batch.
-6. Optionally adjust at most 2 indicator settings in feature_config.
+5. Review active observations — if any are contradicted by new data, expire them by ID.
+6. Write a one-line session entry summarizing this batch.
+7. Optionally adjust at most 2 indicator settings in feature_config.
 
 ## FORBIDDEN
 - Do NOT write imperatives ("NEVER", "ALWAYS", "require X threshold")
@@ -423,8 +426,10 @@ class KnowledgeManager:
 
                 lines.append("")
                 lines.append("Your recent trades and outcomes:")
-                lines.append("| Token | Entry | Conf | Winner | Result |")
-                lines.append("|-------|-------|------|--------|--------|")
+                lines.append("| Token | Entry | Opp Ask | Signal | Winner | Result |")
+                lines.append("|-------|-------|---------|--------|--------|--------|")
+                expensive_side_losses = 0
+                expensive_side_total = 0
                 for t in recent_filled:
                     res = res_by_slug.get(t.candle_slug)
                     if res:
@@ -432,10 +437,34 @@ class KnowledgeManager:
                         result = "WIN" if won else "LOSS"
                     else:
                         result = "pending"
+                    opp = t.extra.get("opposite_ask")
+                    opp_str = f"${opp:.2f}" if opp is not None else "—"
+                    sig = t.extra.get("signal_type", "—")
                     lines.append(
-                        f"| {t.action.value} {t.token_side.value.upper()} | {t.fill_price:.4f} | {t.confidence:.2f} | {res.winner if res else '?'} | {result} |"
+                        f"| {t.action.value} {t.token_side.value.upper()} | {t.fill_price:.4f} "
+                        f"| {opp_str} | {sig} | {res.winner if res else '?'} | {result} |"
                     )
+                    # Track expensive-side pattern in uncertain/contrarian markets
+                    if (
+                        t.action.value == "BUY"
+                        and t.fill_price > 0.55
+                        and opp is not None
+                        and opp < 0.40
+                        and sig in ("UNCERTAIN", "CONTRARIAN")
+                        and res
+                    ):
+                        expensive_side_total += 1
+                        if not won:
+                            expensive_side_losses += 1
                 lines.append("")
+                # Pattern warning: expensive-side buying in uncertain markets
+                if expensive_side_total >= 2:
+                    lines.append(
+                        f"  !! Pattern: {expensive_side_losses}/{expensive_side_total} losses from buying "
+                        f"expensive side (>$0.55) when cheap side was <$0.40 in uncertain markets. "
+                        f"The cheap side had better EV."
+                    )
+                    lines.append("")
 
         # Last 10 resolutions as compact table
         if resolutions:
@@ -509,15 +538,51 @@ class KnowledgeManager:
             )
         resolutions_table = "\n".join(res_lines)
 
-        # Build trades table
-        trade_lines = ["| Cycle | Action | Side | Size | Confidence | Fill Price | Reasoning |"]
-        trade_lines.append("|-------|--------|------|------|------------|------------|-----------|")
+        # Build trades table (with opposite-side context for side-selection learning)
+        trade_lines = ["| Cycle | Action | Side | Fill | Opp Ask | Signal | Conf | Reasoning |"]
+        trade_lines.append("|-------|--------|------|------|---------|--------|------|-----------|")
         for t in trades[-20:]:
+            opp = t.extra.get("opposite_ask")
+            opp_str = f"${opp:.2f}" if opp is not None else "—"
+            sig = t.extra.get("signal_type", "—")
             trade_lines.append(
-                f"| {t.cycle_number} | {t.action.value} | {t.token_side.value} | {t.decision_size:.1f} "
-                f"| {t.confidence:.2f} | {t.fill_price or 'N/A'} | {t.reasoning[:60]} |"
+                f"| {t.cycle_number} | {t.action.value} | {t.token_side.value} | {t.fill_price or 'N/A'} "
+                f"| {opp_str} | {sig} | {t.confidence:.2f} | {t.reasoning[:60]} |"
             )
         trades_table = "\n".join(trade_lines)
+
+        # Side selection analysis — flag trades that bought expensive side
+        # when cheap opposite existed in uncertain/contrarian markets
+        res_by_slug_refl = {r.slug: r for r in resolutions}
+        side_flags = []
+        for t in trades[-20:]:
+            if t.action.value != "BUY" or t.fill_price is None:
+                continue
+            opp = t.extra.get("opposite_ask")
+            sig = t.extra.get("signal_type")
+            rev = t.extra.get("reversal_rate")
+            if opp is None or sig is None:
+                continue
+            if t.fill_price > 0.55 and opp < 0.40 and sig in ("UNCERTAIN", "CONTRARIAN"):
+                res = res_by_slug_refl.get(t.candle_slug)
+                outcome = "?"
+                if res:
+                    outcome = "WIN" if t.token_side.value == res.winner else "LOSS"
+                rev_str = f"rev={rev:.0%}" if rev is not None else ""
+                side_flags.append(
+                    f"- BUY {t.token_side.value.upper()} @ ${t.fill_price:.2f} "
+                    f"({('DOWN' if t.token_side.value == 'up' else 'UP')} was ${opp:.2f}) "
+                    f"| {sig} ({rev_str}) | {outcome}"
+                )
+        if side_flags:
+            side_selection_analysis = (
+                "## Side Selection Analysis\n"
+                "Trades that bought the expensive side (>$0.55) when the opposite was cheap (<$0.40) "
+                "in uncertain/contrarian markets:\n"
+                + "\n".join(side_flags)
+            )
+        else:
+            side_selection_analysis = ""
 
         # Active observations with IDs for possible expiry
         active_obs = self.load_active_observations()
@@ -546,6 +611,7 @@ class KnowledgeManager:
             scorecard_text=scorecard_text,
             resolutions_table=resolutions_table,
             trades_table=trades_table,
+            side_selection_analysis=side_selection_analysis,
             active_observations=active_observations,
             feature_config_json=feature_config_json,
         )
