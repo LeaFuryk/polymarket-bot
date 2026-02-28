@@ -4,6 +4,24 @@ All notable changes to this project will be documented in this file.
 
 ## [v0.7.0] — 2026-02-28
 
+### Changed — Cheap entry pipeline: stop blocking profitable opportunities
+
+iter_011 analysis: 17 of 22 candles (77%) had the winner side at < $0.50, 14 at < $0.40. The bot captured zero cheap entries — all 4 wins were at expensive fills ($0.75–$0.81). Every pipeline layer was blocking cheap entries before they reached Claude.
+
+**Problem**: The EV math is clear — a $0.35 entry breaks even at 35% accuracy. At 50%: +$0.15/trade. At 40%: +$0.05/trade. Cheap entries are +EV by construction, but the adaptive entry gate (requires BTC move $30+), prefilter spread check, Haiku screening threshold ($0.30), and drawdown warnings all conspired to block them.
+
+**Changes across 4 files:**
+
+1. **Adaptive entry bypass** (`adaptive_entry.py`) — When `min_ask <= 0.35`, `should_trigger()` returns True regardless of BTC move threshold. Cheap entries reach AI before BTC crosses the fakeout threshold. Cooldown + prefilter still gate.
+
+2. **Prefilter spread exemption** (`prefilter.py`) — Check 2 (both spreads wide) is skipped when `best_entry < 0.35`. Wide spreads on a $0.30 entry are noise vs the R/R.
+
+3. **Haiku attractive entry raised** (`prompts.py`) — Screening prompt "attractive entry" threshold: `< $0.30` → `< $0.40`. The false rule for unattractive entries also raised from $0.40 → $0.50. Entries at $0.30–$0.40 now qualify as standalone pass-through signals.
+
+4. **Softer drawdown/streak for cheap entries** (`knowledge.py`) — Drawdown alert now includes: "Exception: very cheap entries (ask < $0.35) have favorable R/R even at lower accuracy — do not skip these." Losing streak warning changed to: "Increase selectivity on expensive entries. Cheap entries (ask < $0.35) remain +EV even at low win rates."
+
+**Not changed**: Claude's decision freedom (changes get entries TO Claude, don't force buys), position sizing, SL/TP, risk checks, fakeout threshold formula (still gates normal entries), cooldown (60s), prefilter time/depth/choppy checks.
+
 ### Changed — Fakeout-based dynamic BTC threshold
 
 Replaced the V-shaped reversal-rate formula ($20–$50) with a **fakeout magnitude-based threshold** ($20–$100) learned from the last 10 candles' actual BTC trajectories.

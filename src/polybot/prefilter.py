@@ -112,15 +112,18 @@ class PreFilter:
             return result
 
         # Check 2: Both orderbooks have wide spreads
+        # Exempt cheap entries (< $0.35) — wide spreads on a $0.30 entry
+        # are noise vs the R/R. Cheap entries are +EV by construction.
         up_spread = snapshot.orderbook.spread_pct
         down_spread = snapshot.down_orderbook.spread_pct
-        if (up_spread is not None and up_spread > self.max_spread_pct and
-                down_spread is not None and down_spread > self.max_spread_pct):
-            result.should_skip = True
-            result.reason = f"Both spreads wide: UP={up_spread:.2%}, DOWN={down_spread:.2%}"
-            self.total_skipped += 1
-            logger.info("Pre-filter SKIP: %s", result.reason)
-            return result
+        if best_entry >= 0.35:
+            if (up_spread is not None and up_spread > self.max_spread_pct and
+                    down_spread is not None and down_spread > self.max_spread_pct):
+                result.should_skip = True
+                result.reason = f"Both spreads wide: UP={up_spread:.2%}, DOWN={down_spread:.2%}"
+                self.total_skipped += 1
+                logger.info("Pre-filter SKIP: %s", result.reason)
+                return result
 
         # Check 3: Both orderbooks lack depth
         up_depth = snapshot.orderbook.bid_depth + snapshot.orderbook.ask_depth
