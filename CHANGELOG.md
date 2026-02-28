@@ -2,6 +2,39 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v0.8.1] — 2026-02-28
+
+### Changed — Retracement-based reversal detection
+
+The old reversal detection ("which side crossed the fakeout threshold first?") measured noise, not commitment. A $25 bounce on the way to an $80 drop was counted as "reversed." And a genuine $60 wrong-direction commitment that crossed the threshold first got missed.
+
+**New algorithm** — reversal = commitment + retracement + acceleration:
+
+1. **Identify initial BTC direction** — first snapshot with |move| > $5
+2. **Threshold crossing** — if BTC crosses the fakeout threshold in the initial direction, momentum is confirmed. Winner determines reversal
+3. **80% retracement** — if BTC never crosses the threshold but retraces 80%+ of its peak commitment AND the retreat is accelerating (or has crossed zero), that's a reversal
+4. **Inconclusive** — neither threshold crossed nor 80% retraced → `reversed = False` (not enough commitment to judge)
+
+Three states replace the old binary threshold-crossing check:
+- **Momentum confirmed**: BTC crossed fakeout threshold → `reversed = (initial_direction != winner)`
+- **Retracement reversal**: 80%+ retracement with acceleration or zero-cross → `reversed = (initial_direction != winner)`
+- **Inconclusive**: Peak < $25 or retracement < 80% → `reversed = False`
+
+**Acceleration check**: Compares average directional position in the first half vs second half of sampled retreat readings (every 5 snapshots after peak). If second half is lower → retreat is accelerating. If price has crossed zero (opposite side of open), reversal is flagged regardless of acceleration.
+
+**Constants**: `RETRACEMENT_THRESHOLD = 0.80`, `MIN_PEAK_COMMIT = $25`, `VELOCITY_SAMPLE_SEC = 5`
+
+**Validation on 470 historical candles**:
+- 85% agreement with old algorithm
+- 37+ false positives eliminated (old=reversed, new=not): noise peaks below $25 excluded, plus cases where old $20 first-cross was fooled
+- 33 real reversals caught (old=missed, new=caught): mostly zero-cross reversals where BTC peaked $25+ then collapsed past zero
+
+**Files changed**:
+- `adaptive_entry.py`: new constants, `record_outcome()` and `bootstrap_from_binance()` use retracement logic, `get_ai_context()` prose updated, `CandleOutcome` docstrings updated
+- `prompts.py`: screening prompt wording updated
+
+**Not changed**: `direction_at_20`/`winner_ask_at_20` fields (still captured for entry price calibration), fakeout threshold computation, signal type thresholds, dynamic SL/TP, position sizing, JSONL field names
+
 ## [v0.8.0] — 2026-02-28
 
 ### Fixed — Bootstrap uses hardcoded $20 threshold, inflating reversal rate
