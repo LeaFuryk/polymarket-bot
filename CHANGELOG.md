@@ -2,7 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
-## [v0.5.1] — 2026-02-27
+## [v0.6.0] — 2026-02-28
+
+### Fixed — 3 improvements from iter_010 deep analysis (75% WR, +$155 net)
+
+**Bug fix: SL sell size rounding** — Position sizing creates fractional share counts (e.g., 30.6) via R/R scaling, but the AI prompt displayed shares as integers (`:.0f` rounds 30.6 → "31"). When the AI tried to sell "31 shares" with only 30.6 held, the `short_sell_prevention` risk check blocked the exit. This occurred 4 times in iter_010. Fixed by:
+- Clamping sell size to actual held shares before risk checks (`ai_decision.py`)
+- Showing share counts with 1 decimal (`:.1f`) in the AI prompt (`prompts.py`)
+
+**Entry price hard cap ($0.85)** — Data shows entries at $0.85+ (R/R < 0.18) have negative average PnL. Even at 85% accuracy, fees and execution costs push these trades underwater. Added a hard block on BUY entries where the best ask >= $0.85 (`ai_decision.py`).
+
+**Dashboard: Haiku screening visibility** — When Haiku screens and rejects a trade, the dashboard now shows:
+- Haiku's reasoning (was blank before — `_log_cycle` was called without a decision)
+- The actual formatted context Haiku received (BTC vs candle open, orderbook depth, R/R, indicators) via "Show Haiku Input" toggle
+
+**Haiku screening context enriched** — `format_screening_context` now includes the primary BTC signal (move from candle open), orderbook depth, and R/R ratios for both tokens. Previously it only showed raw BTC price with no candle-open comparison.
 
 ### Added — Live Polymarket CLOB Trading
 

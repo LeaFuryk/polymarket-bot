@@ -117,13 +117,14 @@ class DecisionEngine:
 
     async def screen(
         self, features: FeatureVector, indicators_text: str = "",
+        candle_open_btc: float | None = None,
     ) -> tuple[bool, str, float]:
         """Pass-1 screen: quick check via Haiku if there's a trade setup.
 
         Returns:
             Tuple of (should_trade, reason, api_cost_usd)
         """
-        prompt = format_screening_context(features, indicators_text)
+        prompt = format_screening_context(features, indicators_text, candle_open_btc=candle_open_btc)
         start = time.monotonic()
 
         try:

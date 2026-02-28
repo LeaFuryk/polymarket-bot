@@ -298,14 +298,14 @@ def format_feature_vector(
     lines.extend(["", "## Positions"])
     if fv.up_position.shares > 0:
         lines.append(
-            f"- UP: {fv.up_position.shares:.0f} shares @ {fv.up_position.avg_entry_price:.4f} "
+            f"- UP: {fv.up_position.shares:.1f} shares @ {fv.up_position.avg_entry_price:.4f} "
             f"(unrealized: ${fv.up_position.unrealized_pnl:.4f}, realized: ${fv.up_position.realized_pnl:.4f})"
         )
     else:
         lines.append("- UP: no position")
     if fv.down_position.shares > 0:
         lines.append(
-            f"- DOWN: {fv.down_position.shares:.0f} shares @ {fv.down_position.avg_entry_price:.4f} "
+            f"- DOWN: {fv.down_position.shares:.1f} shares @ {fv.down_position.avg_entry_price:.4f} "
             f"(unrealized: ${fv.down_position.unrealized_pnl:.4f}, realized: ${fv.down_position.realized_pnl:.4f})"
         )
     else:
@@ -342,26 +342,55 @@ def format_feature_vector(
     return "\n".join(lines)
 
 
-def format_screening_context(fv: FeatureVector, indicators_text: str = "") -> str:
-    """Format a compact context for the Pass-1 screening model (Haiku).
+def format_screening_context(
+    fv: FeatureVector,
+    indicators_text: str = "",
+    candle_open_btc: float | None = None,
+) -> str:
+    """Format context for the Pass-1 screening model (Haiku).
 
-    Much shorter than the full feature vector — just the essentials for
-    a TRADE/HOLD decision.
+    Compact but includes all key signals needed for a TRADE/HOLD gate.
     """
     up_ob = fv.market.orderbook
     down_ob = fv.market.down_orderbook
 
-    lines = [
-        f"Time remaining: {fv.time_remaining:.0f}s",
-        f"Up token: ask={up_ob.best_ask or 'N/A'} bid={up_ob.best_bid or 'N/A'} spread={up_ob.spread_pct:.2%}" if up_ob.spread_pct else "Up token: no data",
-        f"Down token: ask={down_ob.best_ask or 'N/A'} bid={down_ob.best_bid or 'N/A'} spread={down_ob.spread_pct:.2%}" if down_ob.spread_pct else "Down token: no data",
-    ]
+    lines = [f"Time remaining: {fv.time_remaining:.0f}s"]
 
-    # BTC context
-    if fv.market.btc_price:
-        lines.append(f"BTC: ${fv.market.btc_price.price_usd:,.0f}")
+    # PRIMARY SIGNAL: BTC vs candle open
+    if fv.market.btc_price and candle_open_btc is not None:
+        diff = fv.market.btc_price.price_usd - candle_open_btc
+        who = "UP winning" if diff >= 0 else "DOWN winning"
+        lines.append(
+            f"BTC: ${fv.market.btc_price.price_usd:,.2f} | "
+            f"Candle open: ${candle_open_btc:,.2f} | "
+            f"Move: ${diff:+,.2f} ({who})"
+        )
+    elif fv.market.btc_price:
+        lines.append(f"BTC: ${fv.market.btc_price.price_usd:,.2f}")
 
-    # Candle summary
+    # Orderbooks with depth
+    if up_ob.spread_pct is not None:
+        up_rr = (1.0 - up_ob.best_ask) / up_ob.best_ask if up_ob.best_ask and up_ob.best_ask > 0 else 0
+        lines.append(
+            f"UP token: ask={up_ob.best_ask} bid={up_ob.best_bid} "
+            f"spread={up_ob.spread_pct:.2%} "
+            f"depth=${up_ob.bid_depth:.0f}b/${up_ob.ask_depth:.0f}a "
+            f"R/R={up_rr:.2f}"
+        )
+    else:
+        lines.append("UP token: no data")
+    if down_ob.spread_pct is not None:
+        dn_rr = (1.0 - down_ob.best_ask) / down_ob.best_ask if down_ob.best_ask and down_ob.best_ask > 0 else 0
+        lines.append(
+            f"DOWN token: ask={down_ob.best_ask} bid={down_ob.best_bid} "
+            f"spread={down_ob.spread_pct:.2%} "
+            f"depth=${down_ob.bid_depth:.0f}b/${down_ob.ask_depth:.0f}a "
+            f"R/R={dn_rr:.2f}"
+        )
+    else:
+        lines.append("DOWN token: no data")
+
+    # BTC candle history
     candles = fv.market.btc_candles
     if candles:
         last_6 = candles[-6:] if len(candles) >= 6 else candles
