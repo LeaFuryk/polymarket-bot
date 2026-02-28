@@ -1424,6 +1424,15 @@ body::after {
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-sm);
 }
+.td-screen-input {
+  margin: 0;
+  font-size: 0.65rem;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+}
 .td-input-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
@@ -3322,17 +3331,22 @@ function buildCandleTimelines(trades, resolutions, currentMarket, candleSnapshot
       // Input data section (collapsible)
       let inputDataH = '';
       const inputId = `inp-${did}`;
-      inputDataH += `<div class="td-input-toggle" onclick="toggleInputData('${inputId}')">Show Input Data &#9660;</div>`;
-      inputDataH += `<div class="td-input-data" id="${inputId}" style="display:none"><div class="td-input-grid">`;
-      // Basic trade context
-      if (t.btc_price_usd) inputDataH += `<div class="td-input-item"><span class="td-input-label">BTC Price</span><span class="td-input-val">$${Number(t.btc_price_usd).toLocaleString()}</span></div>`;
-      if (t.midpoint) inputDataH += `<div class="td-input-item"><span class="td-input-label">UP Mid</span><span class="td-input-val">$${Number(t.midpoint).toFixed(4)}</span></div>`;
-      if (t.spread_pct != null) inputDataH += `<div class="td-input-item"><span class="td-input-label">Spread</span><span class="td-input-val">${(Number(t.spread_pct)*100).toFixed(1)}%</span></div>`;
-      if (t.cash != null) inputDataH += `<div class="td-input-item"><span class="td-input-label">Cash</span><span class="td-input-val">$${Number(t.cash).toFixed(2)}</span></div>`;
-      if (t.portfolio_value != null) inputDataH += `<div class="td-input-item"><span class="td-input-label">Portfolio</span><span class="td-input-val">$${Number(t.portfolio_value).toFixed(2)}</span></div>`;
-      if (t.fee != null) inputDataH += `<div class="td-input-item"><span class="td-input-label">Fee</span><span class="td-input-val">$${Number(t.fee).toFixed(4)}</span></div>`;
-      if (t.ai_cost != null) inputDataH += `<div class="td-input-item"><span class="td-input-label">AI Cost</span><span class="td-input-val">$${Number(t.ai_cost).toFixed(4)}</span></div>`;
-      inputDataH += `</div></div>`;
+      if (sp === false && t.screen_input) {
+        // Haiku-rejected: show the actual formatted context Haiku received
+        inputDataH += `<div class="td-input-toggle" onclick="toggleInputData('${inputId}')">Show Haiku Input &#9660;</div>`;
+        inputDataH += `<div class="td-input-data" id="${inputId}" style="display:none"><pre class="td-screen-input">${esc(t.screen_input)}</pre></div>`;
+      } else {
+        inputDataH += `<div class="td-input-toggle" onclick="toggleInputData('${inputId}')">Show Input Data &#9660;</div>`;
+        inputDataH += `<div class="td-input-data" id="${inputId}" style="display:none"><div class="td-input-grid">`;
+        if (t.btc_price_usd) inputDataH += `<div class="td-input-item"><span class="td-input-label">BTC Price</span><span class="td-input-val">$${Number(t.btc_price_usd).toLocaleString()}</span></div>`;
+        if (t.midpoint) inputDataH += `<div class="td-input-item"><span class="td-input-label">UP Mid</span><span class="td-input-val">$${Number(t.midpoint).toFixed(4)}</span></div>`;
+        if (t.spread_pct != null) inputDataH += `<div class="td-input-item"><span class="td-input-label">Spread</span><span class="td-input-val">${(Number(t.spread_pct)*100).toFixed(1)}%</span></div>`;
+        if (t.cash != null) inputDataH += `<div class="td-input-item"><span class="td-input-label">Cash</span><span class="td-input-val">$${Number(t.cash).toFixed(2)}</span></div>`;
+        if (t.portfolio_value != null) inputDataH += `<div class="td-input-item"><span class="td-input-label">Portfolio</span><span class="td-input-val">$${Number(t.portfolio_value).toFixed(2)}</span></div>`;
+        if (t.fee != null) inputDataH += `<div class="td-input-item"><span class="td-input-label">Fee</span><span class="td-input-val">$${Number(t.fee).toFixed(4)}</span></div>`;
+        if (t.ai_cost != null) inputDataH += `<div class="td-input-item"><span class="td-input-label">AI Cost</span><span class="td-input-val">$${Number(t.ai_cost).toFixed(4)}</span></div>`;
+        inputDataH += `</div></div>`;
+      }
 
       return `<div class="tl-detail" id="det-${did}">
         <div class="td-row"><span class="td-lbl">Time</span><span class="td-val">${t.timestamp ? shortTime(t.timestamp) : '--'} — ${Math.round(el)}s/${CANDLE_DUR}s (${Math.round(tr)}s left)</span></div>

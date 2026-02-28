@@ -204,8 +204,8 @@ class LiveExecutionEngine:
             )
             return None
 
-        # Min wallet balance (BUY only)
-        if side == Side.BUY and self._wallet_balance < self._config.min_wallet_balance_usd:
+        # Min wallet balance (BUY only, skipped in dry run)
+        if side == Side.BUY and not self._config.dry_run and self._wallet_balance < self._config.min_wallet_balance_usd:
             logger.warning(
                 "Live execution blocked: wallet $%.2f below min $%.2f",
                 self._wallet_balance, self._config.min_wallet_balance_usd,

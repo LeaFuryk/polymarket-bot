@@ -568,6 +568,7 @@ class AIDecision:
         if self._config.ai.two_pass_enabled and not has_position and not extra_context:
             should_trade, screen_reason, screen_cost = await self._engine.screen(
                 features, indicators_text=indicators_text,
+                candle_open_btc=candle_open_btc,
             )
             self._portfolio.cash -= screen_cost
             self._total_api_cost += screen_cost
@@ -578,7 +579,26 @@ class AIDecision:
                 self._last_screen_passed = False
                 self.last_action = f"HOLD (screen: {screen_reason[:60]})"
                 self.last_reasoning = screen_reason
-                self._log_cycle(cycle, snapshot, risk_blocked=False, risk_reason="")
+                # Build a lightweight decision so reasoning + screen context
+                # are captured in the trade record for the dashboard
+                from polybot.decision_engine.prompts import format_screening_context
+                screen_input = format_screening_context(
+                    features, indicators_text, candle_open_btc=candle_open_btc,
+                )
+                screen_decision = TradingDecision(
+                    action=Action.HOLD,
+                    order_type=OrderType.MARKET,
+                    size=0.0,
+                    confidence=0.0,
+                    reasoning=screen_reason,
+                    market_view="",
+                    token_side=TokenSide.UP,
+                )
+                self._log_cycle(
+                    cycle, snapshot, decision=screen_decision,
+                    risk_blocked=False, risk_reason="",
+                    screen_input=screen_input,
+                )
                 self._record_ai_call_time()
                 return
 
@@ -612,6 +632,28 @@ class AIDecision:
                     "Ensemble disagreement: ML=%s (%.0f%%) vs Sonnet=%s (conf=%.2f)",
                     ml_dir, ml_prediction.up_probability * 100,
                     sonnet_dir, decision.confidence,
+                )
+
+        # Clamp sell size to actual held shares (fixes rounding bug where
+        # position sizing creates fractional shares like 30.6 but the AI
+        # sees "31 shares" due to :.0f formatting and requests sell 31)
+        if decision.action == Action.SELL:
+            held = self._portfolio.get_position(decision.token_side).shares
+            if decision.size > held and held > 0:
+                logger.info(
+                    "Clamping sell size: %.2f → %.2f (held) for %s",
+                    decision.size, held, decision.token_side.value,
+                )
+                decision = TradingDecision(
+                    action=decision.action,
+                    order_type=decision.order_type,
+                    size=held,
+                    confidence=decision.confidence,
+                    reasoning=decision.reasoning,
+                    market_view=decision.market_view,
+                    token_side=decision.token_side,
+                    hypothetical_direction=decision.hypothetical_direction,
+                    confidence_drivers=decision.confidence_drivers,
                 )
 
         # Force token_side on exit triggers: don't trust AI's token_side for SELLs
@@ -746,6 +788,28 @@ class AIDecision:
                     size=0.0,
                     confidence=decision.confidence,
                     reasoning=f"Single-entry: already bought {side_key} on this candle. Original: {decision.reasoning[:80]}",
+                    market_view=decision.market_view,
+                    token_side=decision.token_side,
+                    hypothetical_direction=decision.hypothetical_direction,
+                    confidence_drivers=decision.confidence_drivers,
+                )
+
+        # Entry price hard cap: block entries at $0.85+ (R/R < 0.18, negative avg PnL)
+        if decision.action == Action.BUY:
+            cap_ob = down_ob if decision.token_side == TokenSide.DOWN else up_ob
+            cap_price = cap_ob.best_ask or 0.5
+            if cap_price >= 0.85:
+                logger.info(
+                    "Entry price cap: %s ask $%.2f >= $0.85 (R/R=%.2f), overriding to HOLD",
+                    decision.token_side.value, cap_price,
+                    (1.0 - cap_price) / cap_price,
+                )
+                decision = TradingDecision(
+                    action=Action.HOLD,
+                    order_type=OrderType.MARKET,
+                    size=0.0,
+                    confidence=decision.confidence,
+                    reasoning=f"Entry price cap: ${cap_price:.2f} >= $0.85 (R/R too low). Original: {decision.reasoning[:80]}",
                     market_view=decision.market_view,
                     token_side=decision.token_side,
                     hypothetical_direction=decision.hypothetical_direction,
@@ -989,7 +1053,7 @@ class AIDecision:
     def _log_cycle(
         self, cycle, snapshot, decision=None, latency_ms=0.0,
         fill=None, risk_blocked=False, risk_reason="",
-        paper_fill=None,
+        paper_fill=None, screen_input=None,
     ) -> None:
         """Log a cycle to trade log and update trade history."""
         ob = snapshot.orderbook
@@ -1027,6 +1091,8 @@ class AIDecision:
             record.extra["time_remaining"] = market.time_remaining()
 
         record.extra["screen_passed"] = self._last_screen_passed
+        if screen_input:
+            record.extra["screen_input"] = screen_input
 
         if decision:
             record.action = decision.action

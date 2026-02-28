@@ -105,9 +105,11 @@ Waits for entry triggers (from MarketMonitor) or exit triggers (from PositionMon
 7. **Anti-hedge guard** — Blocks BUY if opposite side has shares
 7b. **Anti-flip guard** — Blocks buying the opposite side after a SELL on the same candle (prevents whipsaw). Same-side re-entry allowed
 7c. **Single-entry-per-side** — Blocks buying the same side twice on the same candle (code-enforced position discipline)
-8. **Position sizing** — Gentle R/R scale (0.75x-1.0x, since data shows cheap entries are often contrarian traps). Multiplied by BTC move magnitude scaling (80%/90%/100%) and counter-trend reduction (50-70%). Minimum 40 shares (20 for counter-trend)
-8. **Post-trade risk checks** — Position size, concentration, cash, spread (BUY only)
-9. **Execute + log** — Simulate fill, update portfolio, write TradeRecord
+7d. **Entry price cap** — Blocks BUY when best ask >= $0.85 (R/R < 0.18, negative avg PnL in backtesting)
+8. **Sell size clamp** — Clamps sell size to actual held shares (fixes rounding from fractional position sizing)
+9. **Position sizing** — Gentle R/R scale (0.75x-1.0x, since data shows cheap entries are often contrarian traps). Multiplied by BTC move magnitude scaling (80%/90%/100%) and counter-trend reduction (50-70%). Minimum 40 shares (20 for counter-trend)
+10. **Post-trade risk checks** — Position size, concentration, cash, spread (BUY only)
+11. **Execute + log** — Simulate fill, update portfolio, write TradeRecord
 
 ### PositionMonitor (every 1 second)
 

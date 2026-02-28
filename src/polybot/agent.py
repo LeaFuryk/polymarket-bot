@@ -271,8 +271,8 @@ class TradingAgent:
                 logger.critical("LIVE MODE: missing API credentials — run scripts/generate_api_key.py first")
                 return
             initial_balance = await self._live_engine.sync_balance()
-            if initial_balance <= 0:
-                logger.critical("LIVE MODE: wallet balance is $%.2f — aborting", initial_balance)
+            if initial_balance <= 0 and not tc.dry_run:
+                logger.critical("LIVE MODE: wallet balance is $%.2f — aborting (fund wallet or use dry_run=true)", initial_balance)
                 return
             logger.info(
                 "LIVE MODE: wallet balance $%.2f, max_order=$%.0f, kill_switch=-$%.0f, dry_run=%s",
@@ -1038,6 +1038,7 @@ class TradingAgent:
                     "unrealized_pnl": t.unrealized_pnl,
                     "ai_cost": t.ai_cost,
                     "screen_passed": t.extra.get("screen_passed"),
+                    "screen_input": t.extra.get("screen_input"),
                 }
                 trades.append(trade_entry)
 
