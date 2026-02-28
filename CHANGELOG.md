@@ -4,6 +4,26 @@ All notable changes to this project will be documented in this file.
 
 ## [v0.8.1] — 2026-02-28
 
+### Reverted — Cheap entry pipeline (v0.7.0) causing 21% WR / -$267 over 4 iterations
+
+iter_011 through iter_014 analysis: 62 trades, 30% combined WR, -$267 net. Root cause traced to v0.7.0's cheap entry pipeline — 4 coordinated changes that removed every gate blocking cheap entries. Before v0.7.0 (iter_010): 75% WR, +$155. After: consistent losses.
+
+The "breaks even at 35% accuracy" EV math was correct but the assumption was wrong — bypassing all gates doesn't give 35%+ accuracy, it gives 21%. Cheap entries that happen *naturally* (after BTC moves past threshold) had ~56% WR; force-fed cheap entries without BTC signal had 21%.
+
+**Reverted 4 changes:**
+
+1. **Adaptive entry bypass removed** (`adaptive_entry.py`) — `min_ask <= 0.35 → return True` bypass removed. Cheap entries now require BTC to cross the fakeout threshold like any other entry. The threshold already adapts to market conditions ($20-$100).
+
+2. **Prefilter spread exemption removed** (`prefilter.py`) — Check 2 (both spreads wide) now applies to all entries regardless of price. Wide spreads on cheap entries were being dismissed as "noise vs R/R" but actually signal thin markets where fills are unreliable.
+
+3. **Haiku screening thresholds restored** (`prompts.py`) — "Attractive entry" reverted from `< $0.40` to `< $0.30`. "Unattractive entries" reverted from `> $0.50` to `> $0.40`. Tighter screening prevents low-quality entries from reaching Sonnet.
+
+4. **Drawdown/streak cheap exceptions removed** (`knowledge.py`) — Removed "Exception: very cheap entries remain +EV — do not skip these" from drawdown alert and losing streak warning. During drawdowns, ALL entries should be more selective.
+
+**Kept from v0.7.0:** Fakeout-based threshold formula (sound improvement), UNCERTAIN cheapest-side suggestion (fires after BTC crosses threshold).
+
+**Kept from v0.8.0:** Wider SL for cheap entries (≤$0.30: 15%, ≤$0.40: 10%) — helps the rare natural cheap entries that pass threshold.
+
 ### Changed — Retracement-based reversal detection
 
 The old reversal detection ("which side crossed the fakeout threshold first?") measured noise, not commitment. A $25 bounce on the way to an $80 drop was counted as "reversed." And a genuine $60 wrong-direction commitment that crossed the threshold first got missed.

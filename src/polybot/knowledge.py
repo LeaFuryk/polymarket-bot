@@ -368,9 +368,7 @@ class KnowledgeManager:
                 lines.append(
                     f"## SESSION DRAWDOWN ALERT\n"
                     f"Last {len(recent_10)} resolutions: ${rolling_pnl:+.2f} net.\n"
-                    f"Consider being more selective — prioritize high-conviction setups and smaller sizes.\n"
-                    f"Exception: very cheap entries (ask < $0.35) have favorable R/R even at lower "
-                    f"accuracy — do not skip these."
+                    f"Consider being more selective — prioritize high-conviction setups and smaller sizes."
                 )
                 if session_pnl < 0:
                     lines.append(f"Session overall: ${session_pnl:+.2f}")
@@ -420,8 +418,7 @@ class KnowledgeManager:
                     if streak >= 3:
                         lines.append(
                             f"  !! You are on a {streak}-trade losing streak. "
-                            f"Increase selectivity on expensive entries. "
-                            f"Cheap entries (ask < $0.35) remain +EV even at low win rates."
+                            f"Increase selectivity — prioritize high-conviction setups."
                         )
 
                 lines.append("")
