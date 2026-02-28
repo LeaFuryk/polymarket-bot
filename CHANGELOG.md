@@ -29,6 +29,13 @@ Replaced the V-shaped reversal-rate formula ($20–$50) with a **fakeout magnitu
 
 **Unchanged**: `reversal_rate`, `signal_type`, `regime`, `direction_at_20`, `reversed`, `max_entry_price`, dynamic SL/TP — only the BTC threshold formula and UNCERTAIN market guidance are changed.
 
+### Fixed — Haiku screening blocks UNCERTAIN market entries
+
+The Haiku screening prompt used the old signal boundaries (CONTRARIAN >55%, false-when < 55%) and had no awareness of the UNCERTAIN regime. In 40–60% reversal markets with balanced prices, Haiku would reject valid cheap-side entries because "both asks > $0.40 and reversal rate < 55%" matched its false rule. Updated:
+- CONTRARIAN trigger: >55% → >60%
+- False rules: reversal rate < 55% → < 40% (don't block UNCERTAIN zone)
+- New true rule: uncertain (40–60%) + balanced prices ($0.35–$0.65) + BTC moved >$15 = valid cheap-side setup
+
 ### Fixed — AI cooldown race condition
 
 The 60s cooldown between AI calls was bypassed when MarketMonitor re-triggered during an async Haiku/Sonnet call. The race: (1) MarketMonitor checks cooldown → OK → sets trigger event, (2) AIDecision clears event, starts async Haiku call, (3) MarketMonitor's next 1s tick sees event cleared and cooldown still based on the *previous* call time → sets event again, (4) Haiku finishes, calls `_record_ai_call_time()` → but event is already re-set. Result: two Haiku calls 19s apart instead of 60s. Fix: record `ai_last_call_time` immediately when the entry trigger fires (before async work), not after completion. The final call time is still updated when the decision completes.
