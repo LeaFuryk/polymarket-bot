@@ -509,7 +509,11 @@ class AIDecision:
 
         # Inject adaptive entry reversal context (visible to both Haiku screen and Sonnet)
         if self._adaptive_entry is not None:
-            reversal_ctx = self._adaptive_entry.get_ai_context()
+            # Compute abs BTC move for UNCERTAIN regime gating
+            abs_btc_move = 0.0
+            if candle_open_btc is not None and snapshot.btc_price:
+                abs_btc_move = abs(snapshot.btc_price.price_usd - candle_open_btc)
+            reversal_ctx = self._adaptive_entry.get_ai_context(abs_btc_move=abs_btc_move)
             if reversal_ctx:
                 indicators_text = indicators_text + "\n\n" + reversal_ctx if indicators_text else reversal_ctx
 

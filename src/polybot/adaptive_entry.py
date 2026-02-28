@@ -395,13 +395,13 @@ class AdaptiveEntryTracker:
             btc_close: BTC price at candle close
             prefilter_history: List of PreFilterSnapshot from the candle
         """
-        # Find the first snapshot where BTC moved >= $20 from open
+        # Find the first snapshot where BTC moved past the fakeout noise floor
         direction_at_20 = ""
         winner_ask_at_20 = 0.0
 
         for snap in prefilter_history:
             btc_move = snap.btc_move_from_open
-            if abs(btc_move) >= 20.0:
+            if abs(btc_move) >= self.btc_threshold:
                 direction_at_20 = "up" if btc_move > 0 else "down"
                 # Get the winner-side ask at this point
                 if winner == "up":
@@ -410,7 +410,7 @@ class AdaptiveEntryTracker:
                     winner_ask_at_20 = snap.best_entry_down
                 break
 
-        # If BTC never moved $20, use final direction
+        # If BTC never moved past threshold, use final direction
         if not direction_at_20:
             final_move = btc_close - btc_open
             direction_at_20 = "up" if final_move >= 0 else "down"
@@ -423,6 +423,9 @@ class AdaptiveEntryTracker:
                     winner_ask_at_20 = last_snap.best_entry_down
 
         reversed_flag = direction_at_20 != winner
+        # Near-zero BTC moves are timing noise, not real reversals
+        if abs(btc_close - btc_open) < 5.0:
+            reversed_flag = False
 
         # Compute peak up/down moves from prefilter history
         peak_up_move = 0.0
@@ -516,8 +519,14 @@ class AdaptiveEntryTracker:
             f"max_entry=${self.max_entry_price:.2f}"
         )
 
-    def get_ai_context(self) -> str | None:
+    def get_ai_context(self, abs_btc_move: float = 0.0) -> str | None:
         """Build reversal rate context for the AI prompt.
+
+        Args:
+            abs_btc_move: Absolute BTC price change from candle open.
+                Used to gate UNCERTAIN cheapest-side suggestion — only
+                suggest contrarian when BTC hasn't cleared the fakeout
+                noise floor.
 
         Returns None if insufficient history. Otherwise returns a section
         with the actual reversal rate and signal interpretation.
@@ -554,17 +563,28 @@ class AdaptiveEntryTracker:
                 f"${self._avg_reversal_winner_ask():.2f} at the $20 cross.",
             ])
         elif rate >= 0.40:
-            # UNCERTAIN regime (40-60%): direction unreliable, prefer cheap entries
-            lines.extend([
-                "",
-                f"⚠ **Uncertain market ({rate:.0%} reversal)**: Direction has been unreliable. "
-                f"When both sides are priced near even (both asks $0.35–$0.65), "
-                f"**lean toward the cheaper side** — at ~50% accuracy, only cheap entries are profitable. "
-                f"An entry at $0.35 profits +$0.15/trade at 50%; $0.60 loses -$0.10/trade at 50%. "
-                f"However, if one side is clearly confirmed by price (e.g., $0.90 vs $0.10), "
-                f"trust the market signal — the cheap side is cheap for a reason. "
-                f"This applies mainly to early-candle balanced prices, not late confirmations.",
-            ])
+            if abs_btc_move >= self.btc_threshold:
+                # BTC has cleared the fakeout noise floor — momentum is real
+                lines.extend([
+                    "",
+                    f"⚠ **Uncertain reversal history ({rate:.0%} at initial cross)** but BTC has moved "
+                    f"**${abs_btc_move:.0f}** — past the fakeout threshold (${self.btc_threshold:.0f}). "
+                    f"The reversal rate was measured at the initial cross; moves beyond "
+                    f"${self.btc_threshold:.0f} have cleared typical fakeout noise. "
+                    f"Momentum entries are favored over contrarian.",
+                ])
+            else:
+                # Below fakeout threshold — could still be noise, cheapest-side guidance applies
+                lines.extend([
+                    "",
+                    f"⚠ **Uncertain market ({rate:.0%} reversal)**: Direction has been unreliable. "
+                    f"When both sides are priced near even (both asks $0.35–$0.65), "
+                    f"**lean toward the cheaper side** — at ~50% accuracy, only cheap entries are profitable. "
+                    f"An entry at $0.35 profits +$0.15/trade at 50%; $0.60 loses -$0.10/trade at 50%. "
+                    f"However, if one side is clearly confirmed by price (e.g., $0.90 vs $0.10), "
+                    f"trust the market signal — the cheap side is cheap for a reason. "
+                    f"This applies mainly to early-candle balanced prices, not late confirmations.",
+                ])
         elif rate < 0.25:
             lines.extend([
                 "",

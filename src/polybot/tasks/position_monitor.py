@@ -213,8 +213,10 @@ class PositionMonitor:
                 price_adj = 0.06    # expensive → tighten 6%
             elif ep >= 0.60:
                 price_adj = 0.03    # moderately expensive → tighten 3%
+            elif ep <= 0.30:
+                price_adj = -0.15   # very cheap → widen 15% (huge % swings are normal)
             elif ep <= 0.40:
-                price_adj = -0.05   # cheap → widen 5%
+                price_adj = -0.10   # cheap → widen 10%
 
         # Combine: positive adjustments = tighter (less negative SL), negative = wider
         raw_sl = time_sl + regime_adj + vel_adj + ml_adj + price_adj
