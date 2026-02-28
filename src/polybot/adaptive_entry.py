@@ -548,15 +548,16 @@ class AdaptiveEntryTracker:
                 f"${self._avg_reversal_winner_ask():.2f} at the $20 cross.",
             ])
         elif rate >= 0.40:
-            # UNCERTAIN regime (40-60%): coin-flip market, direction is unreliable
+            # UNCERTAIN regime (40-60%): direction unreliable, prefer cheap entries
             lines.extend([
                 "",
-                f"⚠ **Uncertain market ({rate:.0%} reversal)**: Direction is essentially a coin flip. "
-                f"Do NOT try to predict direction — buy whichever side has the CHEAPEST ask price. "
-                f"At ~50% accuracy, only cheap entries (high R/R) are profitable after fees. "
-                f"Compare UP ask vs DOWN ask and pick the lower one. "
-                f"An entry at $0.35 profits $0.65 on a win and loses $0.35 on a loss — "
-                f"even at 50% that's +$0.15 per trade. An entry at $0.60 loses -$0.10 per trade at 50%.",
+                f"⚠ **Uncertain market ({rate:.0%} reversal)**: Direction has been unreliable. "
+                f"When both sides are priced near even (both asks $0.35–$0.65), "
+                f"**lean toward the cheaper side** — at ~50% accuracy, only cheap entries are profitable. "
+                f"An entry at $0.35 profits +$0.15/trade at 50%; $0.60 loses -$0.10/trade at 50%. "
+                f"However, if one side is clearly confirmed by price (e.g., $0.90 vs $0.10), "
+                f"trust the market signal — the cheap side is cheap for a reason. "
+                f"This applies mainly to early-candle balanced prices, not late confirmations.",
             ])
         elif rate < 0.25:
             lines.extend([
