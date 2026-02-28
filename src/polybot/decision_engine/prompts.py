@@ -22,7 +22,7 @@ Say should_trade=true if ANY of these apply:
 - Entry prices are very attractive (either token ask < $0.40)
 - Clear candle streak of 4+ consecutive same-direction candles (mean reversion setup)
 - Reversal rate is high (>60%) AND BTC has moved — contrarian entry opportunity
-- Reversal rate is uncertain (40-60%) AND prices are balanced (both asks $0.35-$0.65) AND BTC move magnitude >$15 — cheap-side entry opportunity
+- Reversal rate is uncertain (40-60%) AND prices are balanced (both asks $0.35-$0.65) AND BTC move magnitude is moderate ($15-$50) — cheap-side entry opportunity. At larger moves (>$50), favor momentum — the move has cleared typical fakeout noise
 
 Say should_trade=false if ANY of these apply:
 - BTC move magnitude < $15 AND no streak (< 3 same-direction) AND time < 120s AND reversal rate < 40%

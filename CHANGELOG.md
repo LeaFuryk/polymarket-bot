@@ -4,6 +4,40 @@ All notable changes to this project will be documented in this file.
 
 ## [v0.8.0] — 2026-02-28
 
+### Fixed — UNCERTAIN contrarian overtrading + cheap entry SL
+
+iter_013 analysis: 19 trades, 31% win rate, -$21.41 PnL. UNCERTAIN trades destroyed PnL (12 trades, 25% WR, -$34.53) while MOMENTUM trades were fine (7 trades, 67% WR, +$13.12). Three interconnected fixes:
+
+**1. Reversal detection threshold: $20 → dynamic fakeout threshold** (`adaptive_entry.py`)
+
+The reversal rate was inflated by a hardcoded $20 detection threshold. At $20, small moves (noise) were counted as "reversals" — BTC bouncing up $22 on its way to closing -$80 was flagged as "reversed." Data: small moves (<$57 fakeout threshold) had a 59% "reversal" rate (coin flips); large moves (>=$57) had only 26%. The 40% blended rate put the signal into UNCERTAIN territory when the market was actually momentum-driven for real moves.
+
+- `record_outcome()`: replaced hardcoded `>= 20.0` with `>= self.btc_threshold` (the dynamically-computed fakeout threshold from P75 of peak wrong-direction moves)
+- Added guard: near-zero BTC moves (`abs(btc_close - btc_open) < 5.0`) are now excluded from reversal counting — these are Chainlink timing artifacts, not real reversals
+
+No circular dependency: `btc_threshold` is computed from fakeout magnitudes (`peak_up_move`/`peak_down_move`), NOT from the `reversed` flag.
+
+**2. BTC-move-aware UNCERTAIN suggestion** (`adaptive_entry.py`, `ai_decision.py`)
+
+The cheapest-side suggestion fired in UNCERTAIN markets regardless of how far BTC had moved. At $80 BTC move, telling Claude to go contrarian is fighting strong momentum.
+
+- `get_ai_context()` now accepts `abs_btc_move` parameter
+- When BTC has cleared the fakeout threshold: message says "momentum entries are favored over contrarian"
+- When BTC is below the threshold: original cheapest-side guidance applies (could still be noise)
+- Adapts automatically to volatility — in noisy markets with $60+ fakeouts, the threshold is higher
+
+**3. Wider dynamic SL for cheap entries** (`position_monitor.py`)
+
+Current SL widened only 5% for cheap entries. At $0.34 entry with -35% base SL, exit triggered at $0.255 — an absolute swing of just $0.085. In iter_013, 3 of 11 losses (27%) were correct-side trades killed by SL before resolution.
+
+- Very cheap (≤$0.30): widen 15% (was 5%)
+- Cheap (≤$0.40): widen 10% (was 5%)
+- Example: $0.34 entry → SL at $0.187 (was $0.204), giving cheap tokens room for their naturally large percentage swings
+
+**4. Haiku screening: scope UNCERTAIN cheap-side to moderate moves** (`prompts.py`)
+
+Updated the UNCERTAIN screening rule to note that cheap-side entries apply to moderate BTC moves ($15-$50), and larger moves (>$50) should favor momentum.
+
 ### Fixed — Haiku screening rejects negative BTC moves as "below threshold"
 
 Haiku compared the signed BTC move value (e.g., `$-80`) against the `>$15` threshold using naive comparison: `-80 < 15` = true, so an $80 DOWN move was rejected as "no signal." Added explicit instruction that BTC moves are signed values and all threshold comparisons must use the absolute magnitude. Changed all threshold language from "BTC move" to "BTC move magnitude."
