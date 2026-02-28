@@ -164,29 +164,83 @@ class MarketMonitor:
         best_rr = max(rr_up, rr_down)
         prefilter_passed = not pf_result.should_skip
         min_ask = min(up_ask, down_ask)
+        best_side = "up" if rr_up >= rr_down else "down"
 
         # Adaptive trigger: uses rolling reversal rate to set BTC threshold + max entry
+        adaptive_passed = False
+        adaptive_reason = ""
         if self._adaptive_enabled and self._adaptive_entry is not None:
-            should_trigger = (
-                prefilter_passed
-                and self._adaptive_entry.should_trigger(
-                    abs_btc_move=abs(btc_move),
-                    min_ask=min_ask,
-                )
+            adaptive_passed = self._adaptive_entry.should_trigger(
+                abs_btc_move=abs(btc_move),
+                min_ask=min_ask,
             )
+            if not adaptive_passed:
+                btc_thresh = self._adaptive_entry.btc_threshold
+                max_entry = self._adaptive_entry.max_entry_price
+                parts = []
+                if abs(btc_move) < btc_thresh:
+                    parts.append(f"BTC move ${abs(btc_move):.0f} < ${btc_thresh:.0f} threshold")
+                if min_ask > max_entry:
+                    parts.append(f"min ask ${min_ask:.2f} > ${max_entry:.2f} max entry")
+                adaptive_reason = "; ".join(parts) if parts else "adaptive gate blocked"
+            should_trigger = prefilter_passed and adaptive_passed
         else:
             # Fallback: static R/R threshold
-            should_trigger = (
-                prefilter_passed
-                and best_rr >= self._rr_threshold
-            )
+            adaptive_passed = best_rr >= self._rr_threshold
+            if not adaptive_passed:
+                adaptive_reason = f"R/R {best_rr:.2f} < {self._rr_threshold:.2f} threshold"
+            should_trigger = prefilter_passed and adaptive_passed
+
+        # Check cooldown
+        now = time.time()
+        elapsed = now - self._shared.ai_last_call_time
+        cooldown_active = elapsed < self._cooldown
+        cooldown_remaining = max(0, self._cooldown - elapsed)
+
+        # Build gate status for dashboard (every tick)
+        gate_status = "TRIGGERED" if should_trigger and not cooldown_active else ""
+        if not prefilter_passed:
+            gate_status = f"PREFILTER: {pf_result.reason}"
+        elif not adaptive_passed:
+            gate_status = f"ADAPTIVE: {adaptive_reason}"
+        elif cooldown_active:
+            gate_status = f"COOLDOWN: {cooldown_remaining:.0f}s remaining"
+        elif self._shared.ai_trigger_event.is_set():
+            gate_status = "AI PENDING (waiting for previous decision)"
+
+        self._shared.monitor_status = {
+            "timestamp": now,
+            "time_remaining": time_remaining,
+            "btc_price": btc_price_val,
+            "btc_move": btc_move,
+            "candle_open_btc": candle_open or 0,
+            "up_ask": up_ask,
+            "down_ask": down_ask,
+            "up_mid": up_mid,
+            "down_mid": down_mid,
+            "rr_up": round(rr_up, 3),
+            "rr_down": round(rr_down, 3),
+            "best_side": best_side,
+            "up_spread": up_ob.spread_pct,
+            "down_spread": down_ob.spread_pct,
+            "up_depth": up_ob.bid_depth + up_ob.ask_depth,
+            "down_depth": down_ob.bid_depth + down_ob.ask_depth,
+            "streak": pf_result.consecutive_streak,
+            "streak_dir": pf_result.streak_direction,
+            "has_position": has_position,
+            # Gate pipeline
+            "prefilter_passed": prefilter_passed,
+            "prefilter_reason": pf_result.reason if not prefilter_passed else "",
+            "adaptive_passed": adaptive_passed,
+            "adaptive_reason": adaptive_reason,
+            "cooldown_active": cooldown_active,
+            "cooldown_remaining": round(cooldown_remaining, 1),
+            "ai_triggered": should_trigger and not cooldown_active,
+            "gate_status": gate_status,
+        }
 
         if should_trigger and not self._shared.ai_trigger_event.is_set():
-            # Check cooldown
-            now = time.time()
-            elapsed = now - self._shared.ai_last_call_time
-            if elapsed >= self._cooldown:
-                best_side = "up" if rr_up >= rr_down else "down"
+            if not cooldown_active:
                 if self._adaptive_enabled and self._adaptive_entry is not None:
                     self._shared.ai_trigger_reason = (
                         f"adaptive btc_thresh=${self._adaptive_entry.btc_threshold:.0f}, "

@@ -111,5 +111,9 @@ class SharedState:
         self.dynamic_sl: dict[str, float] = {}  # for dashboard display
         self.dynamic_tp: dict[str, float] = {}
 
+        # Real-time monitor status (updated every tick by MarketMonitor)
+        # Shows the full gate pipeline: prefilter → adaptive → cooldown → trigger
+        self.monitor_status: dict = {}
+
         # Shutdown flag
         self.shutdown: bool = False

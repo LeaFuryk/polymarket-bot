@@ -1194,6 +1194,7 @@ class TradingAgent:
                     "prefilter_snapshots": len(self._shared.prefilter_history),
                     "ai_cooldown_remaining": max(0, self._config.monitor.ai_cooldown_seconds - (time.time() - self._shared.ai_last_call_time)),
                     "last_trigger_reason": self._shared.ai_trigger_reason,
+                    "status": self._shared.monitor_status,
                 },
                 "adaptive_entry": {
                     "enabled": self._config.monitor.adaptive_entry_enabled,
