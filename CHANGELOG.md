@@ -29,6 +29,10 @@ Replaced the V-shaped reversal-rate formula ($20–$50) with a **fakeout magnitu
 
 **Unchanged**: `reversal_rate`, `signal_type`, `regime`, `direction_at_20`, `reversed`, `max_entry_price`, dynamic SL/TP — only the BTC threshold formula and UNCERTAIN market guidance are changed.
 
+### Fixed — AI cooldown race condition
+
+The 60s cooldown between AI calls was bypassed when MarketMonitor re-triggered during an async Haiku/Sonnet call. The race: (1) MarketMonitor checks cooldown → OK → sets trigger event, (2) AIDecision clears event, starts async Haiku call, (3) MarketMonitor's next 1s tick sees event cleared and cooldown still based on the *previous* call time → sets event again, (4) Haiku finishes, calls `_record_ai_call_time()` → but event is already re-set. Result: two Haiku calls 19s apart instead of 60s. Fix: record `ai_last_call_time` immediately when the entry trigger fires (before async work), not after completion. The final call time is still updated when the decision completes.
+
 ### Added — Interactive prefilter ticks on candle timeline
 
 Prefilter tick marks on the candle timeline are now hoverable with a rich popover showing the full prefilter context at each snapshot:

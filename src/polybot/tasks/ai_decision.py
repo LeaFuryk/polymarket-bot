@@ -276,6 +276,10 @@ class AIDecision:
 
     async def _handle_entry_trigger(self) -> None:
         """Handle an entry opportunity trigger from the market monitor."""
+        # Record call time immediately to prevent MarketMonitor from
+        # re-triggering during the async Haiku/Sonnet call
+        self._record_ai_call_time()
+
         self._last_screen_passed = None  # Reset per cycle
         self._cycle_count += 1
         cycle = self._cycle_count
@@ -323,7 +327,6 @@ class AIDecision:
             self.last_action = "BLOCKED (pre-trade)"
             self.last_risk_status = reasons
             self._log_cycle(cycle, snapshot, risk_blocked=True, risk_reason=reasons)
-            self._record_ai_call_time()
             return
 
         await self._run_ai_decision(cycle, snapshot, market, time_remaining, portfolio_value)
@@ -599,7 +602,6 @@ class AIDecision:
                     risk_blocked=False, risk_reason="",
                     screen_input=screen_input,
                 )
-                self._record_ai_call_time()
                 return
 
             self._last_screen_passed = True
