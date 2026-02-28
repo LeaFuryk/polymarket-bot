@@ -25,7 +25,7 @@ Replaced the V-shaped reversal-rate formula ($20–$50) with a **fakeout magnitu
 
 **Dashboard**: Fakeout badge shows P75/Max/Median when fakeout data is active. BTC Threshold tooltip updated. Color breakpoints widened for $100 range (red at $60+).
 
-**Cheapest-side guidance for UNCERTAIN markets** — When reversal rate is 40–60% (coin-flip territory), the AI now receives explicit guidance to stop guessing direction and buy whichever side has the cheapest ask price. At ~50% accuracy, only cheap entries (high R/R) are profitable after fees. Session data showed 3 of 6 losses in uncertain markets came from Claude picking expensive entries on the wrong side. The math is clear: $0.35 entry at 50% accuracy = +$0.15/trade; $0.60 entry at 50% = -$0.10/trade. Signal type boundaries widened to match: MOMENTUM (<40%), UNCERTAIN (40–60%), CONTRARIAN (>60%).
+**Cheapest-side suggestion for UNCERTAIN markets** — When reversal rate is 40–60% (coin-flip territory), the AI receives a suggestion to lean toward the cheaper side when both asks are in the balanced range ($0.35–$0.65). At ~50% accuracy, only cheap entries are profitable after fees. However, this is a soft suggestion — when one side is clearly confirmed by price (e.g., $0.90 vs $0.10), the AI should trust the market signal. The guidance applies mainly to early-candle balanced prices, not late confirmations. Signal type boundaries widened to match: MOMENTUM (<40%), UNCERTAIN (40–60%), CONTRARIAN (>60%).
 
 **Unchanged**: `reversal_rate`, `signal_type`, `regime`, `direction_at_20`, `reversed`, `max_entry_price`, dynamic SL/TP — only the BTC threshold formula and UNCERTAIN market guidance are changed.
 
