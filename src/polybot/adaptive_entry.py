@@ -35,6 +35,11 @@ logger = logging.getLogger(__name__)
 DEFAULT_BTC_THRESHOLD = 30.0  # $30 BTC move
 DEFAULT_MAX_ENTRY = 0.60  # $0.60 max ask
 
+# Retracement-based reversal detection constants
+RETRACEMENT_THRESHOLD = 0.80  # 80% of peak must be retraced
+MIN_PEAK_COMMIT = 25.0        # $25 minimum peak to evaluate retracement
+VELOCITY_SAMPLE_SEC = 5       # sample interval for acceleration check
+
 
 @dataclass
 class CandleOutcome:
@@ -44,8 +49,8 @@ class CandleOutcome:
     winner: str  # "up" or "down"
     btc_open: float
     btc_close: float
-    direction_at_20: str  # BTC direction when move first crossed $20
-    reversed: bool  # did the $20 direction disagree with the winner?
+    direction_at_20: str  # Initial BTC direction (for entry price capture)
+    reversed: bool  # BTC retraced 80%+ from initial commitment or threshold-confirmed direction disagreed with winner
     winner_ask_at_20: float  # ask price for the winning side at the $20 cross
     peak_up_move: float = 0.0  # max positive btc_move_from_open during candle
     peak_down_move: float = 0.0  # max abs(negative btc_move_from_open) during candle
@@ -196,28 +201,45 @@ class AdaptiveEntryTracker:
 
             winner = "up" if final_move > 0 else "down"
 
-            # Find initial direction: first 1-min candle where price moved past
-            # the fakeout noise floor (same threshold as record_outcome)
-            direction_at_20 = ""
-            for _, _, hi, lo, _ in mins:
-                up_move = hi - btc_open
-                down_move = btc_open - lo
-                if up_move >= self.btc_threshold:
-                    direction_at_20 = "up"
-                    break
-                if down_move >= self.btc_threshold:
-                    direction_at_20 = "down"
+            # Initial direction from first 1-min close
+            first_close = mins[0][4]
+            initial_direction = "up" if first_close >= btc_open else "down"
+            sign = 1.0 if initial_direction == "up" else -1.0
+
+            # Peak and retracement from 1-min closes
+            max_dir_move = 0.0
+            threshold_crossed = False
+            retracement_reversal = False
+            retreat_closes: list[float] = []
+
+            for _, _, hi, lo, cl in mins:
+                # Check threshold from high/low (more precise)
+                dir_hi = (hi - btc_open) * sign
+                dir_lo = (lo - btc_open) * sign
+                if max(dir_hi, dir_lo) >= self.btc_threshold:
+                    threshold_crossed = True
                     break
 
-            if not direction_at_20:
-                # BTC never moved past threshold — use the first 1-min candle direction
-                first_close = mins[0][4]
-                direction_at_20 = "up" if first_close >= btc_open else "down"
+                dir_close = (cl - btc_open) * sign
+                if dir_close > max_dir_move:
+                    max_dir_move = dir_close
+                    retreat_closes = []
+                elif max_dir_move >= MIN_PEAK_COMMIT:
+                    retreat_closes.append(dir_close)
+                    remaining_ratio = dir_close / max_dir_move if max_dir_move > 0 else 1.0
+                    if remaining_ratio < (1.0 - RETRACEMENT_THRESHOLD):
+                        if dir_close <= 0 or len(retreat_closes) >= 2:
+                            retracement_reversal = True
+                            break
 
-            reversed_flag = direction_at_20 != winner
-            # Near-zero moves are timing noise, not real reversals
+            if threshold_crossed or retracement_reversal:
+                reversed_flag = initial_direction != winner
+            else:
+                reversed_flag = False
             if abs(final_move) < 5.0:
                 reversed_flag = False
+
+            direction_at_20 = initial_direction
 
             # Estimate winner_ask_at_20 (no Polymarket data available)
             # Use conservative defaults based on observed patterns
@@ -389,8 +411,9 @@ class AdaptiveEntryTracker:
     ) -> None:
         """Record a candle resolution and update adaptive thresholds.
 
-        Retroactively determines the BTC direction at the $20 cross point
-        and what the winner-side ask was at that moment.
+        Uses retracement-based reversal detection: identifies initial BTC
+        direction, then checks for threshold crossing (momentum confirmed)
+        or 80%+ retracement with acceleration (reversal detected).
 
         Args:
             slug: Candle slug
@@ -399,39 +422,7 @@ class AdaptiveEntryTracker:
             btc_close: BTC price at candle close
             prefilter_history: List of PreFilterSnapshot from the candle
         """
-        # Find the first snapshot where BTC moved past the fakeout noise floor
-        direction_at_20 = ""
-        winner_ask_at_20 = 0.0
-
-        for snap in prefilter_history:
-            btc_move = snap.btc_move_from_open
-            if abs(btc_move) >= self.btc_threshold:
-                direction_at_20 = "up" if btc_move > 0 else "down"
-                # Get the winner-side ask at this point
-                if winner == "up":
-                    winner_ask_at_20 = snap.best_entry_up
-                else:
-                    winner_ask_at_20 = snap.best_entry_down
-                break
-
-        # If BTC never moved past threshold, use final direction
-        if not direction_at_20:
-            final_move = btc_close - btc_open
-            direction_at_20 = "up" if final_move >= 0 else "down"
-            # Use the last snapshot's ask if available
-            if prefilter_history:
-                last_snap = prefilter_history[-1]
-                if winner == "up":
-                    winner_ask_at_20 = last_snap.best_entry_up
-                else:
-                    winner_ask_at_20 = last_snap.best_entry_down
-
-        reversed_flag = direction_at_20 != winner
-        # Near-zero BTC moves are timing noise, not real reversals
-        if abs(btc_close - btc_open) < 5.0:
-            reversed_flag = False
-
-        # Compute peak up/down moves from prefilter history
+        # 1. Compute peak up/down moves from prefilter history
         peak_up_move = 0.0
         peak_down_move = 0.0
         for snap in prefilter_history:
@@ -440,6 +431,88 @@ class AdaptiveEntryTracker:
                 peak_up_move = move
             if move < 0 and abs(move) > peak_down_move:
                 peak_down_move = abs(move)
+
+        # 2. Identify initial BTC direction (first snapshot with |move| > $5)
+        initial_direction = ""
+        for snap in prefilter_history:
+            if abs(snap.btc_move_from_open) > 5.0:
+                initial_direction = "up" if snap.btc_move_from_open > 0 else "down"
+                break
+        if not initial_direction:
+            initial_direction = "up" if (btc_close - btc_open) >= 0 else "down"
+
+        # Capture winner ask at threshold crossing for entry price calibration
+        winner_ask_at_20 = 0.0
+        for snap in prefilter_history:
+            if abs(snap.btc_move_from_open) >= self.btc_threshold:
+                if winner == "up":
+                    winner_ask_at_20 = snap.best_entry_up
+                else:
+                    winner_ask_at_20 = snap.best_entry_down
+                break
+        if not winner_ask_at_20 and prefilter_history:
+            last_snap = prefilter_history[-1]
+            if winner == "up":
+                winner_ask_at_20 = last_snap.best_entry_up
+            else:
+                winner_ask_at_20 = last_snap.best_entry_down
+
+        # 3. Scan for threshold crossing or 80% retracement + acceleration
+        sign = 1.0 if initial_direction == "up" else -1.0
+        max_dir_move = 0.0
+        threshold_crossed = False
+        retracement_reversal = False
+        # Collect directional positions for velocity calculation
+        retreat_positions: list[float] = []
+        peak_index = 0
+
+        for i, snap in enumerate(prefilter_history):
+            dir_move = snap.btc_move_from_open * sign
+
+            # Track peak
+            if dir_move > max_dir_move:
+                max_dir_move = dir_move
+                peak_index = i
+                retreat_positions = []  # reset on new peak
+
+            # Threshold crossing → momentum confirmed, stop checking retracement
+            if dir_move >= self.btc_threshold:
+                threshold_crossed = True
+                break
+
+            # After peak: collect retreat positions (sampled every ~5 snapshots)
+            if i > peak_index and (i - peak_index) % VELOCITY_SAMPLE_SEC == 0:
+                retreat_positions.append(dir_move)
+
+            # 80% retracement check (needs meaningful peak)
+            if max_dir_move >= MIN_PEAK_COMMIT and dir_move < max_dir_move:
+                remaining_ratio = dir_move / max_dir_move  # <0 means crossed zero
+                if remaining_ratio < (1.0 - RETRACEMENT_THRESHOLD):  # < 0.20
+                    if dir_move <= 0:
+                        # Crossed zero — definitive reversal
+                        retracement_reversal = True
+                        break
+                    # Check acceleration: velocity trend over sampled positions
+                    if len(retreat_positions) >= 3:
+                        half = len(retreat_positions) // 2
+                        avg_first = sum(retreat_positions[:half]) / half
+                        avg_second = sum(retreat_positions[half:]) / (len(retreat_positions) - half)
+                        if avg_second < avg_first:  # lower position = faster retreat
+                            retracement_reversal = True
+                            break
+
+        # 4. Determine reversed
+        if threshold_crossed or retracement_reversal:
+            reversed_flag = initial_direction != winner
+        else:
+            reversed_flag = False  # inconclusive — not enough commitment
+
+        # Near-zero guard
+        if abs(btc_close - btc_open) < 5.0:
+            reversed_flag = False
+
+        # Keep direction_at_20 field for JSONL compat (now = initial_direction)
+        direction_at_20 = initial_direction
 
         outcome = CandleOutcome(
             slug=slug,
@@ -545,7 +618,7 @@ class AdaptiveEntryTracker:
         lines = [
             "## Reversal Rate Context (Adaptive Entry)",
             f"- Rolling reversal rate: **{rate:.0%}** "
-            f"({reversals} of last {len(window)} candles reversed from initial BTC direction)",
+            f"({reversals} of last {len(window)} candles showed 80%+ retracement from initial commitment)",
             f"- Signal type: **{self._signal_type}**",
             f"- BTC move threshold: ${self.btc_threshold:.0f}",
         ]
@@ -560,7 +633,7 @@ class AdaptiveEntryTracker:
         if rate > 0.60:
             lines.extend([
                 "",
-                f"⚠ **High reversal rate ({rate:.0%})**: The initial BTC direction (first $20 move) "
+                f"⚠ **High reversal rate ({rate:.0%})**: The initial commitment "
                 f"has been WRONG {rate:.0%} of the time recently. The cheap (contrarian) side — "
                 f"opposite to the current BTC move — may be the better entry. "
                 f"When reversals dominated, the winning side's average ask was "
@@ -592,7 +665,7 @@ class AdaptiveEntryTracker:
         elif rate < 0.25:
             lines.extend([
                 "",
-                f"✓ **Low reversal rate ({rate:.0%})**: BTC direction has been reliable. "
+                f"✓ **Low reversal rate ({rate:.0%})**: BTC rarely retraces from initial commitment. "
                 f"The initial move is continuing {1-rate:.0%} of the time. "
                 f"Momentum entries aligned with the current BTC direction are favored.",
             ])
