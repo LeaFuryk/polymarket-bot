@@ -391,11 +391,6 @@ class AdaptiveEntryTracker:
             True if BTC has moved enough AND entry price is reasonable,
             OR if entry is very cheap (<=0.35) regardless of BTC move.
         """
-        # Cheap entries are +EV by construction — $0.35 breaks even at 35%
-        # accuracy. Let these reach the AI before BTC crosses the fakeout
-        # threshold. Cooldown + prefilter still gate.
-        if min_ask <= 0.35:
-            return True
         return (
             abs_btc_move >= self.btc_threshold
             and min_ask <= self.max_entry_price
