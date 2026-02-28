@@ -59,6 +59,20 @@ monitor:
   tp_floor: 0.20           # never below +20%
   tp_ceiling: 1.20         # never above +120%
 
+trading:
+  mode: "paper"                     # "paper" (default — simulation only) or "live" (real CLOB orders + shadow paper)
+  # Credentials: set via env vars (POLYBOT_TRADING_PRIVATE_KEY, etc.) or here
+  private_key: ""
+  api_key: ""
+  api_secret: ""
+  api_passphrase: ""
+  chain_id: 137                     # Polygon mainnet
+  max_order_size_usd: 50.0          # hard cap per single order
+  max_session_loss_usd: 40.0        # kill switch: shutdown if session loss exceeds this
+  min_wallet_balance_usd: 5.0       # refuse BUY if wallet USDC below this
+  max_price_drift_pct: 0.03         # 3% — skip trade if price moved since AI decision
+  dry_run: false                    # sign orders but don't post (for testing auth flow)
+
 logging:
   log_dir: "logs"
   jsonl_enabled: true

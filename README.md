@@ -1,8 +1,8 @@
 # Polymarket BTC Candle Bot
 
-An AI-powered paper trading agent that trades Polymarket BTC 5-minute candle prediction markets using Claude as its decision engine. The bot features a self-improving feedback loop where Claude reflects on past outcomes, updates its own knowledge base, and tunes the indicators fed into future decisions.
+An AI-powered trading agent that trades Polymarket BTC 5-minute candle prediction markets using Claude as its decision engine. The bot features a self-improving feedback loop where Claude reflects on past outcomes, updates its own knowledge base, and tunes the indicators fed into future decisions.
 
-**Paper trading only** — no real money is ever at risk. The bot simulates order execution, slippage, fees, and portfolio accounting against live Polymarket orderbook data.
+**Two modes**: paper trading (default, simulated execution) or live trading (real CLOB orders via py-clob-client with shadow paper comparison). In paper mode, no real money is at risk. In live mode, real FOK orders are placed on Polymarket with 9 layers of safety (kill switch, order caps, drift checks, dry run).
 
 ---
 
@@ -262,6 +262,71 @@ The dashboard auto-refreshes every 30 seconds and shows a **deep analysis sectio
 
 Set `dashboard_enabled: false` in `config/default.yaml` for structured log output instead of the live Rich terminal dashboard.
 
+### Live Trading
+
+The bot supports real money trading on Polymarket via CLOB API. **Default is paper mode** — live trading must be explicitly enabled.
+
+#### 1. Generate API credentials
+
+Export your Polygon wallet private key from MetaMask, add it to `.env`:
+```
+POLYBOT_TRADING_PRIVATE_KEY=0x...
+```
+
+Then generate CLOB API credentials:
+```bash
+uv run python scripts/generate_api_key.py
+```
+
+This prints `POLYBOT_TRADING_API_KEY`, `POLYBOT_TRADING_API_SECRET`, and `POLYBOT_TRADING_API_PASSPHRASE` — add them to `.env`.
+
+#### 2. Test with dry run
+
+Set live mode with dry run enabled — orders are signed but not posted:
+```
+POLYBOT_TRADING_MODE=live
+POLYBOT_TRADING_DRY_RUN=true
+```
+
+Run the bot and verify: auth works, balance syncs, orders are signed, fills flow through correctly. Check logs for `DRY RUN:` messages.
+
+#### 3. Go live
+
+```
+POLYBOT_TRADING_MODE=live
+POLYBOT_TRADING_DRY_RUN=false
+```
+
+**Recommended first session**: watch the entire session, ready to Ctrl+C. The safety defaults are conservative:
+- Max order size: $50 per trade
+- Kill switch: shuts down if session loss exceeds $40
+- Min wallet balance: refuses BUY below $5 USDC
+- Price drift: skips trade if orderbook moved >3% since AI decision
+- FOK orders: fills entirely or rejects (no partial fills or stuck orders)
+
+#### 4. Shadow comparison
+
+In live mode, every trade is also simulated on a shadow paper portfolio. The dashboard shows:
+- `Live PnL` vs `Paper PnL` and the execution cost difference
+- Per-trade: live fill price vs paper fill price with drift %
+- Trade logs include `paper_fill_price` and `paper_total_cost` fields
+
+This gives hard data on how much real CLOB execution costs vs simulation.
+
+#### Safety layers
+
+| Layer | What | Where |
+|-------|------|-------|
+| 1 | Config default `mode: paper` | config.py |
+| 2 | Dry run mode (sign, don't post) | LiveExecutionEngine |
+| 3 | Max order size ($50 hard cap) | LiveExecutionEngine.execute() |
+| 4 | Min wallet balance check | LiveExecutionEngine.execute() |
+| 5 | Session kill switch ($40 loss) | _balance_sync_loop() |
+| 6 | Stale price drift check (3%) | LiveExecutionEngine.execute() |
+| 7 | Existing risk manager | RiskManager (unchanged) |
+| 8 | FOK orders (no partial fills) | CLOB API |
+| 9 | Startup credential + balance validation | agent.py |
+
 ### Environment Variable Overrides
 
 | Variable | Purpose | Default |
@@ -277,6 +342,14 @@ Set `dashboard_enabled: false` in `config/default.yaml` for structured log outpu
 | `POLYBOT_RISK_DAILY_LOSS_LIMIT_PCT` | Daily loss halt threshold | `0.10` |
 | `POLYBOT_KNOWLEDGE_DIR` | Knowledge files directory | `data/knowledge` |
 | `POLYBOT_ETHEREUM_RPC_URL` | Ethereum RPC for Chainlink reads | `https://ethereum.publicnode.com` |
+| `POLYBOT_TRADING_MODE` | Trading mode: `paper` or `live` | `paper` |
+| `POLYBOT_TRADING_PRIVATE_KEY` | Polygon wallet private key | (required for live) |
+| `POLYBOT_TRADING_API_KEY` | CLOB API key | (required for live) |
+| `POLYBOT_TRADING_API_SECRET` | CLOB API secret | (required for live) |
+| `POLYBOT_TRADING_API_PASSPHRASE` | CLOB API passphrase | (required for live) |
+| `POLYBOT_TRADING_DRY_RUN` | Sign orders but don't post | `false` |
+| `POLYBOT_TRADING_MAX_ORDER_SIZE_USD` | Hard cap per order | `50.0` |
+| `POLYBOT_TRADING_MAX_SESSION_LOSS_USD` | Kill switch threshold | `40.0` |
 
 ---
 
@@ -363,7 +436,7 @@ Each candle is tagged with an `iteration` label (e.g., `iter_003`) so you can tr
 
 With 500+ candles accumulated, you can statistically validate every assumption in the codebase — momentum continuation rates, reversal frequencies, optimal entry timing — instead of guessing.
 
-A comprehensive statistical analysis (287+ candles across 8 iterations) found: BTC moves >$50 have ~65-70% directional accuracy (originally estimated at ~90% from a smaller sample, corrected after iter_008's 128 candles showed at least 10 losses on $50+ moves); two EV peaks at 30-45s and 120-165s; cheap entries (R/R 1.5-3.0) are often contrarian traps; and streaks of 3+ continue ~62% of the time. Findings are loaded into `data/knowledge/trading_patterns.md` as soft guidance for the AI.
+A comprehensive statistical analysis (340+ candles across 9 iterations) found: BTC moves >$50 have ~65-70% directional accuracy (originally estimated at ~90% from a smaller sample, corrected after iter_008's 128 candles showed at least 10 losses on $50+ moves); two EV peaks at 30-45s and 120-165s; cheap entries (R/R 1.5-3.0) are often contrarian traps; and streaks of 3+ continue ~62% of the time. Findings are loaded into `data/knowledge/trading_patterns.md` as soft guidance for the AI.
 
 ### Analysis Report
 
@@ -591,6 +664,10 @@ TradingAgent (agent.py) — orchestrator, launches 6 concurrent tasks
  ├── DecisionEngine ─── Claude API
  │   FeatureVector + feedback + indicators → structured JSON decision
  │
+ ├── LiveExecutionEngine (execution/live.py) — live mode only
+ │   py-clob-client Level 2 → FOK market orders → SimulatedFill
+ │   Stale price mitigation, kill switch, dry run, order size cap
+ │
  ├── ExecutionSimulator
  │   Market orders: slippage model + 20bps fee → SimulatedFill
  │
@@ -654,6 +731,9 @@ polymarket-bot/
 │   │   ├── compare.py            # polybot-compare CLI — cross-iteration comparison
 │   │   ├── report.py             # polybot-analyze CLI
 │   │   └── validate.py           # polybot-validate CLI — assumption validation against market history
+│   ├── execution/
+│   │   ├── __init__.py
+│   │   └── live.py              # Live CLOB execution (FOK orders, safety checks)
 │   ├── decision_engine/
 │   │   ├── engine.py             # Claude API decision calls
 │   │   ├── prompts.py            # System prompt + feature formatting
@@ -676,6 +756,8 @@ polymarket-bot/
 │       ├── market_monitor.py     # 1s market data polling + prefilter + AI trigger
 │       ├── ai_decision.py        # Event-driven AI decision pipeline
 │       └── position_monitor.py   # Real-time P&L tracking + SL/TP exits
+├── scripts/
+│   └── generate_api_key.py      # Derive CLOB API credentials from wallet key
 ├── tests/                        # pytest + pytest-asyncio
 ├── .env.example                  # Environment variable template
 └── pyproject.toml                # Package definition + dependencies
@@ -685,4 +767,4 @@ polymarket-bot/
 
 ## License
 
-This project is for educational and research purposes only. It does not place real trades.
+This project is for educational and research purposes. Live trading mode places real orders on Polymarket — use at your own risk.

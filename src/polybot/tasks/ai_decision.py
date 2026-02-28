@@ -36,6 +36,7 @@ from polybot.models import (
     TradingDecision,
 )
 from polybot.adaptive_entry import AdaptiveEntryTracker
+from polybot.execution.live import LiveExecutionEngine
 from polybot.prefilter import PreFilter
 from polybot.shared_state import EntryContext, PreFilterSnapshot
 from polybot.resolution import ResolutionTracker
@@ -151,6 +152,8 @@ class AIDecision:
         session_trades: list[TradeRecord],
         pending_ml_features: dict[str, dict[str, float]],
         adaptive_entry: AdaptiveEntryTracker | None = None,
+        live_engine: LiveExecutionEngine | None = None,
+        shadow_portfolio: Portfolio | None = None,
     ) -> None:
         self._config = config
         self._shared = shared
@@ -168,6 +171,11 @@ class AIDecision:
         self._feature_config = feature_config
         self._resolution_tracker = resolution_tracker
         self._adaptive_entry = adaptive_entry
+
+        # Live trading engine (None in paper mode)
+        self._live_engine = live_engine
+        self._shadow_portfolio = shadow_portfolio
+        self._live_mode = live_engine is not None
 
         # Optional SQLite analytics
         self._datastore = None  # set by agent if sqlite_enabled
@@ -873,11 +881,34 @@ class AIDecision:
                 self.last_risk_status = risk_reason
                 risk_blocked = True
 
-        # Execute
+        # Execute (paper_fill is only set in live mode for shadow comparison)
         fill = None
+        paper_fill = None
         if not risk_blocked and decision.action != Action.HOLD:
             target_ob = down_ob if decision.token_side == TokenSide.DOWN else up_ob
-            if decision.order_type == OrderType.MARKET:
+
+            if self._live_mode and self._live_engine and decision.order_type == OrderType.MARKET:
+                # Live mode: execute on CLOB + shadow paper sim
+                fill = await self._live_engine.execute(decision, target_ob)
+                paper_fill = self._exec_sim.execute(decision, target_ob)
+
+                # Apply shadow paper fill to shadow portfolio
+                if paper_fill and self._shadow_portfolio:
+                    self._shadow_portfolio.apply_fill(paper_fill, decision.token_side)
+
+                if fill and paper_fill:
+                    drift_pct = ((fill.fill_price - paper_fill.fill_price) / paper_fill.fill_price * 100) if paper_fill.fill_price > 0 else 0
+                    logger.info(
+                        "Live fill $%.4f vs Paper fill $%.4f (drift %+.1f%%)",
+                        fill.fill_price, paper_fill.fill_price, drift_pct,
+                    )
+                elif not fill and paper_fill:
+                    logger.info(
+                        "Live SKIPPED but Paper would have filled at $%.4f",
+                        paper_fill.fill_price,
+                    )
+            elif decision.order_type == OrderType.MARKET:
+                # Paper mode: execute on simulator only
                 fill = self._exec_sim.execute(decision, target_ob)
             elif decision.order_type == OrderType.LIMIT:
                 self._orderbook.add_order(decision)
@@ -946,6 +977,7 @@ class AIDecision:
             cycle, snapshot,
             decision=decision, latency_ms=latency_ms,
             fill=fill, risk_blocked=risk_blocked, risk_reason=risk_reason,
+            paper_fill=paper_fill,
         )
 
         self._record_ai_call_time()
@@ -957,6 +989,7 @@ class AIDecision:
     def _log_cycle(
         self, cycle, snapshot, decision=None, latency_ms=0.0,
         fill=None, risk_blocked=False, risk_reason="",
+        paper_fill=None,
     ) -> None:
         """Log a cycle to trade log and update trade history."""
         ob = snapshot.orderbook
@@ -1016,6 +1049,10 @@ class AIDecision:
             record.fill_size = fill.size
             record.slippage_bps = fill.slippage_bps
             record.fee_amount = fill.fee_amount
+
+        if paper_fill:
+            record.paper_fill_price = paper_fill.fill_price
+            record.paper_total_cost = paper_fill.total_cost
 
         self._trade_log.write(record)
 

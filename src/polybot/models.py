@@ -316,6 +316,10 @@ class TradeRecord(BaseModel):
     cycle_number: int = 0
     extra: dict[str, Any] = Field(default_factory=dict)
 
+    # Shadow paper fill (populated in live mode for comparison)
+    paper_fill_price: float | None = None
+    paper_total_cost: float | None = None
+
     # Resolution fields (populated after candle resolves)
     candle_slug: str = ""
     candle_winner: str = ""
