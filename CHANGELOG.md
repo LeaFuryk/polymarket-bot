@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 ## [v0.8.0] — 2026-02-28
 
+### Fixed — Bootstrap uses hardcoded $20 threshold, inflating reversal rate
+
+The Binance bootstrap (warm start on fresh sessions) still used the hardcoded `$20` for initial direction detection — the same bug fixed in `record_outcome()`. This caused bootstrapped reversal rates of 58-60% (UNCERTAIN) when the dynamic threshold ($72) would compute 8% (MOMENTUM). iter_014's 3 losses were all contrarian UP buys triggered by this inflated rate.
+
+- `bootstrap_from_binance()`: replaced `>= 20.0` with `>= self.btc_threshold`
+- Added near-zero guard (`abs(final_move) < 5.0`) to exclude flat candles from reversal counting
+- Same fix as `record_outcome()` — the logic was duplicated but only one copy was updated
+
 ### Fixed — UNCERTAIN contrarian overtrading + cheap entry SL
 
 iter_013 analysis: 19 trades, 31% win rate, -$21.41 PnL. UNCERTAIN trades destroyed PnL (12 trades, 25% WR, -$34.53) while MOMENTUM trades were fine (7 trades, 67% WR, +$13.12). Three interconnected fixes:
