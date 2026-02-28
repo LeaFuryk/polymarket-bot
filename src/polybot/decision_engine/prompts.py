@@ -18,11 +18,12 @@ Say should_trade=true if ANY of these apply:
 - BTC has moved >$15 from candle open (momentum OR contrarian signal — check reversal context)
 - Entry prices are very attractive (either token ask < $0.30)
 - Clear candle streak of 4+ consecutive same-direction candles (mean reversion setup)
-- Reversal rate is high (>55%) AND BTC has moved — contrarian entry opportunity
+- Reversal rate is high (>60%) AND BTC has moved — contrarian entry opportunity
+- Reversal rate is uncertain (40-60%) AND prices are balanced (both asks $0.35-$0.65) AND BTC has moved >$15 — cheap-side entry opportunity
 
 Say should_trade=false if ANY of these apply:
-- BTC move from candle open < $15 AND no streak (< 3 same-direction) AND time < 120s AND no high reversal rate
-- Both token asks are > $0.40 (unattractive entries) AND BTC move < $15 AND reversal rate < 55%
+- BTC move from candle open < $15 AND no streak (< 3 same-direction) AND time < 120s AND reversal rate < 40%
+- Both token asks are > $0.40 (unattractive entries) AND BTC move < $15 AND reversal rate < 40%
 - BTC move is $0 (no signal at all)
 
 When in doubt, say false. Save the budget for setups with a clear directional signal.
