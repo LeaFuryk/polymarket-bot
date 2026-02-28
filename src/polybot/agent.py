@@ -1082,7 +1082,10 @@ class TradingAgent:
                                s.time_remaining, s.up_mid, s.down_mid,
                                s.btc_move_from_open, s.prefilter_passed, s.prefilter_reasons,
                                s.indicators_json, s.up_spread_pct, s.down_spread_pct,
-                               s.up_bid_depth, s.down_bid_depth, s.btc_price
+                               s.up_bid_depth, s.down_bid_depth, s.btc_price,
+                               s.up_best_ask, s.down_best_ask,
+                               s.rr_up, s.rr_down,
+                               s.streak, s.streak_direction
                         FROM snapshots s
                         JOIN candles c ON s.candle_id = c.candle_id
                         ORDER BY c.candle_id, s.timestamp
@@ -1114,6 +1117,12 @@ class TradingAgent:
                                 "u_dep": round(row[12], 1) if row[12] else None,
                                 "d_dep": round(row[13], 1) if row[13] else None,
                                 "btc": round(row[14], 2) if row[14] else None,
+                                "u_ask": round(row[15], 4) if row[15] else None,
+                                "d_ask": round(row[16], 4) if row[16] else None,
+                                "rr_u": round(row[17], 3) if row[17] else None,
+                                "rr_d": round(row[18], 3) if row[18] else None,
+                                "stk": row[19],
+                                "stk_d": row[20],
                             })
                 except Exception:
                     logger.debug("Failed to build candle snapshots", exc_info=True)
@@ -1207,6 +1216,7 @@ class TradingAgent:
                     "window_size": self._adaptive_entry._window,
                     "history_count": len(self._adaptive_entry._history),
                     **self._compute_market_trend(snapshot),
+                    **self._adaptive_entry.fakeout_stats,
                 },
                 "ensemble": {
                     "screen_calls": self._ai_decision._screen_calls,

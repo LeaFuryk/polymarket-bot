@@ -2,7 +2,39 @@
 
 All notable changes to this project will be documented in this file.
 
-## [v0.6.0] — 2026-02-28
+## [v0.7.0] — 2026-02-28
+
+### Changed — Fakeout-based dynamic BTC threshold
+
+Replaced the V-shaped reversal-rate formula ($20–$50) with a **fakeout magnitude-based threshold** ($20–$100) learned from the last 10 candles' actual BTC trajectories.
+
+**Problem**: 3 of 4 recent losses were reversals — BTC moved one way at entry, then flipped. The V-shaped formula peaked at $50, but fakeouts of +$45 and +$56 both reversed and caused losses. The formula used a fixed $20 detection point and an abstract `abs(rate - 0.5)` deviation — disconnected from actual market noise.
+
+**Solution**: For each candle, measure how far BTC moved in the *wrong direction* (peak move opposite to eventual winner) from the 300 per-second prefilter snapshots. Set the threshold above typical fakeouts:
+
+- `peak_up_move` = max positive `btc_move_from_open` during candle
+- `peak_down_move` = max abs(negative `btc_move_from_open`) during candle
+- Fakeout = peak in wrong direction (if winner=UP, fakeout = peak_down_move)
+- Threshold = **P75(last 10 fakeouts) + $5 margin**, clamped to [$20, $100]
+
+**Examples**:
+- Small fakeouts `[0, 2, 5, 8, 10, 12, 15, 18, 22, 25]` → P75=$20 → threshold=$25
+- Large fakeouts `[10, 15, 25, 30, 35, 40, 45, 50, 55, 80]` → P75=$52 → threshold=$57
+
+**Backward compatible**: Falls back to V-shaped formula when peak data is unavailable (old JSONL records without `peak_up_move`/`peak_down_move` fields). Binance bootstrap now approximates peak moves from 1-min high/low.
+
+**Dashboard**: Fakeout badge shows P75/Max/Median when fakeout data is active. BTC Threshold tooltip updated. Color breakpoints widened for $100 range (red at $60+).
+
+**Cheapest-side guidance for UNCERTAIN markets** — When reversal rate is 40–60% (coin-flip territory), the AI now receives explicit guidance to stop guessing direction and buy whichever side has the cheapest ask price. At ~50% accuracy, only cheap entries (high R/R) are profitable after fees. Session data showed 3 of 6 losses in uncertain markets came from Claude picking expensive entries on the wrong side. The math is clear: $0.35 entry at 50% accuracy = +$0.15/trade; $0.60 entry at 50% = -$0.10/trade. Signal type boundaries widened to match: MOMENTUM (<40%), UNCERTAIN (40–60%), CONTRARIAN (>60%).
+
+**Unchanged**: `reversal_rate`, `signal_type`, `regime`, `direction_at_20`, `reversed`, `max_entry_price`, dynamic SL/TP — only the BTC threshold formula and UNCERTAIN market guidance are changed.
+
+### Added — Interactive prefilter ticks on candle timeline
+
+Prefilter tick marks on the candle timeline are now hoverable with a rich popover showing the full prefilter context at each snapshot:
+- **Hover popover**: Shows PASS/FAIL status with reason, entry prices (best ask), R/R ratios, BTC price & move, spread, depth, and streak
+- **Cheap rejection highlighting**: Failed ticks where min(UP ask, DOWN ask) < $0.35 render in amber instead of gray — makes it easy to spot contrarian entries the prefilter blocked
+- **New data columns**: `up_best_ask`, `down_best_ask`, `rr_up`, `rr_down`, `streak`, `streak_direction` now flow from SQLite snapshots into the dashboard JSON
 
 ### Added — Real-time Bot Status dashboard panel
 
@@ -11,6 +43,8 @@ The bot is no longer a black box. A new "Bot Status" panel on the dashboard show
 - **Gate status message**: Exactly why the AI isn't being called (e.g., "PREFILTER: No clear setup: streak=1, best entry=0.520 > 0.500", or "ADAPTIVE: BTC move $8 < $30 threshold", or "COOLDOWN: 42s remaining")
 - **Live market data**: BTC move from candle open, UP/DOWN ask prices, R/R ratios, streak, position status
 - Data flows from `MarketMonitor` → `SharedState.monitor_status` → dashboard JSON → UI
+
+## [v0.6.0] — 2026-02-28
 
 ### Fixed — 3 improvements from iter_010 deep analysis (75% WR, +$155 net)
 
