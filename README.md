@@ -155,7 +155,7 @@ This runs once at startup before the main trading loop begins. Candles that are 
 
 ### Reflection (Self-Improvement)
 
-After every 10 candle resolutions, the bot calls Claude with a **quantitative scorecard** (current batch vs previous batch: win rate, avg PnL, avg win/loss size, hold rate) plus resolution/trade tables and active observations. This creates a real feedback loop where reflection can see if its changes helped.
+After every 10 candle resolutions, the bot calls Claude with a **quantitative scorecard** (current batch vs previous batch: win rate, avg PnL, avg win/loss size, hold rate) plus resolution/trade tables and active observations. This creates a real feedback loop where reflection can see if its changes helped. The trades table includes **opposite-side context** (the other side's ask price and signal type) so reflection can identify "wrong side" mistakes — e.g., buying UP at $0.68 when DOWN was $0.31 in an UNCERTAIN market. A **Side Selection Analysis** section flags these expensive-side trades with outcomes, and the real-time feedback table shows the same context so Claude can self-correct within a session.
 
 Claude produces **structured observations** — descriptive, not imperative:
 - Good: "momentum plays at entry 0.30-0.40 won 3/4 times"

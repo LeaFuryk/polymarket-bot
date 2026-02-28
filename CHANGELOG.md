@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v0.8.0] — 2026-02-28
+
+### Fixed — Haiku screening rejects negative BTC moves as "below threshold"
+
+Haiku compared the signed BTC move value (e.g., `$-80`) against the `>$15` threshold using naive comparison: `-80 < 15` = true, so an $80 DOWN move was rejected as "no signal." Added explicit instruction that BTC moves are signed values and all threshold comparisons must use the absolute magnitude. Changed all threshold language from "BTC move" to "BTC move magnitude."
+
+### Added — Reflection feedback: teach Claude to learn from "wrong side" mistakes
+
+The bot bought UP at $0.68 in a 50% reversal market when DOWN was $0.31 — the pipeline delivered the entry correctly, but Claude followed momentum instead of buying the cheap side. The feedback loop was blind to this class of mistake because reflection couldn't see opposite-side prices, signal type, or reversal rate.
+
+**Three changes close the feedback gap:**
+
+1. **Data capture** (`ai_decision.py`) — For every BUY trade, `record.extra` now stores `opposite_ask` (the other side's best ask), `signal_type` (MOMENTUM/UNCERTAIN/CONTRARIAN), and `reversal_rate`. All three were already in scope at trade time but weren't persisted.
+
+2. **Reflection visibility** (`knowledge.py`) — The trades table in reflection now shows `Opp Ask` and `Signal` columns (replacing `Size`, which wasn't diagnostic for learning). A new **Side Selection Analysis** section flags trades that bought the expensive side (>$0.55) when the opposite was cheap (<$0.40) in UNCERTAIN/CONTRARIAN markets, with win/loss outcome. The reflection prompt instructs Claude to pay attention to these patterns.
+
+3. **Real-time feedback** (`knowledge.py`) — The recent trades table in `build_feedback_context()` now includes `Opp Ask` and `Signal` columns. When 2+ trades show the expensive-side-in-uncertain-market pattern, a warning is appended so Claude can self-correct within a session.
+
+**Backward compatible**: Old trades without the new `extra` fields show "—" in enriched columns and are excluded from pattern analysis.
+
 ## [v0.7.0] — 2026-02-28
 
 ### Changed — Cheap entry pipeline: stop blocking profitable opportunities

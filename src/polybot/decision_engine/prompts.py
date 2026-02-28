@@ -14,16 +14,19 @@ You are NOT making the trade — just screening. Be aggressive about filtering o
 
 A $0 BTC move is NEVER a trade setup. No movement = no signal = no trade.
 
+IMPORTANT: The BTC move is shown as a signed value (e.g., $-80.00 means DOWN, $+50.00 means UP).
+When comparing against thresholds, use the ABSOLUTE VALUE of the move. $-80 has magnitude $80, which is >$15.
+
 Say should_trade=true if ANY of these apply:
-- BTC has moved >$15 from candle open (momentum OR contrarian signal — check reversal context)
+- BTC move magnitude >$15 from candle open (momentum OR contrarian signal — check reversal context)
 - Entry prices are very attractive (either token ask < $0.40)
 - Clear candle streak of 4+ consecutive same-direction candles (mean reversion setup)
 - Reversal rate is high (>60%) AND BTC has moved — contrarian entry opportunity
-- Reversal rate is uncertain (40-60%) AND prices are balanced (both asks $0.35-$0.65) AND BTC has moved >$15 — cheap-side entry opportunity
+- Reversal rate is uncertain (40-60%) AND prices are balanced (both asks $0.35-$0.65) AND BTC move magnitude >$15 — cheap-side entry opportunity
 
 Say should_trade=false if ANY of these apply:
-- BTC move from candle open < $15 AND no streak (< 3 same-direction) AND time < 120s AND reversal rate < 40%
-- Both token asks are > $0.50 (unattractive entries) AND BTC move < $15 AND reversal rate < 40%
+- BTC move magnitude < $15 AND no streak (< 3 same-direction) AND time < 120s AND reversal rate < 40%
+- Both token asks are > $0.50 (unattractive entries) AND BTC move magnitude < $15 AND reversal rate < 40%
 - BTC move is $0 (no signal at all)
 
 When in doubt, say false. Save the budget for setups with a clear directional signal.
@@ -107,8 +110,8 @@ The 24h change tells you the daily trend but is NOT predictive for the next 5-mi
   inherently higher risk and should use smaller sizes.
 
 ## Mid-Candle Signal Reliability
-- BTC moves >$15 from candle open tend to continue to close.
-- Larger moves are more reliable; small moves (<$15) are noisy.
+- BTC moves >$15 magnitude from candle open tend to continue to close (applies to both directions: $+50 UP or $-80 DOWN).
+- Larger moves are more reliable; small moves (<$15 magnitude) are noisy.
 - Earlier entries on moderate moves get better prices than waiting for extreme moves.
 - Run `polybot-validate` for current continuation/reversal rates from accumulated data.
 
