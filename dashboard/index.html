@@ -531,6 +531,37 @@ body::after {
 .pos-sub { font-size: 0.73rem; color: var(--text-muted); }
 .pos-worth { font-size: 0.73rem; color: var(--text-secondary); margin-top: 0.15rem; }
 
+/* ═══ GATE PIPELINE (Bot Status) ═══ */
+.gate-pipeline {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin: 0.5rem 0;
+  flex-wrap: wrap;
+}
+.gate-step {
+  font-size: 0.65rem;
+  font-weight: 600;
+  padding: 0.15rem 0.45rem;
+  border-radius: 3px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-base);
+  white-space: nowrap;
+}
+.gate-step.g-pass { color: var(--green); border-color: var(--green); }
+.gate-step.g-fail { color: var(--red); border-color: var(--red); background: rgba(255,85,85,0.08); }
+.gate-step.g-skip { color: var(--text-muted); opacity: 0.5; }
+.gate-arrow { color: var(--text-muted); font-size: 0.7rem; }
+.gate-data {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+  gap: 0.3rem;
+  margin-top: 0.35rem;
+}
+.gd-item { display: flex; flex-direction: column; gap: 0.05rem; }
+.gd-lbl { font-size: 0.55rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.gd-val { font-size: 0.75rem; font-weight: 700; font-family: var(--font-mono); }
+
 /* ═══ CANDLE TIMELINES ═══ */
 .candle-list {
   max-height: 600px;
@@ -2236,6 +2267,42 @@ function render(d) {
         return slTpH;
       })()}
     </div>`;
+
+    // Bot Status panel — real-time gate pipeline visibility
+    const ms = (d.monitor && d.monitor.status) || {};
+    if (Object.keys(ms).length > 0) {
+      const gateColor = ms.ai_triggered ? 'var(--green)' :
+        (ms.prefilter_passed && ms.adaptive_passed ? 'var(--amber)' : 'var(--red)');
+      const gateIcon = ms.ai_triggered ? '&#9679;' :
+        (ms.cooldown_active ? '&#9202;' : '&#9679;');
+      const gateLbl = ms.gate_status || 'OK';
+
+      // Build gate pipeline steps
+      let pipeH = '<div class="gate-pipeline">';
+      pipeH += `<span class="gate-step ${ms.prefilter_passed ? 'g-pass' : 'g-fail'}">Prefilter ${ms.prefilter_passed ? '&#10003;' : '&#10007;'}</span>`;
+      pipeH += `<span class="gate-arrow">&#8594;</span>`;
+      pipeH += `<span class="gate-step ${!ms.prefilter_passed ? 'g-skip' : ms.adaptive_passed ? 'g-pass' : 'g-fail'}">Adaptive ${ms.adaptive_passed ? '&#10003;' : !ms.prefilter_passed ? '—' : '&#10007;'}</span>`;
+      pipeH += `<span class="gate-arrow">&#8594;</span>`;
+      pipeH += `<span class="gate-step ${!ms.adaptive_passed || !ms.prefilter_passed ? 'g-skip' : !ms.cooldown_active ? 'g-pass' : 'g-fail'}">Cooldown ${ms.cooldown_active ? ms.cooldown_remaining.toFixed(0) + 's' : '&#10003;'}</span>`;
+      pipeH += `<span class="gate-arrow">&#8594;</span>`;
+      pipeH += `<span class="gate-step ${ms.ai_triggered ? 'g-pass' : 'g-skip'}">AI ${ms.ai_triggered ? '&#9889;' : '—'}</span>`;
+      pipeH += '</div>';
+
+      // Market data grid
+      let mkH = '<div class="gate-data">';
+      mkH += `<div class="gd-item"><span class="gd-lbl">BTC Move</span><span class="gd-val" style="color:${ms.btc_move >= 0 ? 'var(--green)' : 'var(--red)'}">$${ms.btc_move >= 0 ? '+' : ''}${ms.btc_move.toFixed(0)}</span></div>`;
+      mkH += `<div class="gd-item"><span class="gd-lbl">UP Ask</span><span class="gd-val">$${ms.up_ask.toFixed(2)}</span></div>`;
+      mkH += `<div class="gd-item"><span class="gd-lbl">DN Ask</span><span class="gd-val">$${ms.down_ask.toFixed(2)}</span></div>`;
+      mkH += `<div class="gd-item"><span class="gd-lbl">R/R</span><span class="gd-val">${ms.rr_up.toFixed(2)} / ${ms.rr_down.toFixed(2)}</span></div>`;
+      mkH += `<div class="gd-item"><span class="gd-lbl">Streak</span><span class="gd-val">${ms.streak} ${ms.streak_dir.toUpperCase()}</span></div>`;
+      mkH += `<div class="gd-item"><span class="gd-lbl">Position</span><span class="gd-val">${ms.has_position ? 'YES' : 'NO'}</span></div>`;
+      mkH += '</div>';
+
+      lh += `<div class="panel" data-tip="Real-time gate pipeline: shows exactly why the bot is or isn't calling the AI on each tick. Prefilter → Adaptive Entry → Cooldown → AI Trigger.">
+        <div class="panel-header">Bot Status <span style="color:${gateColor};font-size:0.7rem;margin-left:0.4rem">${gateIcon} ${esc(gateLbl.length > 60 ? gateLbl.slice(0, 60) + '…' : gateLbl)}</span></div>
+        ${pipeH}${mkH}
+      </div>`;
+    }
 
     $('liveRow').innerHTML = lh;
     $('liveRow').style.display = '';

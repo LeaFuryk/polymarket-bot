@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 ## [v0.6.0] — 2026-02-28
 
+### Added — Real-time Bot Status dashboard panel
+
+The bot is no longer a black box. A new "Bot Status" panel on the dashboard shows the full gate pipeline on every tick (1s updates):
+- **Gate pipeline visualization**: Prefilter → Adaptive Entry → Cooldown → AI Trigger, each step colored green (pass) / red (blocked)
+- **Gate status message**: Exactly why the AI isn't being called (e.g., "PREFILTER: No clear setup: streak=1, best entry=0.520 > 0.500", or "ADAPTIVE: BTC move $8 < $30 threshold", or "COOLDOWN: 42s remaining")
+- **Live market data**: BTC move from candle open, UP/DOWN ask prices, R/R ratios, streak, position status
+- Data flows from `MarketMonitor` → `SharedState.monitor_status` → dashboard JSON → UI
+
 ### Fixed — 3 improvements from iter_010 deep analysis (75% WR, +$155 net)
 
 **Bug fix: SL sell size rounding** — Position sizing creates fractional share counts (e.g., 30.6) via R/R scaling, but the AI prompt displayed shares as integers (`:.0f` rounds 30.6 → "31"). When the AI tried to sell "31 shares" with only 30.6 held, the `short_sell_prevention` risk check blocked the exit. This occurred 4 times in iter_010. Fixed by:
