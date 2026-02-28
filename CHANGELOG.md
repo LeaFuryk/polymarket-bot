@@ -29,6 +29,10 @@ Replaced the V-shaped reversal-rate formula ($20–$50) with a **fakeout magnitu
 
 **Unchanged**: `reversal_rate`, `signal_type`, `regime`, `direction_at_20`, `reversed`, `max_entry_price`, dynamic SL/TP — only the BTC threshold formula and UNCERTAIN market guidance are changed.
 
+### Fixed — Archive missing ask prices, R/R, streak in snapshot timelines
+
+The archive enrichment query was missing 6 columns that the live dashboard query includes: `up_best_ask`, `down_best_ask`, `rr_up`, `rr_down`, `streak`, `streak_direction`. This meant archived iterations lacked the data needed for price heatmaps (cheap entry windows), prefilter tick popovers (entry prices, R/R), and streak context. Now matches the live dashboard query exactly.
+
 ### Fixed — Haiku screening blocks UNCERTAIN market entries
 
 The Haiku screening prompt used the old signal boundaries (CONTRARIAN >55%, false-when < 55%) and had no awareness of the UNCERTAIN regime. In 40–60% reversal markets with balanced prices, Haiku would reject valid cheap-side entries because "both asks > $0.40 and reversal rate < 55%" matched its false rule. Updated:
