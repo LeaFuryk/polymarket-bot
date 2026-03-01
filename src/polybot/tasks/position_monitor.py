@@ -348,6 +348,48 @@ class PositionMonitor:
                 "trigger_type": "stop_loss",
             })
 
+        # Reversal retracement: BTC retraced 50%+ from peak toward open
+        # Triggers AI to decide: HOLD (SL stays active) or SELL + flip
+        if "reversal" not in self._triggered.get(token_side, ""):
+            history = list(self._shared.prefilter_history)
+            if len(history) >= 10:
+                # Compute peak move in the position's favored direction
+                if token_side == "up":
+                    peak_move = max(s.btc_move_from_open for s in history)
+                    current_move = history[-1].btc_move_from_open
+                else:
+                    peak_move = min(s.btc_move_from_open for s in history)
+                    current_move = history[-1].btc_move_from_open
+
+                # Need a meaningful peak ($15+) before checking retracement
+                if abs(peak_move) >= 15.0:
+                    # Retracement ratio: how much of the peak has been given back
+                    # 0.0 = still at peak, 1.0 = back to open, >1.0 = crossed zero
+                    if peak_move != 0:
+                        retracement = 1.0 - (current_move / peak_move)
+                    else:
+                        retracement = 0.0
+
+                    if retracement >= 0.50:
+                        components = self._sl_components_str(token_side)
+                        logger.info(
+                            "REVERSAL RETRACEMENT: %s peak=$%+.0f, now=$%+.0f, "
+                            "retraced %.0f%% [%s]",
+                            token_side.upper(), peak_move, current_move,
+                            retracement * 100, components,
+                        )
+                        self._triggered[token_side] = "reversal_retracement"
+                        await self._shared.exit_trigger_queue.put({
+                            "token_side": token_side,
+                            "reason": (
+                                f"reversal_retracement (peak=${peak_move:+.0f}, "
+                                f"now=${current_move:+.0f}, {retracement:.0%} retraced)"
+                            ),
+                            "pnl_pct": pnl_pct,
+                            "trigger_type": "reversal_retracement",
+                        })
+                        return  # Don't also check TP on same tick
+
         elif pnl_pct >= dynamic_tp:
             logger.info(
                 "TAKE-PROFIT triggered: %s P&L=+%.1f%% >= +%.1f%% (dynamic TP)",

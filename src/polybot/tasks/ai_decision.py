@@ -416,70 +416,93 @@ class AIDecision:
                 "timestamp": time.time(),
             }
 
-            # --- Post-SL contrarian flip ---
-            # After getting stopped out, the opposite side is likely winning.
-            # Check conditions and trigger a second AI decision for the opposite side.
-            snap = self._shared.latest_snapshot
-            mkt = self._shared.current_market
-            if snap is not None and mkt is not None:
-                tr = mkt.time_remaining()
-                btc_now = snap.btc_price.price_usd if snap.btc_price else None
-                candle_open = self._shared.candle_open_btc
+        # --- Contrarian flip (post-exit reversal entry) ---
+        # After SL or reversal-retracement exit, check if the opposite side
+        # is worth entering. Only if the AI actually sold (position closed).
+        if trigger_type in ("stop_loss", "reversal_retracement"):
+            # Verify position was actually closed
+            pos = (self._portfolio.up_position if token_side_str.lower() == "up"
+                   else self._portfolio.down_position)
+            if pos.shares <= 0:
+                await self._try_contrarian_flip(token_side_str, pnl_pct, trigger_type)
 
-                # Determine opposite side and its ask price
-                sold_up = token_side_str.lower() == "up"
-                opposite_side = "DOWN" if sold_up else "UP"
-                opp_ob = snap.down_orderbook if sold_up else snap.orderbook
-                opp_ask = opp_ob.best_ask
+    async def _try_contrarian_flip(
+        self,
+        token_side_str: str,
+        pnl_pct: float,
+        trigger_type: str,
+    ) -> None:
+        """After exiting a position, evaluate buying the opposite side.
 
-                # BTC confirms reversal: move is against the sold position
-                btc_confirms = False
-                btc_move = 0.0
-                if btc_now is not None and candle_open is not None:
-                    btc_move = btc_now - candle_open
-                    # If we sold UP, BTC should be dropping (btc_move < 0)
-                    # If we sold DOWN, BTC should be rising (btc_move > 0)
-                    btc_confirms = (sold_up and btc_move < 0) or (not sold_up and btc_move > 0)
+        Triggered after stop-loss or reversal-retracement exits. Checks that
+        BTC confirms the reversal and enough time remains, then calls AI to
+        decide BUY or HOLD. The anti-flip guard is bypassed for this call.
+        """
+        snap = self._shared.latest_snapshot
+        mkt = self._shared.current_market
+        if snap is None or mkt is None:
+            return
 
-                # Log skip reasons for debugging
-                skip_reasons = []
-                if tr < 60:
-                    skip_reasons.append(f"time={tr:.0f}s<60s")
-                if not btc_confirms:
-                    skip_reasons.append(f"BTC {'$' if btc_move >= 0 else '-$'}{abs(btc_move):.0f} doesn't confirm reversal")
+        tr = mkt.time_remaining()
+        btc_now = snap.btc_price.price_usd if snap.btc_price else None
+        candle_open = self._shared.candle_open_btc
 
-                if skip_reasons:
-                    logger.info("Contrarian flip: skip — %s", ", ".join(skip_reasons))
-                else:
-                    logger.info(
-                        "Contrarian flip: triggering %s entry (BTC %s$%.0f, %s ask=$%.2f, %.0fs left)",
-                        opposite_side,
-                        "+" if btc_move >= 0 else "", btc_move,
-                        opposite_side, opp_ask or 0, tr,
-                    )
-                    flip_context = (
-                        f"\n## CONTRARIAN FLIP OPPORTUNITY\n"
-                        f"- Just exited {token_side_str.upper()} at {pnl_pct:+.1%} (stop-loss)\n"
-                        f"- BTC reversed: ${btc_move:+.0f} from candle open\n"
-                        f"- {opposite_side} ask = ${opp_ask:.2f}\n"
-                        f"- Consider buying {opposite_side} to recover — the reversal is confirmed.\n"
-                    )
-                    # Re-read portfolio value
-                    up_mid2 = snap.orderbook.midpoint
-                    down_mid2 = snap.down_orderbook.midpoint
-                    if up_mid2 is not None:
-                        self._portfolio.mark_to_market(up_mid2, down_mid2)
-                    pv = self._portfolio.total_value_at_market(up_mid2 or 0.5, down_mid2)
+        # Determine opposite side and its ask price
+        sold_up = token_side_str.lower() == "up"
+        opposite_side = "DOWN" if sold_up else "UP"
+        opp_ob = snap.down_orderbook if sold_up else snap.orderbook
+        opp_ask = opp_ob.best_ask
 
-                    self._contrarian_flip_active = True
-                    try:
-                        self._cycle_count += 1
-                        await self._run_ai_decision(
-                            self._cycle_count, snap, mkt, tr, pv,
-                            extra_context=flip_context,
-                        )
-                    finally:
-                        self._contrarian_flip_active = False
+        # BTC confirms reversal: move is against the sold position
+        btc_confirms = False
+        btc_move = 0.0
+        if btc_now is not None and candle_open is not None:
+            btc_move = btc_now - candle_open
+            # If we sold UP, BTC should be dropping (btc_move < 0)
+            # If we sold DOWN, BTC should be rising (btc_move > 0)
+            btc_confirms = (sold_up and btc_move < 0) or (not sold_up and btc_move > 0)
+
+        # Log skip reasons for debugging
+        skip_reasons = []
+        if tr < 60:
+            skip_reasons.append(f"time={tr:.0f}s<60s")
+        if not btc_confirms:
+            skip_reasons.append(f"BTC {'$' if btc_move >= 0 else '-$'}{abs(btc_move):.0f} doesn't confirm reversal")
+
+        if skip_reasons:
+            logger.info("Contrarian flip: skip — %s", ", ".join(skip_reasons))
+            return
+
+        reason_label = "stop-loss" if trigger_type == "stop_loss" else "reversal exit"
+        logger.info(
+            "Contrarian flip: triggering %s entry after %s (BTC %s$%.0f, %s ask=$%.2f, %.0fs left)",
+            opposite_side, reason_label,
+            "+" if btc_move >= 0 else "", btc_move,
+            opposite_side, opp_ask or 0, tr,
+        )
+        flip_context = (
+            f"\n## CONTRARIAN FLIP OPPORTUNITY\n"
+            f"- Just exited {token_side_str.upper()} at {pnl_pct:+.1%} ({reason_label})\n"
+            f"- BTC reversed: ${btc_move:+.0f} from candle open\n"
+            f"- {opposite_side} ask = ${opp_ask:.2f}\n"
+            f"- Consider buying {opposite_side} to recover — the reversal is confirmed.\n"
+        )
+        # Re-read portfolio value
+        up_mid2 = snap.orderbook.midpoint
+        down_mid2 = snap.down_orderbook.midpoint
+        if up_mid2 is not None:
+            self._portfolio.mark_to_market(up_mid2, down_mid2)
+        pv = self._portfolio.total_value_at_market(up_mid2 or 0.5, down_mid2)
+
+        self._contrarian_flip_active = True
+        try:
+            self._cycle_count += 1
+            await self._run_ai_decision(
+                self._cycle_count, snap, mkt, tr, pv,
+                extra_context=flip_context,
+            )
+        finally:
+            self._contrarian_flip_active = False
 
     async def _run_ai_decision(
         self,

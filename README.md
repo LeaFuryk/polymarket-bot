@@ -110,7 +110,7 @@ Waits for entry triggers (from MarketMonitor) or exit triggers (from PositionMon
 9. **Position sizing** — Gentle R/R scale (0.75x-1.0x, since data shows cheap entries are often contrarian traps). Multiplied by BTC move magnitude scaling (80%/90%/100%) and counter-trend reduction (50-70%). Minimum 40 shares (20 for counter-trend)
 10. **Post-trade risk checks** — Position size, concentration, cash, spread (BUY only)
 11. **Execute + log** — Simulate fill, update portfolio, write TradeRecord
-12. **Post-SL contrarian flip** — After a stop-loss exit fills, checks if the opposite side is worth entering: time >= 60s remaining and BTC confirms reversal (moving against the stopped-out side). No price gate — the AI sees the full context and decides BUY or HOLD. The anti-flip guard is bypassed for this entry only
+12. **Contrarian flip** — After any exit (stop-loss or reversal retracement), if the position was closed and BTC confirms the reversal (time >= 60s, BTC moving against the exited side), triggers a second AI decision for the opposite side. The anti-flip guard is bypassed for this entry only. No price gate — the AI sees the full context and decides BUY or HOLD
 
 ### PositionMonitor (every 1 second)
 
@@ -118,8 +118,9 @@ Waits for entry triggers (from MarketMonitor) or exit triggers (from PositionMon
 2. **Compute P&L %** — For each open position (UP and DOWN independently)
 3. **Adaptive dynamic stop-loss** — Computed per-position from 5 factors: (1) time weighting (-60% at 240s to -20% at 0s), (2) regime from reversal rate (momentum tightens, choppy widens), (3) BTC velocity (against position tightens, favors widens), (4) ML alignment at entry (agreed widens, disagreed tightens), (5) entry price quality (expensive tightens +6%, cheap ≤$0.40 widens -10%, very cheap ≤$0.30 widens -15%). Bounded by configurable floor/ceiling (-75% to -15%)
 4. **Adaptive dynamic take-profit** — Time-weighted base with 3 adjustments: regime (momentum lets winners run, choppy takes profits), BTC velocity, entry price quality. Bounded (+20% to +120%)
-5. **Trigger exit** — Push exit signal to AIDecision with reason, P&L, and dynamic threshold (respects AI cooldown; emergencies ≤-30% bypass)
-6. **Fallback** — When `dynamic_sl_enabled: false`, uses existing time-weighted-only logic
+5. **Reversal retracement detection** — When BTC retraces 50%+ from its peak move back toward candle open (minimum $15 peak), triggers an AI exit decision. AI decides HOLD (SL stays active) or SELL (position closes, contrarian flip evaluates opposite side). Fires once per position
+6. **Trigger exit** — Push exit signal to AIDecision with reason, P&L, and dynamic threshold (respects AI cooldown; emergencies ≤-30% bypass)
+7. **Fallback** — When `dynamic_sl_enabled: false`, uses existing time-weighted-only logic
 
 ### Market Rotation & Resolution
 
