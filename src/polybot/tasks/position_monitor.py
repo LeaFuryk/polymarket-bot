@@ -348,7 +348,7 @@ class PositionMonitor:
                 "trigger_type": "stop_loss",
             })
 
-        # Reversal retracement: BTC retraced 50%+ from peak toward open
+        # Reversal retracement: BTC retraced 80%+ from peak toward open
         # Triggers AI to decide: HOLD (SL stays active) or SELL + flip
         if "reversal" not in self._triggered.get(token_side, ""):
             history = list(self._shared.prefilter_history)
@@ -370,7 +370,7 @@ class PositionMonitor:
                     else:
                         retracement = 0.0
 
-                    if retracement >= 0.50:
+                    if retracement >= 0.80:
                         components = self._sl_components_str(token_side)
                         logger.info(
                             "REVERSAL RETRACEMENT: %s peak=$%+.0f, now=$%+.0f, "

@@ -6,9 +6,9 @@ All notable changes to this project will be documented in this file.
 
 ### Added — Reversal retracement detection + contrarian flip
 
-**Reversal retracement** — a new PositionMonitor trigger that fires when BTC retraces 50%+ from its peak move back toward the candle open while a position is open. Instead of waiting for the stop-loss to fire (when the opposite side is already $0.80+), the bot detects the reversal early and asks AI to decide: **HOLD** (keep position, SL stays active) or **SELL + flip** (close and buy opposite side).
+**Reversal retracement** — a new PositionMonitor trigger that fires when BTC retraces 80%+ from its peak move back toward the candle open while a position is open. Instead of waiting for the stop-loss to fire (when the opposite side is already $0.80+), the bot detects the reversal early and asks AI to decide: **HOLD** (keep position, SL stays active) or **SELL + flip** (close and buy opposite side).
 
-Example: Bot buys UP, BTC peaks at +$50, then retraces to +$20 (60% retraced). The reversal trigger fires. AI evaluates and can either hold (SL remains active) or sell UP and buy DOWN while prices are still reasonable.
+Example: Bot buys UP, BTC peaks at +$50, then retraces to +$20 (80% retraced). The reversal trigger fires. AI evaluates and can either hold (SL remains active) or sell UP and buy DOWN while prices are still reasonable.
 
 **Contrarian flip** — after any exit (stop-loss or reversal-retracement), if AI sold the position and BTC confirms the reversal, a second AI decision is triggered for the opposite side. The anti-flip guard is bypassed for this entry only.
 
