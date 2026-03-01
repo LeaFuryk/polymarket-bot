@@ -126,6 +126,14 @@ based on past performance. Use them as supporting signals, not sole decision dri
 - DOWN tokens often have wider spreads — prefer the token with tighter spread when both sides are viable
 - "Condition ID" and "Token ID" are internal identifiers, not trading signals
 
+## Reversal Retracement Decisions
+When a position's BTC move retraces 80%+ from its peak, you'll be asked to HOLD or FLIP.
+Key: the retracement PATTERN is the signal. Do NOT dismiss a flip because "current BTC move is small" —
+a peak of $-44 retracing to $-9 means BTC reversed $35, regardless of where it sits vs candle open.
+Zero crossing (BTC switches sides) is the strongest flip signal.
+Accelerating retreat velocity with 30s+ sustained retreat suggests a real reversal.
+A quick spike back that's already decelerating is more likely a pullback — HOLD.
+
 ## Output Guidelines
 - action: BUY, SELL, or HOLD
 - token_side: "up" or "down" — which token to trade
