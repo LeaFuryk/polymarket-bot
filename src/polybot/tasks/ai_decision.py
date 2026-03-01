@@ -95,6 +95,111 @@ def _compute_btc_trajectory(history: list[PreFilterSnapshot]) -> str | None:
     return "\n".join(parts)
 
 
+def _compute_retracement_context(
+    history: list[PreFilterSnapshot],
+    position_side: str,
+    snapshot,
+) -> str:
+    """Compute rich retracement analytics for reversal HOLD-or-FLIP decisions.
+
+    Returns a formatted prompt section with peak move, retracement %, zero
+    crossing, retreat velocity/acceleration, and opposite-side ask.
+    """
+    if len(history) < 5:
+        return ""
+
+    moves = [s.btc_move_from_open for s in history]
+    timestamps = [s.timestamp for s in history]
+    now_ts = timestamps[-1]
+    current_move = moves[-1]
+
+    # Determine peak in the direction that favours the held position
+    # UP position profits when BTC goes up (positive moves)
+    # DOWN position profits when BTC goes down (negative moves)
+    is_up = position_side.lower() == "up"
+    if is_up:
+        peak_val = max(moves)
+        peak_idx = moves.index(peak_val)
+    else:
+        peak_val = min(moves)
+        peak_idx = moves.index(peak_val)
+
+    peak_ts = timestamps[peak_idx]
+    peak_age = now_ts - peak_ts
+
+    # Retracement %: how much of the peak move has been given back
+    if abs(peak_val) > 0.01:
+        retracement_pct = (1.0 - current_move / peak_val) * 100 if is_up else (1.0 - current_move / peak_val) * 100
+    else:
+        retracement_pct = 0.0
+    retracement_pct = max(0.0, min(retracement_pct, 200.0))  # clamp
+
+    # Zero crossing: has BTC switched sides?
+    if is_up:
+        crossed_zero = current_move < 0
+    else:
+        crossed_zero = current_move > 0
+
+    # Retreat velocity: rate of change over last 10-15 snapshots
+    # Positive velocity = moving AWAY from position's favoured direction
+    tail = moves[-15:] if len(moves) >= 15 else moves[-10:]
+    if len(tail) >= 5:
+        recent_chunk = tail[-5:]
+        earlier_chunk = tail[:5]
+        vel_recent = (recent_chunk[-1] - recent_chunk[0]) / len(recent_chunk)
+        vel_earlier = (earlier_chunk[-1] - earlier_chunk[0]) / len(earlier_chunk)
+
+        # For UP position, negative velocity = retreating (bad)
+        # For DOWN position, positive velocity = retreating (bad)
+        if is_up:
+            retreat_vel = -vel_recent  # positive = retreating from UP
+        else:
+            retreat_vel = vel_recent  # positive = retreating from DOWN
+
+        # Acceleration: is retreat speeding up or slowing down?
+        if is_up:
+            retreat_vel_earlier = -vel_earlier
+        else:
+            retreat_vel_earlier = vel_earlier
+
+        if retreat_vel > 0 and retreat_vel_earlier > 0:
+            if retreat_vel > retreat_vel_earlier * 1.2:
+                accel_label = "ACCELERATING (retreat speeding up)"
+            elif retreat_vel < retreat_vel_earlier * 0.8:
+                accel_label = "DECELERATING (retreat slowing)"
+            else:
+                accel_label = "steady"
+        elif retreat_vel > 0:
+            accel_label = "ACCELERATING (newly retreating)"
+        else:
+            accel_label = "not retreating"
+    else:
+        retreat_vel = 0.0
+        accel_label = "insufficient data"
+
+    # Opposite side ask price
+    is_sold_up = is_up
+    opp_ob = snapshot.down_orderbook if is_sold_up else snapshot.orderbook
+    opp_ask = opp_ob.best_ask
+    opp_side = "DOWN" if is_sold_up else "UP"
+
+    # Build prompt section
+    parts = [
+        f"## Reversal Analysis (from per-second data)",
+        f"- Peak BTC move: ${peak_val:+,.0f} from open (at t={peak_idx}s, {peak_age:.0f}s ago)",
+        f"- Current BTC move: ${current_move:+,.0f} from open",
+        f"- Retracement: {retracement_pct:.0f}% of peak given back",
+        f"- Zero crossing: {'YES — BTC has switched sides (strong flip signal)' if crossed_zero else 'NO — BTC still on original side'}",
+        f"- Retreat velocity: ${retreat_vel:+.1f}/s ({accel_label})",
+        f"- Time since peak: {peak_age:.0f}s ({'sustained retreat' if peak_age > 30 else 'recent peak'})",
+    ]
+    if opp_ask is not None:
+        rr = (1.0 - opp_ask) / opp_ask if opp_ask > 0 else 0
+        parts.append(f"- {opp_side} ask: ${opp_ask:.2f} (R/R = {rr:.2f}x if flipping)")
+
+    return "\n".join(parts)
+
+
 def _format_microstructure(history: list) -> str | None:
     """Format cross-candle microstructure summary for the AI prompt.
 
@@ -401,19 +506,29 @@ class AIDecision:
 
         if trigger_type == "reversal_retracement":
             # Single AI call: HOLD (keep position) or BUY opposite (auto-close + flip)
+            # Compute rich retracement analytics from per-second prefilter history
+            retracement_ctx = _compute_retracement_context(
+                list(self._shared.prefilter_history),
+                token_side_str,
+                snapshot,
+            )
+
             opp_ob = snapshot.down_orderbook if sold_up else snapshot.orderbook
             opp_ask = opp_ob.best_ask
             opp_line = f"- {opposite_side} ask: ${opp_ask:.2f}\n" if opp_ask else ""
             exit_context = (
                 f"\n## REVERSAL RETRACEMENT — HOLD OR FLIP?\n"
                 f"- Position: {token_side_str.upper()}\n"
-                f"- Reason: {reason}\n"
                 f"- Current P&L: {pnl_pct:+.1%}\n"
                 f"{opp_line}"
-                f"- BTC has given back most of its peak move. The position is losing momentum.\n"
+                f"{retracement_ctx}\n"
+                f"\n### Decision Guide\n"
+                f"- The RETRACEMENT PATTERN is the signal — do NOT evaluate the current BTC move as a standalone entry.\n"
+                f"- Zero crossing (BTC moved to opposite side) = strong flip signal.\n"
+                f"- Accelerating retreat + time since peak > 30s = likely real reversal.\n"
+                f"- Decelerating retreat or very recent peak = likely pullback, consider HOLD.\n"
                 f"- **HOLD** = keep position open, stop-loss remains active.\n"
                 f"- **BUY {opposite_side}** = close {token_side_str.upper()} and flip to {opposite_side}.\n"
-                f"- Consider: is the reversal real (flip) or a temporary pullback (hold)?\n"
             )
             # Set flag so anti-hedge auto-closes current position instead of blocking
             self._reversal_flip_side = token_side_str.lower()

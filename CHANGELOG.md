@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v0.11.0] — 2026-03-01
+
+### Improved — Enriched reversal retracement prompt
+
+iter_019 analysis: reversal retracement fired on 10 of 16 traded candles but HOLD/FLIP accuracy was only 60% (6/10), costing $20.88 net. Root cause: the 8-line generic reversal prompt gave the AI no quantitative retracement data, so it evaluated the post-retracement BTC move as a standalone entry signal (e.g. candle 3: "$9 move is too small = noise" — missing that $44→$9 is an 80% retracement).
+
+New `_compute_retracement_context()` helper computes from per-second prefilter history: peak BTC move + age, retracement %, zero crossing (BTC switched sides), retreat velocity + acceleration, time since peak, and opposite-side R/R. The reversal prompt now includes this structured data plus a decision guide that teaches the AI to read the retracement pattern instead of the absolute BTC level. System prompt also adds a baseline section on reversal retracement interpretation.
+
 ## [v0.10.1] — 2026-03-01
 
 ### Added — Bot version tracking per iteration
