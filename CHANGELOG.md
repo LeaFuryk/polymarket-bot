@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v0.12.0] — 2026-03-01
+
+### Fixed — Auto-close flip SELL not logged
+
+`_auto_close_for_flip` updated the portfolio but never wrote a TradeRecord to JSONL — zero SELL records in the audit trail for reversal flips. Added `cycle` parameter and `_log_cycle()` call after successful fill so every flip close is captured in the trade log.
+
+### Fixed — Reversal retracement fires too early
+
+PositionMonitor could fire reversal_retracement after just ~10s (10 snapshots). On noisy candles, early BTC noise crossing zero triggered a premature flip that guaranteed a loss on the first leg. Added a 30-second minimum hold time guard before checking retracement. Also raised the minimum peak from $15 to $25 (matching `MIN_PEAK_COMMIT` in adaptive_entry.py) so only meaningful peaks trigger retracement analysis.
+
+### Added — Patience advisory for UNCERTAIN regime
+
+In UNCERTAIN signal regimes (40-60% reversal rate), early entries (>200s remaining) historically underperformed — iter_020 saw the >200s bucket collapse from 71-78% WR to 20-33%. Both UNCERTAIN prompt blocks in `get_ai_context()` now include soft timing guidance nudging the AI to wait for the 150-200s window or stronger confirmation on marginal setups. This is prompt-level advice, not a hard gate — the AI can still enter early on genuinely strong signals.
+
 ## [v0.11.0] — 2026-03-01
 
 ### Added — Live entry timing performance indicator

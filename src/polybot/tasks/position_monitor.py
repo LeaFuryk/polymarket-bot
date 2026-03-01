@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 
 from polybot.config import AppConfig
 from polybot.shared_state import EntryContext, PreFilterSnapshot, SharedState
@@ -351,6 +352,12 @@ class PositionMonitor:
         # Reversal retracement: BTC retraced 80%+ from peak toward open
         # Triggers AI to decide: HOLD (SL stays active) or SELL + flip
         if "reversal" not in self._triggered.get(token_side, ""):
+            # Minimum 30s hold time — early BTC noise can cross zero and
+            # trigger a premature flip that guarantees a loss on the first leg
+            entry_ctx = self._shared.entry_context.get(token_side)
+            if entry_ctx and (time.time() - entry_ctx.entry_time) < 30:
+                return  # Too early — let the position develop
+
             history = list(self._shared.prefilter_history)
             if len(history) >= 10:
                 # Compute peak move in the position's favored direction
@@ -361,8 +368,8 @@ class PositionMonitor:
                     peak_move = min(s.btc_move_from_open for s in history)
                     current_move = history[-1].btc_move_from_open
 
-                # Need a meaningful peak ($15+) before checking retracement
-                if abs(peak_move) >= 15.0:
+                # Need a meaningful peak ($25+) before checking retracement
+                if abs(peak_move) >= 25.0:
                     # Retracement ratio: how much of the peak has been given back
                     # 0.0 = still at peak, 1.0 = back to open, >1.0 = crossed zero
                     if peak_move != 0:

@@ -647,6 +647,10 @@ class AdaptiveEntryTracker:
                     f"The reversal rate was measured at the initial cross; moves beyond "
                     f"${self.btc_threshold:.0f} have cleared typical fakeout noise. "
                     f"Momentum entries are favored over contrarian.",
+                    "",
+                    f"⏳ **Entry timing**: BTC has cleared fakeout noise, but uncertain regimes still show elevated "
+                    f"reversal risk on very early entries (>200s). Size down or wait for brief confirmation if "
+                    f"confidence is marginal.",
                 ])
             else:
                 # Below fakeout threshold — could still be noise, cheapest-side guidance applies
@@ -659,6 +663,10 @@ class AdaptiveEntryTracker:
                     f"However, if one side is clearly confirmed by price (e.g., $0.90 vs $0.10), "
                     f"trust the market signal — the cheap side is cheap for a reason. "
                     f"This applies mainly to early-candle balanced prices, not late confirmations.",
+                    "",
+                    f"⏳ **Entry timing**: Early entries (>200s remaining) in uncertain regimes have historically "
+                    f"underperformed. The 150-200s window offers better directional clarity. If the current move "
+                    f"is marginal, consider waiting for stronger confirmation.",
                 ])
         elif rate < 0.25:
             lines.extend([

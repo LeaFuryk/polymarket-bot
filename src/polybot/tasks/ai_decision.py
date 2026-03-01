@@ -735,6 +735,7 @@ class AIDecision:
         market: CandleMarket | None,
         time_remaining: float,
         snapshot,
+        cycle: int = 0,
     ) -> bool:
         """Auto-close a position as part of reversal flip. Returns True if closed."""
         token_side = TokenSide.UP if close_side == "up" else TokenSide.DOWN
@@ -789,6 +790,7 @@ class AIDecision:
             "Reversal flip: auto-closed %s (%.1f shares @ $%.4f, P&L $%.2f)",
             close_side.upper(), fill.size, fill.fill_price, realized,
         )
+        self._log_cycle(cycle, snapshot, decision=sell_decision, fill=fill)
         return True
 
     async def _run_ai_decision(
@@ -1109,7 +1111,7 @@ class AIDecision:
         if decision.action == Action.BUY:
             if decision.token_side == TokenSide.DOWN and self._portfolio.up_position.shares > 0:
                 if self._reversal_flip_side:
-                    closed = await self._auto_close_for_flip("up", market, time_remaining, snapshot)
+                    closed = await self._auto_close_for_flip("up", market, time_remaining, snapshot, cycle)
                     if not closed:
                         decision = TradingDecision(
                             action=Action.HOLD,
@@ -1140,7 +1142,7 @@ class AIDecision:
                     )
             elif decision.token_side == TokenSide.UP and self._portfolio.down_position.shares > 0:
                 if self._reversal_flip_side:
-                    closed = await self._auto_close_for_flip("down", market, time_remaining, snapshot)
+                    closed = await self._auto_close_for_flip("down", market, time_remaining, snapshot, cycle)
                     if not closed:
                         decision = TradingDecision(
                             action=Action.HOLD,
