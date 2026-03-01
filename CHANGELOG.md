@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v0.9.2] — 2026-03-01
+
+### Fixed — Haiku screening returns empty reasoning
+
+Haiku sometimes returned `reason: ""` in its screening tool call, causing the dashboard to show "No reasoning". Strengthened the schema description to demand specific reasoning (e.g. "BTC move only $8, below $15 threshold"). Logs a warning if Haiku still returns empty.
+
 ## [v0.9.1] — 2026-02-28
 
 ### Fixed — Reversal retracement blocked by AI cooldown
