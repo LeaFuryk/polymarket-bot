@@ -393,13 +393,37 @@ class AIDecision:
         portfolio_value = self._portfolio.total_value_at_market(up_mid or 0.5, down_mid)
 
         # Add exit context to the AI call
-        exit_context = (
-            f"\n## EXIT TRIGGER\n"
-            f"- Token: {token_side_str.upper()}\n"
-            f"- Reason: {reason}\n"
-            f"- Current P&L: {pnl_pct:+.1%}\n"
-            f"- Action needed: Evaluate whether to SELL this position NOW.\n"
-        )
+        trigger_type = exit_signal.get("trigger_type", "")
+        sold_up = token_side_str.lower() == "up"
+        opposite_side = "DOWN" if sold_up else "UP"
+
+        if trigger_type == "reversal_retracement":
+            # Richer context for reversal: tell AI about the flip option
+            snap = self._shared.latest_snapshot
+            opp_ask = None
+            if snap:
+                opp_ob = snap.down_orderbook if sold_up else snap.orderbook
+                opp_ask = opp_ob.best_ask
+            opp_line = f"- {opposite_side} ask: ${opp_ask:.2f}\n" if opp_ask else ""
+            exit_context = (
+                f"\n## REVERSAL RETRACEMENT — SELL OR HOLD?\n"
+                f"- Position: {token_side_str.upper()}\n"
+                f"- Reason: {reason}\n"
+                f"- Current P&L: {pnl_pct:+.1%}\n"
+                f"{opp_line}"
+                f"- BTC has given back most of its peak move. The position is losing momentum.\n"
+                f"- **HOLD** = keep position open, stop-loss remains active.\n"
+                f"- **SELL** = close position now. A contrarian flip to {opposite_side} will be evaluated automatically.\n"
+                f"- Consider: is the reversal real (sell + flip) or a temporary pullback (hold)?\n"
+            )
+        else:
+            exit_context = (
+                f"\n## EXIT TRIGGER\n"
+                f"- Token: {token_side_str.upper()}\n"
+                f"- Reason: {reason}\n"
+                f"- Current P&L: {pnl_pct:+.1%}\n"
+                f"- Action needed: Evaluate whether to SELL this position NOW.\n"
+            )
 
         await self._run_ai_decision(
             cycle, snapshot, market, time_remaining, portfolio_value,
@@ -408,7 +432,6 @@ class AIDecision:
         )
 
         # Safeguard #3: Record stop-loss exit for cooldown warning
-        trigger_type = exit_signal.get("trigger_type", "")
         if trigger_type == "stop_loss":
             self._shared.last_stop_loss = {
                 "token_side": token_side_str,
