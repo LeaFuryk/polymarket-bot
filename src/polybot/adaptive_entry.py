@@ -9,7 +9,7 @@ Fakeout-based threshold: for each candle, measures how far BTC moved in the
 was decided. Sets the threshold above typical fakeouts so the bot only enters
 on signals stronger than recent noise.
 
-  threshold = P75(last 10 fakeout magnitudes) + $5 margin, clamped to [$20, $100]
+  threshold = P75(last 5 fakeout magnitudes), clamped to [$20, $100]
 
 Small fakeouts [0..25] → threshold ~$25 (clean signals, enter early).
 Large fakeouts [10..80] → threshold ~$57 (noisy market, wait for confirmation).
@@ -322,8 +322,11 @@ class AdaptiveEntryTracker:
 
         # Fakeout-based BTC threshold: compute per-candle fakeout magnitude
         # (peak move in the *wrong* direction before the winner was decided)
+        # Use shorter window (last 5 candles) so volatile outliers age out fast,
+        # while reversal rate / signal type still use the full window for smoothness.
+        fakeout_window = self._history[-5:]
         fakeout_magnitudes = []
-        for c in window:
+        for c in fakeout_window:
             if c.peak_up_move > 0 or c.peak_down_move > 0:
                 # Fakeout = peak in wrong direction
                 if c.winner == "up":
@@ -342,8 +345,8 @@ class AdaptiveEntryTracker:
             self._fakeout_max = sorted_fakeouts[-1]
             self._using_fakeout = True
 
-            # Threshold = P75 + $5 margin, clamped to [$20, $100]
-            self.btc_threshold = max(20.0, min(100.0, self._fakeout_p75 + 5.0))
+            # Threshold = P75, clamped to [$20, $100]
+            self.btc_threshold = max(20.0, min(100.0, self._fakeout_p75))
         else:
             # Fallback: V-shaped formula for old records without peak data
             self._using_fakeout = False
