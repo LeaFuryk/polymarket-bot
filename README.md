@@ -461,7 +461,7 @@ polybot-archive --name "baseline"  # → archive/baseline/, then clean
 polybot-archive --no-clean         # archive without cleaning
 ```
 
-Each archive contains all generated artifacts (trade logs, resolutions, SQLite DB, AI knowledge, feature config) plus a `summary.json` with key metrics: date range, candles, trades, win rate, PnL, fees, AI cost, net result, reflections count, and enabled indicators.
+Each archive contains all generated artifacts (trade logs, resolutions, SQLite DB, AI knowledge, feature config) plus a `summary.json` with key metrics: bot version, date range, candles, trades, win rate, PnL, fees, AI cost, net result, reflections count, and enabled indicators.
 
 Compare performance across all archived iterations:
 

@@ -1232,6 +1232,19 @@ body::after {
   font-size: 0.62rem;
   color: var(--text-muted);
 }
+/* Version badge */
+.version-badge {
+  display: inline-block;
+  font: 500 0.58rem/1 var(--mono);
+  color: var(--text-muted);
+  background: var(--bg-inset);
+  border: 1px solid var(--border-subtle);
+  border-radius: 3px;
+  padding: 1px 5px;
+  vertical-align: middle;
+}
+.iv-header .version-badge { font-size: 0.68rem; padding: 2px 7px; }
+.sb-iter-version { font-size: 0.55rem; color: var(--text-muted); opacity: 0.7; }
 
 /* Changes from previous iteration */
 .iv-changes {
@@ -1948,6 +1961,7 @@ function renderSidebar(data) {
         </div>
         <div class="sb-item-metrics">
           <span class="sb-iter-net ${pnlCls(net)}">${pnlSign(net)}$${Math.abs(net).toFixed(2)}</span>
+          ${it.version ? `<span class="sb-iter-version">${esc(it.version)}</span>` : ''}
         </div>
       </div>`;
     }
@@ -2579,7 +2593,7 @@ function renderIterationView(it, prev, next) {
   h += `<div class="iv-header">
     <div class="iv-header-left">
       <div>
-        <div class="iv-label">${esc(it.label)}</div>
+        <div class="iv-label">${esc(it.label)}${it.version ? ' <span class="version-badge">' + esc(it.version) + '</span>' : ''}</div>
         <div class="iv-date">${startStr}${endStr ? ' – ' + endStr : ''} &nbsp; (${dur})</div>
       </div>
       <div class="iv-net-badge ${net >= 0 ? 'pos' : 'neg'}">${pnlSign(net)}$${Math.abs(net).toFixed(2)}</div>
@@ -3770,7 +3784,7 @@ function buildIterCards(iterations) {
     // Header: label + net result
     card += `<div class="iter-card-hdr">
       <div>
-        <div class="iter-card-label">${esc(it.label)}</div>
+        <div class="iter-card-label">${esc(it.label)}${it.version ? ' <span class="version-badge">' + esc(it.version) + '</span>' : ''}</div>
         <div class="iter-card-date">${start}${end ? ' – ' + end : ''} (${dur})</div>
       </div>
       <div class="iter-card-net ${net >= 0 ? 'v-green' : 'v-red'}">${net >= 0 ? '+' : ''}$${net.toFixed(2)}
