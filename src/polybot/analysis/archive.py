@@ -192,12 +192,24 @@ def _compute_summary(label: str, dest: Path) -> dict:
         except Exception:
             pass
 
-    from importlib.metadata import version as _pkg_version
-
-    try:
-        bot_version = "v" + _pkg_version("polybot")
-    except Exception:
-        bot_version = "unknown"
+    # Read version from dashboard data (captured at bot startup) for accuracy;
+    # fall back to importlib.metadata if dashboard is unavailable.
+    bot_version = "unknown"
+    dash_path = LOG_DIR / "dashboard_data.json"
+    if dash_path.exists():
+        try:
+            dash = json.loads(dash_path.read_text())
+            v = dash.get("bot_version", "")
+            if v:
+                bot_version = "v" + v if not v.startswith("v") else v
+        except Exception:
+            pass
+    if bot_version == "unknown":
+        from importlib.metadata import version as _pkg_version
+        try:
+            bot_version = "v" + _pkg_version("polybot")
+        except Exception:
+            pass
 
     summary = {
         "label": label,
