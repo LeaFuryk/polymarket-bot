@@ -4,16 +4,21 @@ All notable changes to this project will be documented in this file.
 
 ## [v0.9.0] — 2026-02-28
 
-### Added — Post-stop-loss contrarian flip
+### Added — Reversal retracement detection + contrarian flip
 
-When the bot gets stopped out, the opposite side is usually winning. Previously the anti-flip guard blocked buying the opposite side on the same candle, forcing the bot to sit idle while the reversal played out. Now, after a stop-loss SELL fills, the bot immediately checks contrarian flip conditions and triggers a second AI decision for the opposite side.
+**Reversal retracement** — a new PositionMonitor trigger that fires when BTC retraces 50%+ from its peak move back toward the candle open while a position is open. Instead of waiting for the stop-loss to fire (when the opposite side is already $0.80+), the bot detects the reversal early and asks AI to decide: **HOLD** (keep position, SL stays active) or **SELL + flip** (close and buy opposite side).
 
-**Conditions (all must pass):**
-1. Exit was a **stop-loss** (not take-profit)
-2. **Time remaining >= 60s** — enough time for the flip to play out
-3. **BTC confirms reversal** — BTC move from candle open is against the stopped-out position
+Example: Bot buys UP, BTC peaks at +$50, then retraces to +$20 (60% retraced). The reversal trigger fires. AI evaluates and can either hold (SL remains active) or sell UP and buy DOWN while prices are still reasonable.
 
-No price gate — the AI sees the full context (opposite ask, R/R, BTC move magnitude) and decides BUY or HOLD. The anti-flip guard is bypassed only during this contrarian flip window. All other guards (anti-hedge, single-entry, entry price cap) still apply normally.
+**Contrarian flip** — after any exit (stop-loss or reversal-retracement), if AI sold the position and BTC confirms the reversal, a second AI decision is triggered for the opposite side. The anti-flip guard is bypassed for this entry only.
+
+**Flip conditions:**
+1. Exit was a **stop-loss** or **reversal retracement** (not take-profit)
+2. Position was actually closed (AI chose SELL, not HOLD)
+3. **Time remaining >= 60s**
+4. **BTC confirms reversal** — BTC move from candle open is against the exited position
+
+No price gate — the AI sees the full context and decides BUY or HOLD.
 
 ### Changed — Shorter fakeout window for BTC threshold (10 → 5 candles)
 
