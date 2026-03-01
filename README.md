@@ -102,7 +102,7 @@ Waits for entry triggers (from MarketMonitor) or exit triggers (from PositionMon
 4. **Claude decides** — Full Sonnet decision with structured JSON output
 5. **Confidence gate** — Override BUY to HOLD if confidence < 0.55
 6. **Calibration gate** — Override BUY to HOLD if calibrated win rate < break-even (with overconfidence warnings per bin)
-7. **Anti-hedge guard** — Blocks BUY if opposite side has shares
+7. **Anti-hedge guard** — Blocks BUY if opposite side has shares. During **reversal flip**, auto-closes the held position instead of blocking, so the BUY proceeds as a flip
 7b. **Anti-flip guard** — Blocks buying the opposite side after a SELL on the same candle (prevents whipsaw). Same-side re-entry allowed. Bypassed during **post-SL contrarian flip** (see below)
 7c. **Single-entry-per-side** — Blocks buying the same side twice on the same candle (code-enforced position discipline)
 7d. **Entry price cap** — Blocks BUY when best ask >= $0.85 (R/R < 0.18, negative avg PnL in backtesting)
@@ -118,7 +118,7 @@ Waits for entry triggers (from MarketMonitor) or exit triggers (from PositionMon
 2. **Compute P&L %** — For each open position (UP and DOWN independently)
 3. **Adaptive dynamic stop-loss** — Computed per-position from 5 factors: (1) time weighting (-60% at 240s to -20% at 0s), (2) regime from reversal rate (momentum tightens, choppy widens), (3) BTC velocity (against position tightens, favors widens), (4) ML alignment at entry (agreed widens, disagreed tightens), (5) entry price quality (expensive tightens +6%, cheap ≤$0.40 widens -10%, very cheap ≤$0.30 widens -15%). Bounded by configurable floor/ceiling (-75% to -15%)
 4. **Adaptive dynamic take-profit** — Time-weighted base with 3 adjustments: regime (momentum lets winners run, choppy takes profits), BTC velocity, entry price quality. Bounded (+20% to +120%)
-5. **Reversal retracement detection** — When BTC retraces 80%+ from its peak move back toward candle open (minimum $15 peak), triggers an AI exit decision. AI decides HOLD (SL stays active) or SELL (position closes, contrarian flip evaluates opposite side). Fires once per position
+5. **Reversal retracement detection** — When BTC retraces 80%+ from its peak move back toward candle open (minimum $15 peak), triggers a **single AI call**: AI decides **HOLD** (keep position, SL stays active) or **BUY opposite** (auto-close current position + flip to other side). No two-call flow — one decision handles everything. Fires once per position
 6. **Trigger exit** — Push exit signal to AIDecision with reason, P&L, and dynamic threshold (respects AI cooldown; emergencies ≤-30% bypass)
 7. **Fallback** — When `dynamic_sl_enabled: false`, uses existing time-weighted-only logic
 

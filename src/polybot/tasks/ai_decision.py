@@ -195,6 +195,7 @@ class AIDecision:
         self._cycle_count = 0
         self._total_api_cost: float = 0.0
         self._contrarian_flip_active = False
+        self._reversal_flip_side: str | None = None  # "up"/"down" during reversal retracement
         self._last_cycle_api_cost: float = 0.0
 
         # Session stats (agent reads these)
@@ -398,24 +399,33 @@ class AIDecision:
         opposite_side = "DOWN" if sold_up else "UP"
 
         if trigger_type == "reversal_retracement":
-            # Richer context for reversal: tell AI about the flip option
-            snap = self._shared.latest_snapshot
-            opp_ask = None
-            if snap:
-                opp_ob = snap.down_orderbook if sold_up else snap.orderbook
-                opp_ask = opp_ob.best_ask
+            # Single AI call: HOLD (keep position) or BUY opposite (auto-close + flip)
+            opp_ob = snapshot.down_orderbook if sold_up else snapshot.orderbook
+            opp_ask = opp_ob.best_ask
             opp_line = f"- {opposite_side} ask: ${opp_ask:.2f}\n" if opp_ask else ""
             exit_context = (
-                f"\n## REVERSAL RETRACEMENT — SELL OR HOLD?\n"
+                f"\n## REVERSAL RETRACEMENT — HOLD OR FLIP?\n"
                 f"- Position: {token_side_str.upper()}\n"
                 f"- Reason: {reason}\n"
                 f"- Current P&L: {pnl_pct:+.1%}\n"
                 f"{opp_line}"
                 f"- BTC has given back most of its peak move. The position is losing momentum.\n"
                 f"- **HOLD** = keep position open, stop-loss remains active.\n"
-                f"- **SELL** = close position now. A contrarian flip to {opposite_side} will be evaluated automatically.\n"
-                f"- Consider: is the reversal real (sell + flip) or a temporary pullback (hold)?\n"
+                f"- **BUY {opposite_side}** = close {token_side_str.upper()} and flip to {opposite_side}.\n"
+                f"- Consider: is the reversal real (flip) or a temporary pullback (hold)?\n"
             )
+            # Set flag so anti-hedge auto-closes current position instead of blocking
+            self._reversal_flip_side = token_side_str.lower()
+            self._contrarian_flip_active = True
+            try:
+                await self._run_ai_decision(
+                    cycle, snapshot, market, time_remaining, portfolio_value,
+                    extra_context=exit_context,
+                    # No forced_exit_side — AI chooses HOLD or BUY opposite
+                )
+            finally:
+                self._reversal_flip_side = None
+                self._contrarian_flip_active = False
         else:
             exit_context = (
                 f"\n## EXIT TRIGGER\n"
@@ -425,29 +435,28 @@ class AIDecision:
                 f"- Action needed: Evaluate whether to SELL this position NOW.\n"
             )
 
-        await self._run_ai_decision(
-            cycle, snapshot, market, time_remaining, portfolio_value,
-            extra_context=exit_context,
-            forced_exit_side=token_side_str,
-        )
+            await self._run_ai_decision(
+                cycle, snapshot, market, time_remaining, portfolio_value,
+                extra_context=exit_context,
+                forced_exit_side=token_side_str,
+            )
 
-        # Safeguard #3: Record stop-loss exit for cooldown warning
-        if trigger_type == "stop_loss":
-            self._shared.last_stop_loss = {
-                "token_side": token_side_str,
-                "pnl_pct": pnl_pct,
-                "timestamp": time.time(),
-            }
+            # Safeguard #3: Record stop-loss exit for cooldown warning
+            if trigger_type == "stop_loss":
+                self._shared.last_stop_loss = {
+                    "token_side": token_side_str,
+                    "pnl_pct": pnl_pct,
+                    "timestamp": time.time(),
+                }
 
-        # --- Contrarian flip (post-exit reversal entry) ---
-        # After SL or reversal-retracement exit, check if the opposite side
-        # is worth entering. Only if the AI actually sold (position closed).
-        if trigger_type in ("stop_loss", "reversal_retracement"):
-            # Verify position was actually closed
-            pos = (self._portfolio.up_position if token_side_str.lower() == "up"
-                   else self._portfolio.down_position)
-            if pos.shares <= 0:
-                await self._try_contrarian_flip(token_side_str, pnl_pct, trigger_type)
+            # --- Contrarian flip (post-SL only) ---
+            # After SL, if position closed and BTC confirms reversal,
+            # trigger a second AI call for the opposite side.
+            if trigger_type == "stop_loss":
+                pos = (self._portfolio.up_position if sold_up
+                       else self._portfolio.down_position)
+                if pos.shares <= 0:
+                    await self._try_contrarian_flip(token_side_str, pnl_pct, trigger_type)
 
     async def _try_contrarian_flip(
         self,
@@ -526,6 +535,68 @@ class AIDecision:
             )
         finally:
             self._contrarian_flip_active = False
+
+    async def _auto_close_for_flip(
+        self,
+        close_side: str,  # "up" or "down"
+        market: CandleMarket | None,
+        time_remaining: float,
+        snapshot,
+    ) -> bool:
+        """Auto-close a position as part of reversal flip. Returns True if closed."""
+        token_side = TokenSide.UP if close_side == "up" else TokenSide.DOWN
+        position = self._portfolio.get_position(token_side)
+        if position.shares <= 0:
+            return True
+
+        ob = snapshot.orderbook if close_side == "up" else snapshot.down_orderbook
+        sell_decision = TradingDecision(
+            action=Action.SELL,
+            order_type=OrderType.MARKET,
+            size=position.shares,
+            confidence=0.5,
+            reasoning="Auto-close for reversal flip",
+            market_view="",
+            token_side=token_side,
+        )
+
+        fill = None
+        if self._live_mode and self._live_engine:
+            fill = await self._live_engine.execute(sell_decision, ob)
+            paper_fill = self._exec_sim.execute(sell_decision, ob)
+            if paper_fill and self._shadow_portfolio:
+                self._shadow_portfolio.apply_fill(paper_fill, token_side)
+        else:
+            fill = self._exec_sim.execute(sell_decision, ob)
+
+        if not fill:
+            logger.warning("Reversal flip: failed to close %s position", close_side.upper())
+            return False
+
+        self._portfolio.apply_fill(fill, token_side)
+        realized = (fill.fill_price - position.avg_entry_price) * fill.size
+        self._risk.record_trade(realized, fill.fee_amount)
+
+        if market:
+            self._exit_tracker.register_exit(
+                slug=market.slug,
+                token_side=token_side.value,
+                entry_price=position.avg_entry_price,
+                exit_price=fill.fill_price,
+                exit_size=fill.size,
+                time_remaining=time_remaining,
+            )
+            self._sold_sides.setdefault(market.slug, set()).add(token_side.value)
+
+        self._shared.entry_context.pop(token_side.value, None)
+        self._shared.dynamic_sl.pop(token_side.value, None)
+        self._shared.dynamic_tp.pop(token_side.value, None)
+
+        logger.info(
+            "Reversal flip: auto-closed %s (%.1f shares @ $%.4f, P&L $%.2f)",
+            close_side.upper(), fill.size, fill.fill_price, realized,
+        )
+        return True
 
     async def _run_ai_decision(
         self,
@@ -836,39 +907,70 @@ class AIDecision:
                 )
 
         # Anti-hedging guard: don't buy one side while holding the other
+        # When _reversal_flip_side is set, auto-close the held position instead of blocking
         if decision.action == Action.BUY:
             if decision.token_side == TokenSide.DOWN and self._portfolio.up_position.shares > 0:
-                logger.info(
-                    "Anti-hedge block: skipping DOWN buy while holding %.1f UP shares",
-                    self._portfolio.up_position.shares,
-                )
-                decision = TradingDecision(
-                    action=Action.HOLD,
-                    order_type=OrderType.MARKET,
-                    size=0.0,
-                    confidence=decision.confidence,
-                    reasoning=f"Anti-hedge: holding UP shares, blocked DOWN buy. Original: {decision.reasoning[:80]}",
-                    market_view=decision.market_view,
-                    token_side=decision.token_side,
-                    hypothetical_direction=decision.hypothetical_direction,
-                    confidence_drivers=decision.confidence_drivers,
-                )
+                if self._reversal_flip_side:
+                    closed = await self._auto_close_for_flip("up", market, time_remaining, snapshot)
+                    if not closed:
+                        decision = TradingDecision(
+                            action=Action.HOLD,
+                            order_type=OrderType.MARKET,
+                            size=0.0,
+                            confidence=decision.confidence,
+                            reasoning=f"Reversal flip: failed to close UP position. Original: {decision.reasoning[:80]}",
+                            market_view=decision.market_view,
+                            token_side=decision.token_side,
+                            hypothetical_direction=decision.hypothetical_direction,
+                            confidence_drivers=decision.confidence_drivers,
+                        )
+                else:
+                    logger.info(
+                        "Anti-hedge block: skipping DOWN buy while holding %.1f UP shares",
+                        self._portfolio.up_position.shares,
+                    )
+                    decision = TradingDecision(
+                        action=Action.HOLD,
+                        order_type=OrderType.MARKET,
+                        size=0.0,
+                        confidence=decision.confidence,
+                        reasoning=f"Anti-hedge: holding UP shares, blocked DOWN buy. Original: {decision.reasoning[:80]}",
+                        market_view=decision.market_view,
+                        token_side=decision.token_side,
+                        hypothetical_direction=decision.hypothetical_direction,
+                        confidence_drivers=decision.confidence_drivers,
+                    )
             elif decision.token_side == TokenSide.UP and self._portfolio.down_position.shares > 0:
-                logger.info(
-                    "Anti-hedge block: skipping UP buy while holding %.1f DOWN shares",
-                    self._portfolio.down_position.shares,
-                )
-                decision = TradingDecision(
-                    action=Action.HOLD,
-                    order_type=OrderType.MARKET,
-                    size=0.0,
-                    confidence=decision.confidence,
-                    reasoning=f"Anti-hedge: holding DOWN shares, blocked UP buy. Original: {decision.reasoning[:80]}",
-                    market_view=decision.market_view,
-                    token_side=decision.token_side,
-                    hypothetical_direction=decision.hypothetical_direction,
-                    confidence_drivers=decision.confidence_drivers,
-                )
+                if self._reversal_flip_side:
+                    closed = await self._auto_close_for_flip("down", market, time_remaining, snapshot)
+                    if not closed:
+                        decision = TradingDecision(
+                            action=Action.HOLD,
+                            order_type=OrderType.MARKET,
+                            size=0.0,
+                            confidence=decision.confidence,
+                            reasoning=f"Reversal flip: failed to close DOWN position. Original: {decision.reasoning[:80]}",
+                            market_view=decision.market_view,
+                            token_side=decision.token_side,
+                            hypothetical_direction=decision.hypothetical_direction,
+                            confidence_drivers=decision.confidence_drivers,
+                        )
+                else:
+                    logger.info(
+                        "Anti-hedge block: skipping UP buy while holding %.1f DOWN shares",
+                        self._portfolio.down_position.shares,
+                    )
+                    decision = TradingDecision(
+                        action=Action.HOLD,
+                        order_type=OrderType.MARKET,
+                        size=0.0,
+                        confidence=decision.confidence,
+                        reasoning=f"Anti-hedge: holding DOWN shares, blocked UP buy. Original: {decision.reasoning[:80]}",
+                        market_view=decision.market_view,
+                        token_side=decision.token_side,
+                        hypothetical_direction=decision.hypothetical_direction,
+                        confidence_drivers=decision.confidence_drivers,
+                    )
 
         # Anti-flip guard: block buying opposite side after selling on same candle
         # Same-side re-entry (adding back) is still allowed
