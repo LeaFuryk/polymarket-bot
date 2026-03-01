@@ -1429,6 +1429,11 @@ class AIDecision:
                         "Live SKIPPED but Paper would have filled at $%.4f",
                         paper_fill.fill_price,
                     )
+
+                # Mark unfilled live trades as blocked for dashboard visibility
+                if fill is None and not risk_blocked:
+                    risk_blocked = True
+                    risk_reason = self._live_engine.last_skip_reason or "limit order timeout"
             elif decision.order_type == OrderType.MARKET:
                 # Paper mode: execute on simulator only
                 fill = self._exec_sim.execute(decision, target_ob)

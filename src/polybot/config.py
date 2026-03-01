@@ -103,7 +103,8 @@ class TradingConfig(BaseModel):
     max_order_size_usd: float = 50.0  # hard cap per order
     max_session_loss_usd: float = 40.0  # kill switch threshold
     min_wallet_balance_usd: float = 5.0  # refuse BUY below this
-    max_price_drift_pct: float = 0.03  # 3% — skip if price drifted since AI decision
+    max_price_drift_pct: float = 0.03  # 3% — skip if price drifted since AI decision (legacy, unused)
+    limit_order_ttl_seconds: int = 3  # how long to keep GTC limit order open before cancel
     dry_run: bool = False  # sign orders but don't post (for testing)
 
 

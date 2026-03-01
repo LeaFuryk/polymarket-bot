@@ -70,7 +70,8 @@ trading:
   max_order_size_usd: 50.0          # hard cap per single order
   max_session_loss_usd: 40.0        # kill switch: shutdown if session loss exceeds this
   min_wallet_balance_usd: 5.0       # refuse BUY if wallet USDC below this
-  max_price_drift_pct: 0.03         # 3% — skip trade if price moved since AI decision
+  max_price_drift_pct: 0.03         # legacy — no longer used (limit orders replace drift check)
+  limit_order_ttl_seconds: 3       # seconds to keep GTC limit order before cancel
   dry_run: false                    # sign orders but don't post (for testing auth flow)
 
 logging:
