@@ -10,7 +10,7 @@ SCREENING_DECISION_SCHEMA = {
         },
         "reason": {
             "type": "string",
-            "description": "Brief 1-2 sentence explanation",
+            "description": "REQUIRED: 1-2 sentence explanation of WHY. For HOLD: what specific condition failed (e.g. 'BTC move only $8, below $15 threshold'). For TRADE: what signal triggered it. NEVER leave empty.",
         },
     },
     "required": ["should_trade", "reason"],

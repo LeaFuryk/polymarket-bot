@@ -159,7 +159,10 @@ class DecisionEngine:
                 raise ValueError("No tool_use block in screening response")
 
             should_trade = bool(data.get("should_trade", False))
-            reason = data.get("reason", "") or ("No clear trade setup" if not should_trade else "Trade setup detected")
+            reason = data.get("reason", "")
+            if not reason:
+                logger.warning("Haiku returned empty reason — check schema prompt")
+                reason = "No reason provided by screener"
 
             logger.info(
                 "Screen: %s — %s (%.0fms, cost=$%.4f)",
