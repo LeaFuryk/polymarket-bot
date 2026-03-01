@@ -391,16 +391,16 @@ class KnowledgeManager:
                 down_wins = sum(1 for t in down_trades if res_by_slug.get(t.candle_slug, None) and res_by_slug[t.candle_slug].winner == "down")
                 lines.append(f"Your trade record: UP buys {up_wins}W/{len(up_trades)-up_wins}L | DOWN buys {down_wins}W/{len(down_trades)-down_wins}L")
 
-                # Safeguard #8: Per-side accuracy warnings
+                # Per-side accuracy context (learning, not avoidance)
                 up_total = len(up_trades)
                 down_total = len(down_trades)
                 up_wr = up_wins / up_total if up_total >= 3 else None
                 down_wr = down_wins / down_total if down_total >= 3 else None
 
                 if up_wr is not None and up_wr < 0.50:
-                    lines.append(f"  !! Your UP accuracy is low ({up_wr:.0%}) — be extra cautious on UP trades")
+                    lines.append(f"  Note: UP accuracy is {up_wr:.0%} — review the trades below to find patterns (entry too late? wrong signal?). Do NOT avoid UP trades entirely; fix the entry criteria instead.")
                 if down_wr is not None and down_wr < 0.50:
-                    lines.append(f"  !! Your DOWN accuracy is low ({down_wr:.0%}) — be extra cautious on DOWN trades")
+                    lines.append(f"  Note: DOWN accuracy is {down_wr:.0%} — review the trades below to find patterns (entry too late? wrong signal?). Do NOT avoid DOWN trades entirely; fix the entry criteria instead.")
 
                 # Safeguard #8: Losing streak detection from resolved trades
                 resolved_buys = [
@@ -417,8 +417,8 @@ class KnowledgeManager:
                             break
                     if streak >= 3:
                         lines.append(
-                            f"  !! You are on a {streak}-trade losing streak. "
-                            f"Increase selectivity — prioritize high-conviction setups."
+                            f"  Note: {streak}-trade losing streak. Review WHY these lost (bad timing? wrong side? weak signal?) "
+                            f"and adjust entry criteria. A streak does NOT mean you should stop trading — it means something about your entries needs fixing."
                         )
 
                 lines.append("")

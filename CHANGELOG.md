@@ -2,6 +2,28 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v0.10.0] — 2026-03-01
+
+### Fixed — Over-filtering: 38% entry rate despite good WR
+
+iter_018 showed 107 candles but only 41 trades (38% entry rate) with 73.7% WR. Three causes addressed:
+
+1. **AI anti-timing-rationalization prompt** — 76% of Sonnet HOLDs cited "too late" with 2-4 minutes remaining, despite the prompt already saying > 120s is "good time." Added explicit guidance: "Time alone is NEVER a reason to HOLD if you have an edge." Screening prompt time threshold also tightened (120s → 60s) so weak-signal rejections require < 60s instead of < 120s.
+
+2. **Adaptive threshold P75 → P50, cap $100 → $50** — After volatile candles, P75 climbed too high (e.g. $91) blocking real $30-$60 moves. Now uses median (P50) with a $50 cap, so the threshold stays responsive without over-reacting to outliers.
+
+3. **Reversal retracement bypasses ALL guards** — Reversal exits now bypass the winning-position guard (already bypassed cooldown in v0.9.1). Previously a profitable position with matching BTC direction and < 120s remaining would block the reversal exit.
+
+### Fixed — Self-poisoning per-side accuracy warnings
+
+The AI developed a self-reinforcing avoidance loop: early DOWN losses → "0% DOWN accuracy" stat → "be extra cautious" warning → AI refuses all DOWN trades → stat can never improve. 80% of iter_018 HOLDs cited this stat, even with strong $50-130 BTC moves and 3-4 minutes remaining.
+
+Reframed per-side accuracy and losing streak warnings from avoidance ("be extra cautious") to learning ("review WHY these lost, fix entry criteria, do NOT avoid the side entirely"). The trade table already shows entry price, signal type, and outcomes — the AI should analyze patterns, not develop phobias.
+
+### Added — Candle timelines in iteration detail view
+
+Dashboard iteration view now lazy-loads candle timelines from `archive/{label}/logs/dashboard_data.json`. Shows the same per-candle trade timeline used in the live view, cached per iteration for fast re-renders.
+
 ## [v0.9.2] — 2026-03-01
 
 ### Fixed — Haiku screening returns empty reasoning

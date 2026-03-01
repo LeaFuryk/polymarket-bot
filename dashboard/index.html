@@ -1636,6 +1636,7 @@ let lastData = null;
 let selectedView = 'overview';
 let _tipTimer = null;
 let _iterationData = null; // loaded once from sidecar file
+let _iterArchiveCache = {}; // label → {trades, resolutions} from archive
 
 // Tooltip: show after 3 seconds of continuous hover
 document.addEventListener('mouseover', e => {
@@ -2611,6 +2612,37 @@ function renderIterationView(it, prev, next) {
     <div class="metric-value">${it.total_candles||0}</div>
     <div class="metric-sub">fees: ${fmt$(it.total_fees, 2)}</div></div>`;
   h += `</div>`;
+
+  // ── Candle Timelines (lazy-loaded from archive) ──
+  const tlId = 'iter-candle-timelines-' + (it.label || '').replace(/\W/g, '_');
+  h += `<div class="iv-section iv-full" style="margin-bottom:0.5rem">
+    <div class="iv-section-title">Candle Timelines</div>
+    <div id="${tlId}" style="font-size:0.75rem;color:var(--text-secondary)">Loading archive data...</div>
+  </div>`;
+
+  // Lazy-load archive data after DOM render
+  setTimeout(async () => {
+    const el = document.getElementById(tlId);
+    if (!el) return;
+    const label = it.label;
+    if (_iterArchiveCache[label]) {
+      const c = _iterArchiveCache[label];
+      el.innerHTML = buildCandleTimelines(c.trades, c.resolutions, null, {});
+      return;
+    }
+    try {
+      const resp = await fetch('../archive/' + encodeURIComponent(label) + '/logs/dashboard_data.json');
+      if (!resp.ok) { el.innerHTML = '<span style="color:var(--text-secondary)">No archive data found for this iteration.</span>'; return; }
+      const archData = await resp.json();
+      const trades = archData.trades || [];
+      const resolutions = archData.resolutions || [];
+      _iterArchiveCache[label] = { trades, resolutions };
+      el.innerHTML = buildCandleTimelines(trades, resolutions, null, {});
+    } catch (e) {
+      el.innerHTML = '<span style="color:var(--text-secondary)">Could not load archive data.</span>';
+      console.warn('Iter archive load failed:', e);
+    }
+  }, 0);
 
   // ── Changes from Previous Iteration ──
   if (prev) {
