@@ -4,6 +4,22 @@ All notable changes to this project will be documented in this file.
 
 ## [v0.8.1] — 2026-02-28
 
+### Added — Post-stop-loss contrarian flip
+
+When the bot gets stopped out, the opposite side is usually winning. Previously the anti-flip guard blocked buying the opposite side on the same candle, forcing the bot to sit idle while the reversal played out. Now, after a stop-loss SELL fills, the bot immediately checks contrarian flip conditions and triggers a second AI decision for the opposite side.
+
+**Conditions (all must pass):**
+1. Exit was a **stop-loss** (not take-profit)
+2. **Time remaining >= 60s** — enough time for the flip to play out
+3. **BTC confirms reversal** — BTC move from candle open is against the stopped-out position
+4. **Opposite side ask <= $0.55** — good risk/reward on the flip
+
+The AI still decides BUY or HOLD — the flip is suggested, not forced. The anti-flip guard is bypassed only during this contrarian flip window. All other guards (anti-hedge, single-entry, entry price cap) still apply normally.
+
+### Changed — Shorter fakeout window for BTC threshold (10 → 5 candles)
+
+The fakeout P75 threshold was computed from the last 10 candles, but a few volatile candles with $85-$102 fakeouts pushed the threshold to $91 — blocking entries on normal $30-$60 BTC moves for many candles. Now the fakeout threshold uses the **last 5 candles** so volatile outliers age out in ~25 min instead of ~50 min. The reversal rate and signal type still use the full window (10 candles) for smoothness.
+
 ### Reverted — Cheap entry pipeline (v0.7.0) causing 21% WR / -$267 over 4 iterations
 
 iter_011 through iter_014 analysis: 62 trades, 30% combined WR, -$267 net. Root cause traced to v0.7.0's cheap entry pipeline — 4 coordinated changes that removed every gate blocking cheap entries. Before v0.7.0 (iter_010): 75% WR, +$155. After: consistent losses.
@@ -23,6 +39,10 @@ The "breaks even at 35% accuracy" EV math was correct but the assumption was wro
 **Kept from v0.7.0:** Fakeout-based threshold formula (sound improvement), UNCERTAIN cheapest-side suggestion (fires after BTC crosses threshold).
 
 **Kept from v0.8.0:** Wider SL for cheap entries (≤$0.30: 15%, ≤$0.40: 10%) — helps the rare natural cheap entries that pass threshold.
+
+### Fixed — Remove +$5 margin from fakeout threshold
+
+The fakeout threshold was computed as P75 + $5, but the $5 margin created blind spots — a $57 peak on a $60 threshold was missed as a reversal. P75 alone already represents "75% of fakeouts are smaller than this," which is sufficient. Now `btc_threshold = P75` (clamped $20-$100).
 
 ### Changed — Retracement-based reversal detection
 
