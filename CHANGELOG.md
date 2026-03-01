@@ -20,6 +20,10 @@ Example: Bot buys UP, BTC peaks at +$50, then retraces to +$10 (80% retraced). T
 
 No price gate — the AI sees the full context and decides BUY or HOLD.
 
+### Fixed — Reversal retracement bypasses AI cooldown
+
+Reversal retracement triggers were being blocked by the 60s AI cooldown — by the time cooldown expired, the flip opportunity was gone. Now `reversal_retracement` bypasses the cooldown entirely (stop-loss emergency bypass at -30% still applies to other triggers).
+
 ### Changed — Shorter fakeout window for BTC threshold (10 → 5 candles)
 
 The fakeout P75 threshold was computed from the last 10 candles, but a few volatile candles with $85-$102 fakeouts pushed the threshold to $91 — blocking entries on normal $30-$60 BTC moves for many candles. Now the fakeout threshold uses the **last 5 candles** so volatile outliers age out in ~25 min instead of ~50 min. The reversal rate and signal type still use the full window (10 candles) for smoothness.

@@ -347,9 +347,11 @@ class AIDecision:
         )
 
         # Exit trigger cooldown: skip if on cooldown and not a true emergency (> -30%)
+        # Reversal retracement bypasses cooldown — it's time-sensitive
+        trigger_type = exit_signal.get("trigger_type", "")
         cooldown = self._config.monitor.ai_cooldown_seconds
         elapsed = time.time() - self._shared.ai_last_call_time
-        if elapsed < cooldown and pnl_pct > -0.30:
+        if elapsed < cooldown and pnl_pct > -0.30 and trigger_type != "reversal_retracement":
             logger.info(
                 "Exit trigger on cooldown (%.0fs < %.0fs, pnl=%.1f%% > -30%%) — skipping",
                 elapsed, cooldown, pnl_pct * 100,
@@ -394,7 +396,6 @@ class AIDecision:
         portfolio_value = self._portfolio.total_value_at_market(up_mid or 0.5, down_mid)
 
         # Add exit context to the AI call
-        trigger_type = exit_signal.get("trigger_type", "")
         sold_up = token_side_str.lower() == "up"
         opposite_side = "DOWN" if sold_up else "UP"
 
