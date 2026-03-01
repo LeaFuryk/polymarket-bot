@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v0.14.0] — 2026-03-01
+
+### Changed — Replace drift-check FOK with 3-second GTC limit orders
+
+The live execution engine previously used FOK market orders with a stale-price drift check (3% threshold). In fast-moving 5-minute BTC candle markets, token prices routinely swing 20-100% between the AI decision and execution, causing the drift check to reject most trades — creating a large divergence between shadow PnL and live PnL.
+
+**New approach**: Place a GTC limit order at the AI's evaluated price (best_ask for BUY, best_bid for SELL), wait up to `limit_order_ttl_seconds` (default 3) for a fill, then cancel if unfilled. This is safer (you never pay more than the AI evaluated) and fills more often (order sits on the book waiting for the market to come back).
+
+- **Real mode**: `_submit_limit_order()` posts a GTC order via `OrderArgs`, polls `get_order()` every 1s, cancels on timeout
+- **Dry run mode**: `_simulate_limit_order()` re-fetches the live orderbook up to TTL times, fills if the market crosses the limit price
+- **Dashboard visibility**: Unfilled live trades now show as `BLOCKED` in the candle timeline with the skip reason (e.g. "limit order timeout (3s)")
+- **Config**: New `limit_order_ttl_seconds: 3` in TradingConfig; `max_price_drift_pct` retained for backward compat but no longer used
+
+### Added — Shadow PnL & Exec Cost metrics on dashboard
+
+In live mode, the session stats panel now shows two new metrics from `live_trading` data: **Shadow PnL** (what the paper simulator would have made) and **Exec Cost** (live vs paper difference — slippage + real fees vs simulated). Both are color-coded green/red by sign and only appear when live trading data exists.
+
 ## [v0.13.0] — 2026-03-01
 
 ### Fixed — Bot version captured at startup, not archive time

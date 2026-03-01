@@ -2,7 +2,7 @@
 
 An AI-powered trading agent that trades Polymarket BTC 5-minute candle prediction markets using Claude as its decision engine. The bot features a self-improving feedback loop where Claude reflects on past outcomes, updates its own knowledge base, and tunes the indicators fed into future decisions.
 
-**Two modes**: paper trading (default, simulated execution) or live trading (real CLOB orders via py-clob-client with shadow paper comparison). In paper mode, no real money is at risk. In live mode, real FOK orders are placed on Polymarket with 9 layers of safety (kill switch, order caps, drift checks, dry run).
+**Two modes**: paper trading (default, simulated execution) or live trading (real CLOB orders via py-clob-client with shadow paper comparison). In paper mode, no real money is at risk. In live mode, GTC limit orders are placed at the AI's evaluated price with a 3-second TTL — if unfilled, the order is cancelled (you never pay more than the AI evaluated). 9 layers of safety (kill switch, order caps, limit order TTL, dry run).
 
 ---
 
@@ -305,14 +305,15 @@ POLYBOT_TRADING_DRY_RUN=false
 - Max order size: $50 per trade
 - Kill switch: shuts down if session loss exceeds $40
 - Min wallet balance: refuses BUY below $5 USDC
-- Price drift: skips trade if orderbook moved >3% since AI decision
-- FOK orders: fills entirely or rejects (no partial fills or stuck orders)
+- GTC limit orders at AI's evaluated price with 3s TTL (never pays more than evaluated)
+- Unfilled orders auto-cancelled after timeout — no stuck orders
 
 #### 4. Shadow comparison
 
 In live mode, every trade is also simulated on a shadow paper portfolio. The dashboard shows:
-- `Live PnL` vs `Paper PnL` and the execution cost difference
-- Per-trade: live fill price vs paper fill price with drift %
+- **Shadow PnL** — what the paper simulator would have made on the same trades
+- **Exec Cost** — difference between live PnL and shadow PnL (slippage + real fees vs simulated)
+- Per-trade: live fill price vs paper fill price with price difference %
 - Trade logs include `paper_fill_price` and `paper_total_cost` fields
 
 This gives hard data on how much real CLOB execution costs vs simulation.
@@ -326,9 +327,9 @@ This gives hard data on how much real CLOB execution costs vs simulation.
 | 3 | Max order size ($50 hard cap) | LiveExecutionEngine.execute() |
 | 4 | Min wallet balance check | LiveExecutionEngine.execute() |
 | 5 | Session kill switch ($40 loss) | _balance_sync_loop() |
-| 6 | Stale price drift check (3%) | LiveExecutionEngine.execute() |
+| 6 | GTC limit order with 3s TTL (price-safe) | LiveExecutionEngine._submit_limit_order() |
 | 7 | Existing risk manager | RiskManager (unchanged) |
-| 8 | FOK orders (no partial fills) | CLOB API |
+| 8 | Auto-cancel unfilled orders | LiveExecutionEngine._submit_limit_order() |
 | 9 | Startup credential + balance validation | agent.py |
 
 ### Environment Variable Overrides
@@ -669,8 +670,8 @@ TradingAgent (agent.py) — orchestrator, launches 6 concurrent tasks
  │   FeatureVector + feedback + indicators → structured JSON decision
  │
  ├── LiveExecutionEngine (execution/live.py) — live mode only
- │   py-clob-client Level 2 → FOK market orders → SimulatedFill
- │   Stale price mitigation, kill switch, dry run, order size cap
+ │   py-clob-client Level 2 → GTC limit orders (3s TTL) → SimulatedFill
+ │   Kill switch, dry run, order size cap, auto-cancel on timeout
  │
  ├── ExecutionSimulator
  │   Market orders: slippage model + 20bps fee → SimulatedFill
@@ -737,7 +738,7 @@ polymarket-bot/
 │   │   └── validate.py           # polybot-validate CLI — assumption validation against market history
 │   ├── execution/
 │   │   ├── __init__.py
-│   │   └── live.py              # Live CLOB execution (FOK orders, safety checks)
+│   │   └── live.py              # Live CLOB execution (GTC limit orders, safety checks)
 │   ├── decision_engine/
 │   │   ├── engine.py             # Claude API decision calls
 │   │   ├── prompts.py            # System prompt + feature formatting
