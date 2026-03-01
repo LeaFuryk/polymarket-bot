@@ -12,9 +12,8 @@ When the bot gets stopped out, the opposite side is usually winning. Previously 
 1. Exit was a **stop-loss** (not take-profit)
 2. **Time remaining >= 60s** — enough time for the flip to play out
 3. **BTC confirms reversal** — BTC move from candle open is against the stopped-out position
-4. **Opposite side ask <= $0.55** — good risk/reward on the flip
 
-The AI still decides BUY or HOLD — the flip is suggested, not forced. The anti-flip guard is bypassed only during this contrarian flip window. All other guards (anti-hedge, single-entry, entry price cap) still apply normally.
+No price gate — the AI sees the full context (opposite ask, R/R, BTC move magnitude) and decides BUY or HOLD. The anti-flip guard is bypassed only during this contrarian flip window. All other guards (anti-hedge, single-entry, entry price cap) still apply normally.
 
 ### Changed — Shorter fakeout window for BTC threshold (10 → 5 candles)
 

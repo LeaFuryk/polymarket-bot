@@ -447,17 +447,15 @@ class AIDecision:
                     skip_reasons.append(f"time={tr:.0f}s<60s")
                 if not btc_confirms:
                     skip_reasons.append(f"BTC {'$' if btc_move >= 0 else '-$'}{abs(btc_move):.0f} doesn't confirm reversal")
-                if opp_ask is None or opp_ask > 0.55:
-                    skip_reasons.append(f"opp_ask=${opp_ask or 0:.2f}>$0.55")
 
                 if skip_reasons:
                     logger.info("Contrarian flip: skip — %s", ", ".join(skip_reasons))
-                elif opp_ask is not None:
+                else:
                     logger.info(
                         "Contrarian flip: triggering %s entry (BTC %s$%.0f, %s ask=$%.2f, %.0fs left)",
                         opposite_side,
                         "+" if btc_move >= 0 else "", btc_move,
-                        opposite_side, opp_ask, tr,
+                        opposite_side, opp_ask or 0, tr,
                     )
                     flip_context = (
                         f"\n## CONTRARIAN FLIP OPPORTUNITY\n"
