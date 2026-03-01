@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 ## [v0.11.0] — 2026-03-01
 
+### Added — Live entry timing performance indicator
+
+iter_019 analysis: 69% of trades at >200s remaining won only 43.8%, while entries at 150-200s won 85.7%. The AI had no visibility into its own entry timing track record during the session.
+
+New `_compute_entry_timing_stats()` computes win rate by time-remaining bucket (>200s, 150-200s, 100-150s, <100s) from resolved session trades and injects the results into the AI prompt. Requires 3+ resolved BUY trades to activate (avoids noise). Identifies the best-performing bucket (2+ trades) and advises patience on marginal setups. Computed on-the-fly each cycle from existing `session_trades` + `recent_resolutions` — no new state tracking needed.
+
 ### Improved — Enriched reversal retracement prompt
 
 iter_019 analysis: reversal retracement fired on 10 of 16 traded candles but HOLD/FLIP accuracy was only 60% (6/10), costing $20.88 net. Root cause: the 8-line generic reversal prompt gave the AI no quantitative retracement data, so it evaluated the post-retracement BTC move as a standalone entry signal (e.g. candle 3: "$9 move is too small = noise" — missing that $44→$9 is an 80% retracement).
