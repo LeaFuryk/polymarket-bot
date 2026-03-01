@@ -2,13 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v0.9.1] — 2026-02-28
+
+### Fixed — Reversal retracement blocked by AI cooldown
+
+Reversal retracement triggers were being blocked by the 60s AI cooldown — by the time cooldown expired, the flip opportunity was gone. Now `reversal_retracement` bypasses the cooldown entirely (stop-loss emergency bypass at -30% still applies to other triggers).
+
+### Changed — Single-call reversal flip
+
+Reversal retracement now uses a single AI call instead of two. When BTC retraces 80%+ from peak, AI sees HOLD vs BUY opposite. If AI says BUY, the anti-hedge guard auto-closes the held position via `_auto_close_for_flip` — no second AI call needed.
+
 ## [v0.9.0] — 2026-02-28
 
 ### Added — Reversal retracement detection + contrarian flip
 
-**Reversal retracement (single-call flip)** — a new PositionMonitor trigger that fires when BTC retraces 80%+ from its peak move back toward the candle open while a position is open. Instead of waiting for the stop-loss to fire (when the opposite side is already $0.80+), the bot detects the reversal early and makes a **single AI call**: **HOLD** (keep position, SL stays active) or **BUY opposite** (auto-close current position + flip to other side). The anti-hedge guard auto-closes the held position when the reversal flip flag is set, so no second AI call is needed.
-
-Example: Bot buys UP, BTC peaks at +$50, then retraces to +$10 (80% retraced). The reversal trigger fires. AI sees HOLD vs BUY DOWN prompt. If AI says BUY DOWN, the code auto-closes UP and buys DOWN in one pass.
+**Reversal retracement** — a new PositionMonitor trigger that fires when BTC retraces 80%+ from its peak move back toward the candle open while a position is open. Instead of waiting for the stop-loss to fire (when the opposite side is already $0.80+), the bot detects the reversal early and asks AI to decide: HOLD (keep position, SL stays active) or flip to the opposite side.
 
 **Post-SL contrarian flip** — after a **stop-loss** exit, if the position was closed and BTC confirms the reversal, a second AI decision is triggered for the opposite side. The anti-flip guard is bypassed for this entry only.
 
@@ -19,10 +27,6 @@ Example: Bot buys UP, BTC peaks at +$50, then retraces to +$10 (80% retraced). T
 4. **BTC confirms reversal** — BTC move from candle open is against the exited position
 
 No price gate — the AI sees the full context and decides BUY or HOLD.
-
-### Fixed — Reversal retracement bypasses AI cooldown
-
-Reversal retracement triggers were being blocked by the 60s AI cooldown — by the time cooldown expired, the flip opportunity was gone. Now `reversal_retracement` bypasses the cooldown entirely (stop-loss emergency bypass at -30% still applies to other triggers).
 
 ### Changed — Shorter fakeout window for BTC threshold (10 → 5 candles)
 
