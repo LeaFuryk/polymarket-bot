@@ -9,10 +9,11 @@ Fakeout-based threshold: for each candle, measures how far BTC moved in the
 was decided. Sets the threshold above typical fakeouts so the bot only enters
 on signals stronger than recent noise.
 
-  threshold = P50(last 5 fakeout magnitudes), clamped to [$20, $50]
+  threshold = P50(last 5 fakeout magnitudes), clamped to [$20, adaptive_cap]
+  adaptive_cap = max($50, min($100, P75 * 1.2))
 
-Small fakeouts [0..25] → threshold ~$25 (clean signals, enter early).
-Large fakeouts [10..80] → threshold ~$57 (noisy market, wait for confirmation).
+Small fakeouts [0..25] → cap=$50, threshold ~$25 (clean signals, enter early).
+Large fakeouts [10..80] → cap=$94, threshold ~$57 (noisy market, wait for confirmation).
 
 Falls back to V-shaped formula when peak data is unavailable (old JSONL records).
 
@@ -78,6 +79,7 @@ class AdaptiveEntryTracker:
         self._fakeout_max: float = 0.0
         self._fakeout_median: float = 0.0
         self._using_fakeout: bool = False  # True when peak data is available
+        self._adaptive_cap: float = 50.0  # Rises with P75 in wild markets, bounded [$50, $100]
 
         # Load persisted data
         self._load()
@@ -345,14 +347,17 @@ class AdaptiveEntryTracker:
             self._fakeout_max = sorted_fakeouts[-1]
             self._using_fakeout = True
 
-            # Threshold = P50, clamped to [$20, $50]
-            self.btc_threshold = max(20.0, min(50.0, self._fakeout_median))
+            # Adaptive cap: rises with P75 in wild markets, bounded [$50, $100]
+            self._adaptive_cap = max(50.0, min(100.0, self._fakeout_p75 * 1.2))
+            # Threshold = P50, clamped to [$20, adaptive_cap]
+            self.btc_threshold = max(20.0, min(self._adaptive_cap, self._fakeout_median))
         else:
             # Fallback: V-shaped formula for old records without peak data
             self._using_fakeout = False
             self._fakeout_p75 = 0.0
             self._fakeout_median = 0.0
             self._fakeout_max = 0.0
+            self._adaptive_cap = 50.0
             deviation = abs(reversal_rate - 0.5)
             self.btc_threshold = max(20.0, min(50.0, 50.0 - deviation * 60.0))
 
@@ -375,10 +380,11 @@ class AdaptiveEntryTracker:
         method = "fakeout" if self._using_fakeout else "v-shaped"
         logger.info(
             "Adaptive entry updated: reversal_rate=%.0f%% (%d/%d) → "
-            "signal=%s, btc_thresh=$%.0f (%s, P50=$%.0f), "
+            "signal=%s, btc_thresh=$%.0f (cap=$%.0f, %s, P50=$%.0f), "
             "avg_winner_ask=$%.3f → max_entry=$%.2f",
             reversal_rate * 100, reversals, len(window),
-            self._signal_type, self.btc_threshold, method, self._fakeout_median,
+            self._signal_type, self.btc_threshold, self._adaptive_cap,
+            method, self._fakeout_median,
             avg_winner_ask if winner_asks else 0,
             self.max_entry_price,
         )
@@ -577,6 +583,7 @@ class AdaptiveEntryTracker:
             "fakeout_p75": round(self._fakeout_p75, 1),
             "fakeout_max": round(self._fakeout_max, 1),
             "fakeout_median": round(self._fakeout_median, 1),
+            "adaptive_cap": round(self._adaptive_cap, 1),
         }
 
     def get_summary(self) -> str:
@@ -585,7 +592,7 @@ class AdaptiveEntryTracker:
         if not window:
             return "Adaptive entry: no history yet"
         reversal_rate = self.rolling_reversal_rate
-        method = f"fakeout P50=${self._fakeout_median:.0f}" if self._using_fakeout else "v-shaped fallback"
+        method = f"fakeout P50=${self._fakeout_median:.0f}, cap=${self._adaptive_cap:.0f}" if self._using_fakeout else "v-shaped fallback"
         return (
             f"Adaptive entry (last {len(window)} candles): "
             f"reversal_rate={reversal_rate:.0%}, "
@@ -625,8 +632,21 @@ class AdaptiveEntryTracker:
             lines.append(
                 f"- Fakeout noise: P75=${self._fakeout_p75:.0f}, "
                 f"max=${self._fakeout_max:.0f}, median=${self._fakeout_median:.0f} "
-                f"(threshold set above typical fakeout magnitudes)"
+                f"(adaptive cap=${self._adaptive_cap:.0f}, threshold=${self.btc_threshold:.0f})"
             )
+
+        # Wild market advisory: fires when recent fakeouts far exceed threshold
+        if self._using_fakeout and self._fakeout_max > self.btc_threshold * 1.5:
+            pct_above = ((self._fakeout_max / self.btc_threshold) - 1) * 100
+            lines.extend([
+                "",
+                f"\U0001f30a **HIGH-VOLATILITY MARKET**: Recent fakeouts reached "
+                f"${self._fakeout_max:.0f} — {pct_above:.0f}% above the "
+                f"${self.btc_threshold:.0f} threshold. "
+                f"Even moves that clear the threshold may reverse. Wait for sustained "
+                f"confirmation (15-20s above threshold) rather than entering immediately. "
+                f"The 150-200s window has historically outperformed early entries in wild markets.",
+            ])
 
         if rate > 0.60:
             lines.extend([
