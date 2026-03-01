@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [v0.13.0] — 2026-03-01
 
+### Fixed — Bot version captured at startup, not archive time
+
+Previously, the bot version was read from `importlib.metadata` at archive time. If `pyproject.toml` was bumped between a session and its archive, the wrong version was recorded. Now `__version__` is captured once at `TradingAgent` startup, persisted to `dashboard_data.json` and `agent_state.json`, and the archiver reads it from there (with `importlib.metadata` fallback for old data).
+
 ### Fixed — Adaptive threshold cap for wild markets
 
 The hard `$50` cap on `btc_threshold` prevented the adaptive system from protecting against genuinely wild markets. In iter_020, 36% of fakeouts exceeded $50 (up to $320), but the threshold was clamped at $50 — so the bot entered on $50 moves that were still noise.

@@ -13,6 +13,7 @@ from rich.live import Live
 from rich.table import Table
 from rich.text import Text
 
+from polybot import __version__
 from polybot.adaptive_entry import AdaptiveEntryTracker
 from polybot.calibration import ConfidenceCalibrator
 from polybot.config import AppConfig
@@ -191,6 +192,9 @@ class TradingAgent:
         self._session_trades: list[TradeRecord] = []
         self._resolutions_since_reflection: int = 0
 
+        # Bot version (captured once at startup)
+        self._bot_version: str = __version__
+
         # Restore persisted state
         self._state_path = Path(config.logging.log_dir) / "agent_state.json"
         self._load_agent_state()
@@ -248,7 +252,7 @@ class TradingAgent:
     async def run(self) -> None:
         """Main entry point — launches concurrent tasks."""
         _setup_logging(self._config)
-        logger.info("TradingAgent starting — cash=%.2f", self._config.agent.initial_cash)
+        logger.info("TradingAgent starting — v%s, cash=%.2f", self._bot_version, self._config.agent.initial_cash)
 
         loop = asyncio.get_running_loop()
         for sig in (signal.SIGINT, signal.SIGTERM):
@@ -1138,6 +1142,7 @@ class TradingAgent:
                     logger.debug("Failed to build candle snapshots", exc_info=True)
 
             data = {
+                "bot_version": self._bot_version,
                 "updated_at": datetime.now(timezone.utc).isoformat(),
                 "session": {
                     "wins": self._session_wins,
@@ -1450,6 +1455,7 @@ class TradingAgent:
         try:
             self._state_path.parent.mkdir(parents=True, exist_ok=True)
             self._state_path.write_text(json.dumps({
+                "bot_version": self._bot_version,
                 "resolutions_since_reflection": self._resolutions_since_reflection,
                 "knowledge": self._knowledge_manager.save_state(),
             }, indent=2) + "\n")
