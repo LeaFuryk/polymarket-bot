@@ -110,7 +110,7 @@ Waits for entry triggers (from MarketMonitor) or exit triggers (from PositionMon
 9. **Position sizing** — Gentle R/R scale (0.75x-1.0x, since data shows cheap entries are often contrarian traps). Multiplied by BTC move magnitude scaling (80%/90%/100%) and counter-trend reduction (50-70%). Minimum 40 shares (20 for counter-trend)
 10. **Post-trade risk checks** — Position size, concentration, cash, spread (BUY only)
 11. **Execute + log** — Simulate fill, update portfolio, write TradeRecord
-12. **Post-SL contrarian flip** — After a stop-loss exit fills, checks if the opposite side is a good recovery trade: time >= 60s remaining, BTC confirms reversal (moving against the stopped-out side), and opposite ask <= $0.55. If all conditions pass, triggers a second AI decision with contrarian context. The anti-flip guard is bypassed for this entry only. The AI still decides BUY or HOLD — the flip is not forced
+12. **Post-SL contrarian flip** — After a stop-loss exit fills, checks if the opposite side is worth entering: time >= 60s remaining and BTC confirms reversal (moving against the stopped-out side). No price gate — the AI sees the full context and decides BUY or HOLD. The anti-flip guard is bypassed for this entry only
 
 ### PositionMonitor (every 1 second)
 
