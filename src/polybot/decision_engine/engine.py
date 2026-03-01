@@ -159,7 +159,7 @@ class DecisionEngine:
                 raise ValueError("No tool_use block in screening response")
 
             should_trade = bool(data.get("should_trade", False))
-            reason = data.get("reason", "")
+            reason = data.get("reason", "") or ("No clear trade setup" if not should_trade else "Trade setup detected")
 
             logger.info(
                 "Screen: %s — %s (%.0fms, cost=$%.4f)",
