@@ -231,6 +231,83 @@ def _format_microstructure(history: list) -> str | None:
     return "\n".join(parts)
 
 
+def _compute_entry_timing_stats(
+    session_trades: list,
+    resolutions: list,
+) -> str | None:
+    """Compute win rate by entry-time bucket from this session's resolved trades.
+
+    Returns a formatted prompt section showing WR per time-remaining bucket,
+    or None if fewer than 3 resolved BUY trades exist.
+    """
+    # Build resolution lookup by slug
+    res_by_slug: dict[str, object] = {}
+    for r in resolutions:
+        res_by_slug[r.slug] = r
+
+    # Buckets: label -> [wins, losses]
+    buckets: dict[str, list[int]] = {
+        ">200s": [0, 0],
+        "150-200s": [0, 0],
+        "100-150s": [0, 0],
+        "<100s": [0, 0],
+    }
+
+    resolved_count = 0
+    for trade in session_trades:
+        if trade.action != Action.BUY or trade.fill_price is None:
+            continue
+        tr = trade.extra.get("time_remaining")
+        if tr is None:
+            continue
+        res = res_by_slug.get(trade.candle_slug)
+        if res is None:
+            continue  # unresolved (current candle)
+
+        # Determine bucket
+        if tr > 200:
+            bucket = ">200s"
+        elif tr > 150:
+            bucket = "150-200s"
+        elif tr > 100:
+            bucket = "100-150s"
+        else:
+            bucket = "<100s"
+
+        # Win = bought the winning side
+        won = trade.token_side.value == res.winner
+        if won:
+            buckets[bucket][0] += 1
+        else:
+            buckets[bucket][1] += 1
+        resolved_count += 1
+
+    if resolved_count < 3:
+        return None
+
+    parts = ["## Entry Timing Performance (this session)"]
+    best_bucket = None
+    best_wr = -1.0
+    for label, (wins, losses) in buckets.items():
+        total = wins + losses
+        if total == 0:
+            parts.append(f"- {label} remaining: \u2014")
+        else:
+            wr = wins / total
+            parts.append(f"- {label} remaining: {wins}W/{losses}L ({wr:.0%})")
+            if total >= 2 and wr > best_wr:
+                best_wr = wr
+                best_bucket = label
+
+    if best_bucket is not None:
+        parts.append(
+            f"- Best bucket: {best_bucket} ({best_wr:.0%} WR) "
+            f"\u2014 consider patience on marginal setups"
+        )
+
+    return "\n".join(parts)
+
+
 class AIDecision:
     """Event-driven AI decision maker."""
 
@@ -825,6 +902,11 @@ class AIDecision:
         micro_ctx = _format_microstructure(self._shared.microstructure_history)
         if micro_ctx:
             indicators_text = indicators_text + "\n\n" + micro_ctx if indicators_text else micro_ctx
+
+        # Entry timing performance (WR by time-remaining bucket)
+        timing_ctx = _compute_entry_timing_stats(self._session_trades, self._recent_resolutions)
+        if timing_ctx:
+            indicators_text = indicators_text + "\n\n" + timing_ctx if indicators_text else timing_ctx
 
         # Safeguard #1: Chainlink divergence warning
         if snapshot.btc_price and snapshot.btc_price.price_divergence is not None:

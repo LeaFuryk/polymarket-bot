@@ -97,7 +97,7 @@ All tasks are `asyncio.Task` in the same event loop (no OS threads). Safe for sh
 Waits for entry triggers (from MarketMonitor) or exit triggers (from PositionMonitor):
 
 1. **Pre-trade risk checks** — Daily loss halt, minimum liquidity
-2. **Build context** — Compact FeatureVector + BTC candle history + feedback context + computed indicators + ML prediction (with top 3 feature drivers) + BTC trajectory (velocity/peak-drawback) + cross-candle microstructure (spread/volatility trends) + soft safeguard warnings (Chainlink divergence >$100, post-stop-loss cooldown, counter-trend advisory, session drawdown alert, per-side failure patterns, calibration overconfidence). Ensemble disagreement (ML vs AI direction) is tracked
+2. **Build context** — Compact FeatureVector + BTC candle history + feedback context + computed indicators + ML prediction (with top 3 feature drivers) + BTC trajectory (velocity/peak-drawback) + cross-candle microstructure (spread/volatility trends) + entry timing performance (WR by time-remaining bucket from resolved session trades) + soft safeguard warnings (Chainlink divergence >$100, post-stop-loss cooldown, counter-trend advisory, session drawdown alert, per-side failure patterns, calibration overconfidence). Ensemble disagreement (ML vs AI direction) is tracked
 3. **Two-pass screening** — Haiku screens first (entry only, not exits). Screening reason is passed to Sonnet as a "Pre-Screening Note". Pass-through rate tracked for tuning
 4. **Claude decides** — Full Sonnet decision with structured JSON output
 5. **Confidence gate** — Override BUY to HOLD if confidence < 0.55
