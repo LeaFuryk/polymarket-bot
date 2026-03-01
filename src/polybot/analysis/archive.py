@@ -192,8 +192,16 @@ def _compute_summary(label: str, dest: Path) -> dict:
         except Exception:
             pass
 
+    from importlib.metadata import version as _pkg_version
+
+    try:
+        bot_version = "v" + _pkg_version("polybot")
+    except Exception:
+        bot_version = "unknown"
+
     summary = {
         "label": label,
+        "version": bot_version,
         "archived_at": datetime.now(timezone.utc).isoformat(),
         "date_range": {"start": date_start, "end": date_end},
         "total_candles": total_candles,

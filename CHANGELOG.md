@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v0.10.1] — 2026-03-01
+
+### Added — Bot version tracking per iteration
+
+Each archived iteration now records which bot version ran it. `summary.json` includes a `version` field set from `importlib.metadata` at archive time. `__init__.__version__` now syncs from `pyproject.toml` instead of a stale hardcoded value. All 18 past iterations were backfilled using git tag dates vs iteration date ranges. Dashboard shows version badges in the iteration detail header, sidebar list, and overview cards.
+
 ## [v0.10.0] — 2026-03-01
 
 ### Fixed — Over-filtering: 38% entry rate despite good WR
