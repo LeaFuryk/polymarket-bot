@@ -24,6 +24,8 @@ No price gate — the AI sees the full context and decides BUY or HOLD.
 
 The fakeout P75 threshold was computed from the last 10 candles, but a few volatile candles with $85-$102 fakeouts pushed the threshold to $91 — blocking entries on normal $30-$60 BTC moves for many candles. Now the fakeout threshold uses the **last 5 candles** so volatile outliers age out in ~25 min instead of ~50 min. The reversal rate and signal type still use the full window (10 candles) for smoothness.
 
+## [v0.8.1] — 2026-02-28
+
 ### Reverted — Cheap entry pipeline (v0.7.0) causing 21% WR / -$267 over 4 iterations
 
 iter_011 through iter_014 analysis: 62 trades, 30% combined WR, -$267 net. Root cause traced to v0.7.0's cheap entry pipeline — 4 coordinated changes that removed every gate blocking cheap entries. Before v0.7.0 (iter_010): 75% WR, +$155. After: consistent losses.
