@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v0.13.0] — 2026-03-01
+
+### Fixed — Adaptive threshold cap for wild markets
+
+The hard `$50` cap on `btc_threshold` prevented the adaptive system from protecting against genuinely wild markets. In iter_020, 36% of fakeouts exceeded $50 (up to $320), but the threshold was clamped at $50 — so the bot entered on $50 moves that were still noise.
+
+**Adaptive cap**: `max($50, min($100, P75 * 1.2))` — rises with fakeout P75 in volatile markets, bounded [$50, $100]. In calm markets (P75=$30), cap stays at $50 and threshold is unchanged. In wild markets (P75=$78), cap rises to $94, letting threshold reach $57 instead of being clamped at $50.
+
+**Wild market advisory**: When recent fakeout max exceeds 1.5x the threshold, the AI prompt includes a HIGH-VOLATILITY MARKET warning advising sustained confirmation (15-20s above threshold) and the 150-200s entry window.
+
 ## [v0.12.0] — 2026-03-01
 
 ### Fixed — Auto-close flip SELL not logged
