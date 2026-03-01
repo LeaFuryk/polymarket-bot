@@ -385,28 +385,63 @@ class KnowledgeManager:
             if filled_trades:
                 # Show last 10 trade decisions with outcomes
                 recent_filled = filled_trades[-10:]
-                up_trades = [t for t in filled_trades if t.token_side.value == "up" and t.action.value == "BUY"]
-                down_trades = [t for t in filled_trades if t.token_side.value == "down" and t.action.value == "BUY"]
-                up_wins = sum(1 for t in up_trades if res_by_slug.get(t.candle_slug, None) and res_by_slug[t.candle_slug].winner == "up")
-                down_wins = sum(1 for t in down_trades if res_by_slug.get(t.candle_slug, None) and res_by_slug[t.candle_slug].winner == "down")
-                lines.append(f"Your trade record: UP buys {up_wins}W/{len(up_trades)-up_wins}L | DOWN buys {down_wins}W/{len(down_trades)-down_wins}L")
 
-                # Per-side accuracy context (learning, not avoidance)
-                up_total = len(up_trades)
-                down_total = len(down_trades)
-                up_wr = up_wins / up_total if up_total >= 3 else None
-                down_wr = down_wins / down_total if down_total >= 3 else None
-
-                if up_wr is not None and up_wr < 0.50:
-                    lines.append(f"  Note: UP accuracy is {up_wr:.0%} — review the trades below to find patterns (entry too late? wrong signal?). Do NOT avoid UP trades entirely; fix the entry criteria instead.")
-                if down_wr is not None and down_wr < 0.50:
-                    lines.append(f"  Note: DOWN accuracy is {down_wr:.0%} — review the trades below to find patterns (entry too late? wrong signal?). Do NOT avoid DOWN trades entirely; fix the entry criteria instead.")
-
-                # Safeguard #8: Losing streak detection from resolved trades
+                # Resolved BUY trades (used for trailing records + losing streak)
                 resolved_buys = [
                     t for t in filled_trades
                     if t.action.value == "BUY" and res_by_slug.get(t.candle_slug)
                 ]
+                up_resolved = [t for t in resolved_buys if t.token_side.value == "up"]
+                down_resolved = [t for t in resolved_buys if t.token_side.value == "down"]
+
+                # Trailing window: show recent performance first to prevent anchoring on stale cumulative stats
+                if len(resolved_buys) >= 5:
+                    trailing = resolved_buys[-5:]
+                    t_wins = sum(1 for t in trailing if t.token_side.value == res_by_slug[t.candle_slug].winner)
+                    t_losses = len(trailing) - t_wins
+                    cum_wins = sum(1 for t in resolved_buys if t.token_side.value == res_by_slug[t.candle_slug].winner)
+                    cum_losses = len(resolved_buys) - cum_wins
+                    cum_wr = cum_wins / len(resolved_buys) * 100
+                    lines.append(
+                        f"Recent 5 trades: {t_wins}W/{t_losses}L ({t_wins / 5 * 100:.0f}%) "
+                        f"| Session: {cum_wins}W/{cum_losses}L ({cum_wr:.0f}%)"
+                    )
+                    # Per-side trailing (last 5 resolved per side)
+                    side_parts = []
+                    for label, side_list in [("UP", up_resolved), ("DOWN", down_resolved)]:
+                        if side_list:
+                            st = side_list[-5:]
+                            sw = sum(1 for t in st if t.token_side.value == res_by_slug[t.candle_slug].winner)
+                            sl = len(st) - sw
+                            side_parts.append(f"{label} recent {len(st)}: {sw}W/{sl}L ({sw / len(st):.0%})")
+                    if side_parts:
+                        lines.append(f"  {' | '.join(side_parts)}")
+                else:
+                    # Fall back to cumulative-only when <5 resolved trades
+                    up_trades = [t for t in filled_trades if t.token_side.value == "up" and t.action.value == "BUY"]
+                    down_trades = [t for t in filled_trades if t.token_side.value == "down" and t.action.value == "BUY"]
+                    up_wins = sum(1 for t in up_trades if res_by_slug.get(t.candle_slug, None) and res_by_slug[t.candle_slug].winner == "up")
+                    down_wins = sum(1 for t in down_trades if res_by_slug.get(t.candle_slug, None) and res_by_slug[t.candle_slug].winner == "down")
+                    lines.append(
+                        f"Your trade record: UP buys {up_wins}W/{len(up_trades) - up_wins}L "
+                        f"| DOWN buys {down_wins}W/{len(down_trades) - down_wins}L"
+                    )
+
+                # Per-side accuracy context (learning, not avoidance)
+                # Use trailing WR (last 5 per side) when ≥3 samples, else cumulative
+                for label, side_list in [("UP", up_resolved), ("DOWN", down_resolved)]:
+                    if len(side_list) >= 3:
+                        st = side_list[-5:]
+                        sw = sum(1 for t in st if t.token_side.value == res_by_slug[t.candle_slug].winner)
+                        wr = sw / len(st)
+                    else:
+                        wr = None
+                    if wr is not None and wr < 0.50:
+                        lines.append(
+                            f"  Note: {label} accuracy is {wr:.0%} (recent {len(side_list[-5:])}) — review the trades below "
+                            f"to find patterns (entry too late? wrong signal?). Do NOT avoid {label} trades entirely; "
+                            f"fix the entry criteria instead."
+                        )
                 if resolved_buys:
                     streak = 0
                     for t in reversed(resolved_buys):
@@ -491,13 +526,15 @@ class KnowledgeManager:
         # Active observations (contextual hints from reflection)
         observations = self.load_active_observations()
         if observations:
-            lines.append("## Recent Observations (contextual hints, not hard rules)")
+            lines.append("## Recent Observations (contextual hints — verify AGING observations against recent trades)")
             for obs in observations:
                 age = self._total_resolutions - obs.resolution_count_at_creation
                 remaining = obs.expires_after_resolutions - age
+                freshness = max(0.0, 1.0 - age / obs.expires_after_resolutions)
+                aging_tag = "[AGING] " if freshness < 0.50 else ""
                 lines.append(
-                    f"- [{obs.category.value}] {obs.text} "
-                    f"(observed {age} resolutions ago, expires in {remaining})"
+                    f"- {aging_tag}[{obs.category.value}] {obs.text} "
+                    f"(freshness: {freshness:.0%} | {age} res ago, expires in {remaining})"
                 )
 
         return "\n".join(lines)
@@ -588,9 +625,11 @@ class KnowledgeManager:
             for obs in active_obs:
                 age = self._total_resolutions - obs.resolution_count_at_creation
                 remaining = obs.expires_after_resolutions - age
+                freshness = max(0.0, 1.0 - age / obs.expires_after_resolutions)
+                aging_tag = " [AGING]" if freshness < 0.50 else ""
                 obs_lines.append(
-                    f"- ID={obs.id} [{obs.category.value}] {obs.text} "
-                    f"(age: {age} resolutions, expires in {remaining})"
+                    f"- ID={obs.id}{aging_tag} [{obs.category.value}] {obs.text} "
+                    f"(freshness: {freshness:.0%} | age: {age} resolutions, expires in {remaining})"
                 )
             active_observations = "\n".join(obs_lines)
         else:

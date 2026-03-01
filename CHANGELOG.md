@@ -16,6 +16,14 @@ The hard `$50` cap on `btc_threshold` prevented the adaptive system from protect
 
 **Wild market advisory**: When recent fakeout max exceeds 1.5x the threshold, the AI prompt includes a HIGH-VOLATILITY MARKET warning advising sustained confirmation (15-20s above threshold) and the 150-200s entry window.
 
+### Fixed — Cumulative session records anchor AI on stale stats
+
+The AI saw inflated cumulative stats like "11W/1L (92%) on DOWN" and anchored on them even as recent performance degraded. Now shows trailing-first format: `Recent 5 trades: 3W/2L (60%) | Session: 16W/8L (67%)` with per-side trailing windows. Entry timing stats also show trailing-10 buckets before full-session buckets. When fewer than 5 resolved trades exist, falls back to cumulative-only format.
+
+### Fixed — Knowledge observations lack freshness decay
+
+Observations displayed without age context let stale hints like "expensive DOWN entries won 5/5" persist at full weight. Now computes `freshness = 1.0 - age/expires_after` and prefixes observations below 50% freshness with `[AGING]`. Both the decision prompt and reflection prompt show freshness percentages, nudging the AI to verify aging observations against recent trades and the reflection AI to expire stale ones.
+
 ## [v0.12.0] — 2026-03-01
 
 ### Fixed — Auto-close flip SELL not logged

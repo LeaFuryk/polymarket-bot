@@ -253,6 +253,9 @@ def _compute_entry_timing_stats(
         "<100s": [0, 0],
     }
 
+    # Collect resolved tuples for trailing window
+    resolved_tuples: list[tuple[float, bool]] = []
+
     resolved_count = 0
     for trade in session_trades:
         if trade.action != Action.BUY or trade.fill_price is None:
@@ -281,11 +284,45 @@ def _compute_entry_timing_stats(
         else:
             buckets[bucket][1] += 1
         resolved_count += 1
+        resolved_tuples.append((tr, won))
 
     if resolved_count < 3:
         return None
 
-    parts = ["## Entry Timing Performance (this session)"]
+    parts = ["## Entry Timing Performance (recent | session)"]
+
+    # Trailing-10 buckets (recent trades first to prevent anchoring on stale session stats)
+    trailing = resolved_tuples[-10:]
+    t_buckets: dict[str, list[int]] = {
+        ">200s": [0, 0],
+        "150-200s": [0, 0],
+        "100-150s": [0, 0],
+        "<100s": [0, 0],
+    }
+    for tr, won in trailing:
+        if tr > 200:
+            b = ">200s"
+        elif tr > 150:
+            b = "150-200s"
+        elif tr > 100:
+            b = "100-150s"
+        else:
+            b = "<100s"
+        if won:
+            t_buckets[b][0] += 1
+        else:
+            t_buckets[b][1] += 1
+
+    parts.append(f"Recent {len(trailing)} trades:")
+    for label, (wins, losses) in t_buckets.items():
+        total = wins + losses
+        if total == 0:
+            parts.append(f"- {label} remaining: \u2014")
+        else:
+            wr = wins / total
+            parts.append(f"- {label} remaining: {wins}W/{losses}L ({wr:.0%})")
+
+    parts.append(f"Full session ({resolved_count} trades):")
     best_bucket = None
     best_wr = -1.0
     for label, (wins, losses) in buckets.items():
