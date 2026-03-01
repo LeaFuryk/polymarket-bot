@@ -9,7 +9,7 @@ Fakeout-based threshold: for each candle, measures how far BTC moved in the
 was decided. Sets the threshold above typical fakeouts so the bot only enters
 on signals stronger than recent noise.
 
-  threshold = P75(last 5 fakeout magnitudes), clamped to [$20, $100]
+  threshold = P50(last 5 fakeout magnitudes), clamped to [$20, $50]
 
 Small fakeouts [0..25] → threshold ~$25 (clean signals, enter early).
 Large fakeouts [10..80] → threshold ~$57 (noisy market, wait for confirmation).
@@ -345,8 +345,8 @@ class AdaptiveEntryTracker:
             self._fakeout_max = sorted_fakeouts[-1]
             self._using_fakeout = True
 
-            # Threshold = P75, clamped to [$20, $100]
-            self.btc_threshold = max(20.0, min(100.0, self._fakeout_p75))
+            # Threshold = P50, clamped to [$20, $50]
+            self.btc_threshold = max(20.0, min(50.0, self._fakeout_median))
         else:
             # Fallback: V-shaped formula for old records without peak data
             self._using_fakeout = False
@@ -375,10 +375,10 @@ class AdaptiveEntryTracker:
         method = "fakeout" if self._using_fakeout else "v-shaped"
         logger.info(
             "Adaptive entry updated: reversal_rate=%.0f%% (%d/%d) → "
-            "signal=%s, btc_thresh=$%.0f (%s, P75=$%.0f), "
+            "signal=%s, btc_thresh=$%.0f (%s, P50=$%.0f), "
             "avg_winner_ask=$%.3f → max_entry=$%.2f",
             reversal_rate * 100, reversals, len(window),
-            self._signal_type, self.btc_threshold, method, self._fakeout_p75,
+            self._signal_type, self.btc_threshold, method, self._fakeout_median,
             avg_winner_ask if winner_asks else 0,
             self.max_entry_price,
         )
@@ -585,7 +585,7 @@ class AdaptiveEntryTracker:
         if not window:
             return "Adaptive entry: no history yet"
         reversal_rate = self.rolling_reversal_rate
-        method = f"fakeout P75=${self._fakeout_p75:.0f}" if self._using_fakeout else "v-shaped fallback"
+        method = f"fakeout P50=${self._fakeout_median:.0f}" if self._using_fakeout else "v-shaped fallback"
         return (
             f"Adaptive entry (last {len(window)} candles): "
             f"reversal_rate={reversal_rate:.0%}, "

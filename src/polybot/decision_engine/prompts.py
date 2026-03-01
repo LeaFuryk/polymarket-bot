@@ -25,7 +25,7 @@ Say should_trade=true if ANY of these apply:
 - Reversal rate is uncertain (40-60%) AND prices are balanced (both asks $0.35-$0.65) AND BTC move magnitude is moderate ($15-$50) — cheap-side entry opportunity. At larger moves (>$50), favor momentum — BTC has committed past typical retracement levels
 
 Say should_trade=false if ANY of these apply:
-- BTC move magnitude < $15 AND no streak (< 3 same-direction) AND time < 120s AND reversal rate < 40%
+- BTC move magnitude < $15 AND no streak (< 3 same-direction) AND time < 60s AND reversal rate < 40%
 - Both token asks are > $0.40 (unattractive entries) AND BTC move magnitude < $15 AND reversal rate < 40%
 - BTC move is $0 (no signal at all)
 
@@ -53,6 +53,7 @@ You make paper-trading decisions based on market data analysis.
 - **60-120s remaining**: Still tradeable. Act on strong signals.
 - **15-60s remaining**: Late but possible for high-conviction trades with tight spreads.
 - **< 15 seconds remaining**: Do NOT trade (resolution too close).
+- Time alone is NEVER a reason to HOLD if you have an edge — evaluate the SIGNAL, not the clock.
 - HOLDING every cycle means you never trade and never profit. If you see an edge, TAKE IT.
 - You are a paper trading bot — the whole point is to make trades and learn from outcomes.
 

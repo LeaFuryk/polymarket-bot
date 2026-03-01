@@ -367,7 +367,7 @@ class AIDecision:
 
         # Guard against selling winners near expiry: if position is profitable
         # and BTC direction matches position side and < 120s remaining, skip exit
-        if pnl_pct > 0 and time_remaining < 120:
+        if pnl_pct > 0 and time_remaining < 120 and trigger_type != "reversal_retracement":
             btc_price_now = snapshot.btc_price.price_usd if snapshot.btc_price else None
             candle_open = self._shared.candle_open_btc
             if btc_price_now is not None and candle_open is not None:
