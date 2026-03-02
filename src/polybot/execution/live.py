@@ -56,6 +56,7 @@ class LiveExecutionEngine:
             chain_id=trading_config.chain_id,
             key=trading_config.private_key,
             creds=creds,
+            signature_type=2,  # Polymarket proxy wallet
         )
 
         # Token IDs for current market (set before each execute call)

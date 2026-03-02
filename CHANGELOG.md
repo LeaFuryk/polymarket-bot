@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v0.14.2] — 2026-03-01
+
+### Fixed — Orders rejected with "not enough balance / allowance"
+
+The `ClobClient` was created without `signature_type=2`, so orders were signed for the EOA wallet (type 0) which has no funds. Added `signature_type=2` (Polymarket proxy wallet) to match where the USDC balance and allowances live.
+
 ## [v0.14.1] — 2026-03-01
 
 ### Fixed — Wallet balance always reads $0.00
