@@ -326,6 +326,20 @@ def main() -> None:
 
     # Compute and write summary
     summary = _compute_summary(label, dest)
+
+    # Run replay analysis on the archived DB
+    replay_stats: dict = {}
+    archived_db = dest / "logs" / "polybot.db"
+    if archived_db.exists():
+        from polybot.analysis.replay import replay_all_candles
+
+        replay_stats = replay_all_candles(archived_db)
+        if replay_stats.get("candles_replayed", 0) > 0:
+            # Strip per_candle detail for summary.json (keep it compact)
+            summary["replay"] = {
+                k: v for k, v in replay_stats.items() if k != "per_candle"
+            }
+
     summary_path = dest / "summary.json"
     with open(summary_path, "w") as fh:
         json.dump(summary, fh, indent=2)
@@ -340,6 +354,12 @@ def main() -> None:
     console.print(f"  [cyan]PnL:[/cyan]        ${summary['total_pnl']:+,.2f}")
     console.print(f"  [cyan]Net Result:[/cyan] ${summary['net_result']:+,.2f}")
     console.print()
+
+    # Replay summary
+    if replay_stats.get("candles_replayed", 0) > 0:
+        from polybot.analysis.replay import render_aggregate_summary
+
+        render_aggregate_summary(replay_stats, console)
 
     # Clean
     if not args.no_clean:

@@ -4,6 +4,31 @@ All notable changes to this project will be documented in this file.
 
 ## [v0.15.0] — 2026-03-02
 
+### Added — `polybot-replay` candle replay runner
+
+New CLI tool that deterministically replays any candle's per-second orderbook timeline offline, turning raw SQLite snapshot data into actionable fill-strategy insights.
+
+```bash
+polybot-replay --slug btc-updown-5m           # Latest candle matching slug
+polybot-replay --slug btc-updown-5m --all     # All candles for slug
+polybot-replay --slug btc-updown-5m --candle-id 15
+polybot-replay --slug btc-updown-5m --ttl 5   # Counterfactual: 5s TTL
+polybot-replay --slug btc-updown-5m --limit-price 0.45  # Fixed limit price scan
+```
+
+**Report sections:**
+1. **Header** — Candle ID, market slug, traded side, duration, winner outcome
+2. **Orderbook Summary** — Min/max/mean/stdev for best_bid, best_ask, mid, spread, BTC price
+3. **Decision Timeline** — Each AI decision with confidence, fill price, book state at decision time
+4. **Fillability Scan** — For each second, simulates placing a limit order at best_ask and checks if the book moves favorably within the TTL window. Reports: fillable seconds, fill rate, best/worst entry, fill delay distribution
+5. **Post-Cancel Recovery** — For missed/cancelled orders, analyzes the 30s price trajectory after cancel to determine if price returned to fillable range
+6. **Live Order Telemetry** — Overlays v0.15.0 `live_order_json` data: order lifecycle, polls, decision-to-submit ask drift, OB at submit/end/post-cancel
+7. **Key Insights** — Auto-generated summary: best entry point, actual vs optimal fill comparison, TTL counterfactuals, post-cancel recovery, winner correctness
+
+**Integrated into existing CLIs:**
+- `polybot-analyze` — appends an aggregate Candle Replay Summary table after the performance report (reads `logs/polybot.db`)
+- `polybot-archive` — runs replay on the archived DB, prints the summary, and saves aggregate stats to `summary.json` under the `replay` key
+
 ### Added — Full limit order execution telemetry
 
 Every live CLOB limit order attempt now records rich execution telemetry via a new `LiveOrderResult` model, enabling post-session analysis of WHY orders fill or miss.
