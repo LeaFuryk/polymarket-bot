@@ -259,6 +259,10 @@ class LiveExecutionEngine:
                     side.value, decision.token_side.value,
                     fill.size, fill.fill_price, fill.total_cost, fill.fee_amount,
                 )
+                # Refresh CLOB server's cached balance/allowance after fill.
+                # After BUY: server needs to know we hold conditional tokens (for future SELL).
+                # After SELL: server needs to know we have more USDC (for future BUY).
+                await self._refresh_allowance_after_fill(token_id, side)
             else:
                 self._last_skip_reason = f"limit order timeout ({ttl}s)"
             return fill
@@ -467,6 +471,39 @@ class LiveExecutionEngine:
         except Exception:
             logger.exception("Failed to re-fetch orderbook for %s", token_id)
             return None
+
+    async def _refresh_allowance_after_fill(self, token_id: str, side: Side) -> None:
+        """Refresh CLOB server's cached balance/allowance after a fill.
+
+        After BUY: update CONDITIONAL allowance so the server knows we hold
+        tokens and can SELL them later.
+        After SELL: update COLLATERAL allowance so the server knows we have
+        more USDC for future BUYs.
+        """
+        from py_clob_client.clob_types import BalanceAllowanceParams, AssetType
+        loop = asyncio.get_event_loop()
+        try:
+            if side == Side.BUY:
+                params = BalanceAllowanceParams(
+                    asset_type=AssetType.CONDITIONAL,
+                    token_id=token_id,
+                    signature_type=2,
+                )
+            else:
+                params = BalanceAllowanceParams(
+                    asset_type=AssetType.COLLATERAL,
+                    signature_type=2,
+                )
+            await loop.run_in_executor(
+                None, partial(self._client.update_balance_allowance, params)
+            )
+            logger.info(
+                "Refreshed %s allowance after %s fill",
+                "conditional" if side == Side.BUY else "collateral",
+                side.value,
+            )
+        except Exception:
+            logger.warning("Failed to refresh allowance after %s fill", side.value, exc_info=True)
 
     def _parse_order_response(
         self,
