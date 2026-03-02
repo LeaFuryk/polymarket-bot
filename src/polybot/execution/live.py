@@ -109,28 +109,14 @@ class LiveExecutionEngine:
                 asset_type=AssetType.COLLATERAL,
                 signature_type=2,
             )
-            # On first sync, refresh server's cached allowance to ensure it's current
-            if self._last_balance_sync == 0.0:
-                try:
-                    await loop.run_in_executor(
-                        None, partial(self._client.update_balance_allowance, params)
-                    )
-                    logger.info("Refreshed COLLATERAL allowance on startup")
-                except Exception:
-                    logger.warning("Failed to refresh COLLATERAL allowance on startup", exc_info=True)
-
             result = await loop.run_in_executor(
                 None, partial(self._client.get_balance_allowance, params)
             )
-            # Balance and allowance are in raw USDC units (6 decimals)
+            # Balance is in raw USDC units (6 decimals)
             raw = float(result.get("balance", 0)) if isinstance(result, dict) else 0.0
             balance = raw / 1e6
-            raw_allowance = float(result.get("allowance", 0)) if isinstance(result, dict) else 0.0
-            allowance = raw_allowance / 1e6
             self._wallet_balance = balance
             self._last_balance_sync = time.time()
-            if allowance < balance:
-                logger.warning("USDC allowance $%.2f < balance $%.2f — orders may be rejected", allowance, balance)
             return balance
         except Exception:
             logger.exception("Failed to sync wallet balance")
@@ -242,6 +228,25 @@ class LiveExecutionEngine:
             )
             return None
 
+        # --- Determine order size ---
+        order_size = decision.size
+
+        # For live SELLs, cap size to actual on-chain conditional token balance.
+        # The paper portfolio tracks shares but on-chain balance may differ due
+        # to rounding in the exchange contract's fill math.
+        if side == Side.SELL and not self._config.dry_run:
+            actual = await self._get_conditional_balance(token_id)
+            if actual is not None and actual < order_size:
+                logger.info(
+                    "SELL size capped: %.4f → %.4f (on-chain balance)",
+                    order_size, actual,
+                )
+                order_size = actual
+            if actual is not None and actual <= 0:
+                self._last_skip_reason = "no on-chain token balance"
+                logger.warning("Live SELL blocked: no on-chain balance for token %s", token_id[:8])
+                return None
+
         # --- Submit limit order ---
         ttl = self._config.limit_order_ttl_seconds
         try:
@@ -257,7 +262,7 @@ class LiveExecutionEngine:
                 fill = await self._submit_limit_order(
                     token_id=token_id,
                     side=side,
-                    size=decision.size,
+                    size=order_size,
                     limit_price=limit_price,
                     ttl=ttl,
                 )
@@ -462,6 +467,28 @@ class LiveExecutionEngine:
 
         logger.info("DRY RUN: limit order timeout after %ds (limit=%.4f)", ttl, limit_price)
         return None
+
+    async def _get_conditional_balance(self, token_id: str) -> float | None:
+        """Query actual on-chain conditional token balance from the CLOB server."""
+        from py_clob_client.clob_types import BalanceAllowanceParams, AssetType
+        loop = asyncio.get_event_loop()
+        try:
+            params = BalanceAllowanceParams(
+                asset_type=AssetType.CONDITIONAL,
+                token_id=token_id,
+                signature_type=2,
+            )
+            result = await loop.run_in_executor(
+                None, partial(self._client.get_balance_allowance, params)
+            )
+            raw = float(result.get("balance", 0)) if isinstance(result, dict) else 0.0
+            # Conditional token balance is in 6-decimal units (like USDC)
+            balance = raw / 1e6
+            logger.debug("Conditional balance for %s: %.4f (raw=%s)", token_id[:8], balance, raw)
+            return balance
+        except Exception:
+            logger.warning("Failed to query conditional balance for %s", token_id[:8], exc_info=True)
+            return None
 
     async def _refetch_orderbook(self, token_id: str) -> OrderbookSnapshot | None:
         """Re-fetch orderbook from CLOB."""
