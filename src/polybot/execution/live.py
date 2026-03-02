@@ -97,11 +97,14 @@ class LiveExecutionEngine:
             from py_clob_client.clob_types import BalanceAllowanceParams, AssetType
             params = BalanceAllowanceParams(
                 asset_type=AssetType.COLLATERAL,
+                signature_type=2,
             )
             result = await loop.run_in_executor(
                 None, partial(self._client.get_balance_allowance, params)
             )
-            balance = float(result.get("balance", 0)) if isinstance(result, dict) else 0.0
+            # Balance is in raw USDC units (6 decimals)
+            raw = float(result.get("balance", 0)) if isinstance(result, dict) else 0.0
+            balance = raw / 1e6
             self._wallet_balance = balance
             self._last_balance_sync = time.time()
             return balance
