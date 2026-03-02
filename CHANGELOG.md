@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v0.14.1] — 2026-03-01
+
+### Fixed — Wallet balance always reads $0.00
+
+The CLOB balance API requires `signature_type=2` for Polymarket proxy wallets — the default (`0`) returns zero. Also the raw balance is in USDC's 6-decimal units and needs dividing by 1e6. This caused the bot to abort on startup with "wallet balance is $0.00".
+
 ## [v0.14.0] — 2026-03-01
 
 ### Changed — Replace drift-check FOK with 3-second GTC limit orders
