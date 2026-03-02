@@ -14,6 +14,7 @@ The live execution engine previously used FOK market orders with a stale-price d
 - **Dry run mode**: `_simulate_limit_order()` re-fetches the live orderbook up to TTL times, fills if the market crosses the limit price
 - **Dashboard visibility**: Unfilled live trades now show as `BLOCKED` in the candle timeline with the skip reason (e.g. "limit order timeout (3s)")
 - **Config**: New `limit_order_ttl_seconds: 3` in TradingConfig; `max_price_drift_pct` retained for backward compat but no longer used
+- **Post-cancel verification**: After cancelling a timed-out order, re-checks `get_order()` once to catch fills that raced the cancel — prevents missed fills and phantom positions
 
 ### Added — Shadow PnL & Exec Cost metrics on dashboard
 

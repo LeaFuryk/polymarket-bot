@@ -348,6 +348,27 @@ class LiveExecutionEngine:
         except Exception:
             logger.warning("Failed to cancel timed-out order %s", order_id, exc_info=True)
 
+        # Post-cancel verification: the order may have filled between last
+        # poll and cancel. Re-check once to avoid missing a real fill.
+        try:
+            final_status = await loop.run_in_executor(
+                None, partial(self._client.get_order, order_id)
+            )
+            status = ""
+            if isinstance(final_status, dict):
+                status = final_status.get("status", "").upper()
+            else:
+                status = getattr(final_status, "status", "").upper()
+
+            if status in ("MATCHED", "FILLED"):
+                logger.warning(
+                    "GTC order filled AFTER cancel attempt (order_id=%s) — capturing fill",
+                    order_id,
+                )
+                return self._parse_order_response(final_status, side, size, limit_price)
+        except Exception:
+            logger.warning("Post-cancel verification failed for %s", order_id, exc_info=True)
+
         return None
 
     async def _simulate_limit_order(
