@@ -1053,6 +1053,7 @@ class TradingAgent:
                     "ai_cost": t.ai_cost,
                     "screen_passed": t.extra.get("screen_passed"),
                     "screen_input": t.extra.get("screen_input"),
+                    "live_order": t.extra.get("live_order"),
                 }
                 trades.append(trade_entry)
 
@@ -1441,6 +1442,7 @@ class TradingAgent:
                         "realized_pnl": t.get("realized_pnl", 0),
                         "unrealized_pnl": t.get("unrealized_pnl", 0),
                         "ai_cost": t.get("ai_cost", 0),
+                        "live_order": t.get("extra", {}).get("live_order"),
                     })
             except Exception:
                 logger.debug("Could not load trade file %s", trade_file, exc_info=True)

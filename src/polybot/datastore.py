@@ -146,6 +146,9 @@ class DecisionRow:
     # Indicators (JSON blob)
     indicators_json: str = "{}"
 
+    # Live order telemetry (JSON blob, empty in paper mode)
+    live_order_json: str = ""
+
 
 # ---------------------------------------------------------------------------
 # Schema
@@ -231,7 +234,8 @@ CREATE TABLE IF NOT EXISTS decisions (
     ai_cost        REAL,
     ai_latency_ms  REAL,
 
-    indicators_json TEXT
+    indicators_json TEXT,
+    live_order_json TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_snapshots_candle ON snapshots(candle_id);
@@ -267,6 +271,12 @@ class DataStore:
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.execute("PRAGMA synchronous=NORMAL")
         self._conn.executescript(_SCHEMA)
+        # Migrate: add live_order_json column if missing (v0.14.5+)
+        try:
+            self._conn.execute("ALTER TABLE decisions ADD COLUMN live_order_json TEXT")
+            self._conn.commit()
+        except sqlite3.OperationalError:
+            pass  # column already exists
         self._conn.commit()
         logger.info("DataStore opened: %s (WAL mode)", self._db_path)
 
@@ -475,7 +485,7 @@ class DataStore:
                         risk_blocked, risk_reason,
                         cash, portfolio_value, up_shares, down_shares,
                         ai_cost, ai_latency_ms,
-                        indicators_json
+                        indicators_json, live_order_json
                     ) VALUES (
                         ?, ?, ?, ?,
                         ?, ?, ?, ?, ?,
@@ -484,7 +494,7 @@ class DataStore:
                         ?, ?,
                         ?, ?, ?, ?,
                         ?, ?,
-                        ?
+                        ?, ?
                     )""",
                     [
                         (
@@ -495,7 +505,7 @@ class DataStore:
                             int(d.risk_blocked), d.risk_reason,
                             d.cash, d.portfolio_value, d.up_shares, d.down_shares,
                             d.ai_cost, d.ai_latency_ms,
-                            d.indicators_json,
+                            d.indicators_json, d.live_order_json,
                         )
                         for d in decisions
                     ],

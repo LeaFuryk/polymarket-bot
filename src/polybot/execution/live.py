@@ -1,11 +1,10 @@
 """Live execution engine — real Polymarket CLOB orders via py-clob-client Level 2.
 
 Uses GTC limit orders at the AI's evaluated price with a configurable TTL
-(default 3s). If the order fills within the TTL, returns a SimulatedFill.
-If not, cancels the order and returns None.
-
-Returns the same SimulatedFill type as ExecutionSimulator, so everything
-downstream (Portfolio, risk, dashboard, logs) works unchanged.
+(default 3s). Returns a LiveOrderResult with full execution telemetry
+(orderbook snapshots, poll progression, fill source, balances) for every
+limit order attempt. The SimulatedFill is nested inside LiveOrderResult.fill.
+Returns None only for safety-check skips (kill switch, no token_id, etc.).
 """
 
 from __future__ import annotations
@@ -14,6 +13,7 @@ import asyncio
 import logging
 import time
 from functools import partial
+from typing import Any
 
 from py_clob_client.client import ClobClient
 from py_clob_client.clob_types import ApiCreds, OrderArgs, OrderType
@@ -21,6 +21,7 @@ from py_clob_client.clob_types import ApiCreds, OrderArgs, OrderType
 from polybot.config import TradingConfig, ApiConfig
 from polybot.models import (
     Action,
+    LiveOrderResult,
     OrderbookSnapshot,
     Side,
     SimulatedFill,
@@ -150,11 +151,24 @@ class LiveExecutionEngine:
             logger.exception("Failed to cancel CLOB orders")
             return 0
 
+    @staticmethod
+    def _snapshot_ob(ob: OrderbookSnapshot | None) -> dict[str, Any]:
+        """Convert OrderbookSnapshot to compact telemetry dict."""
+        if ob is None:
+            return {}
+        return {
+            "best_bid": ob.best_bid,
+            "best_ask": ob.best_ask,
+            "bid_depth": round(ob.bid_depth, 2),
+            "ask_depth": round(ob.ask_depth, 2),
+            "spread_pct": round(ob.spread_pct, 4) if ob.spread_pct is not None else None,
+        }
+
     async def execute(
         self,
         decision: TradingDecision,
         orderbook: OrderbookSnapshot,
-    ) -> SimulatedFill | None:
+    ) -> LiveOrderResult | None:
         """Execute a real CLOB order with safety checks.
 
         Places a GTC limit order at the AI's evaluated price (best_ask for BUY,
@@ -166,7 +180,7 @@ class LiveExecutionEngine:
             orderbook: The orderbook snapshot at AI decision time.
 
         Returns:
-            SimulatedFill with real execution data, or None if skipped/failed.
+            LiveOrderResult with full telemetry, or None if skipped/failed.
         """
         self._last_skip_reason = ""
 
@@ -251,7 +265,7 @@ class LiveExecutionEngine:
         ttl = self._config.limit_order_ttl_seconds
         try:
             if self._config.dry_run:
-                fill = await self._simulate_limit_order(
+                result = await self._simulate_limit_order(
                     token_id=token_id,
                     side=side,
                     size=decision.size,
@@ -259,7 +273,7 @@ class LiveExecutionEngine:
                     ttl=ttl,
                 )
             else:
-                fill = await self._submit_limit_order(
+                result = await self._submit_limit_order(
                     token_id=token_id,
                     side=side,
                     size=order_size,
@@ -267,24 +281,27 @@ class LiveExecutionEngine:
                     ttl=ttl,
                 )
 
-            if fill:
+            # Populate decision-time orderbook on the result
+            result.decision_ob_ask = orderbook.best_ask
+            result.decision_ob_bid = orderbook.best_bid
+
+            if result.fill:
                 # Update wallet balance estimate
                 if side == Side.BUY:
-                    self._wallet_balance -= fill.total_cost
+                    self._wallet_balance -= result.fill.total_cost
                 else:
-                    self._wallet_balance += abs(fill.total_cost)
+                    self._wallet_balance += abs(result.fill.total_cost)
                 logger.info(
                     "LIVE %s %s %.1f @ %.4f (cost=$%.2f, fee=$%.4f)",
                     side.value, decision.token_side.value,
-                    fill.size, fill.fill_price, fill.total_cost, fill.fee_amount,
+                    result.fill.size, result.fill.fill_price,
+                    result.fill.total_cost, result.fill.fee_amount,
                 )
                 # Refresh CLOB server's cached balance/allowance after fill.
-                # After BUY: server needs to know we hold conditional tokens (for future SELL).
-                # After SELL: server needs to know we have more USDC (for future BUY).
                 await self._refresh_allowance_after_fill(token_id, side)
             else:
                 self._last_skip_reason = f"limit order timeout ({ttl}s)"
-            return fill
+            return result
         except Exception:
             logger.exception("Live execution failed")
             self._last_skip_reason = "execution error"
@@ -297,11 +314,29 @@ class LiveExecutionEngine:
         size: float,
         limit_price: float,
         ttl: int,
-    ) -> SimulatedFill | None:
-        """Create and submit a GTC limit order, poll for fill, cancel on timeout."""
+    ) -> LiveOrderResult:
+        """Create and submit a GTC limit order, poll for fill, cancel on timeout.
+
+        The CLOB REST API has an async status propagation delay — an order can
+        be matched by the matching engine while ``get_order`` still reports
+        status "LIVE" for 1-3 seconds.  To avoid missing real fills we check
+        *both* the ``status`` field **and** ``size_matched`` > 0 during polling,
+        and after a timeout we verify via an on-chain balance check.
+
+        Returns a LiveOrderResult with full telemetry regardless of fill outcome.
+        """
         loop = asyncio.get_event_loop()
+        result = LiveOrderResult(limit_price=limit_price, ttl_used=ttl)
 
         clob_side = "BUY" if side == Side.BUY else "SELL"
+
+        # Snapshot pre-order balance so we can detect stealth fills later
+        pre_balance = await self._get_conditional_balance(token_id)
+        result.pre_balance = pre_balance
+
+        # Snapshot orderbook at submit time
+        fresh_ob = await self._refetch_orderbook(token_id)
+        result.ob_at_submit = self._snapshot_ob(fresh_ob)
 
         order_args = OrderArgs(
             token_id=token_id,
@@ -325,6 +360,7 @@ class LiveExecutionEngine:
                 OrderType.GTC,
             )
         )
+        result.submit_ts = time.time()
 
         # Extract order ID from response
         order_id = None
@@ -336,14 +372,20 @@ class LiveExecutionEngine:
         if not order_id:
             logger.warning("GTC order posted but no order_id in response: %s", response)
             # Try to parse as immediate fill
-            return self._parse_order_response(response, side, size, limit_price)
+            fill = self._parse_order_response(response, side, size, limit_price)
+            if fill:
+                result.fill = fill
+                result.fill_ts = time.time()
+                result.fill_source = "immediate"
+            return result
 
+        result.order_id = order_id
         logger.info(
             "GTC limit order posted: %s %s %.1f @ %.4f (order_id=%s, ttl=%ds)",
             clob_side, token_id[:8], size, limit_price, order_id, ttl,
         )
 
-        # Poll for fill
+        # Poll for fill — check both status AND size_matched
         for i in range(ttl):
             await asyncio.sleep(1.0)
             try:
@@ -351,14 +393,15 @@ class LiveExecutionEngine:
                     None, partial(self._client.get_order, order_id)
                 )
 
-                status = ""
-                if isinstance(order_status, dict):
-                    status = order_status.get("status", "").upper()
-                else:
-                    status = getattr(order_status, "status", "").upper()
+                status, sm = self._extract_order_fill_info(order_status)
+                result.polls.append({"ts": time.time(), "status": status, "size_matched": sm})
 
-                if status in ("MATCHED", "FILLED"):
-                    logger.info("GTC order filled after %ds (order_id=%s)", i + 1, order_id)
+                if status in ("MATCHED", "FILLED") or sm > 0:
+                    fill_source = "status_poll" if status in ("MATCHED", "FILLED") else "size_matched"
+                    logger.info(
+                        "GTC order filled after %ds (order_id=%s, status=%s, size_matched=%.4f)",
+                        i + 1, order_id, status, sm,
+                    )
                     # Cancel to clean up (already filled, but good hygiene)
                     try:
                         await loop.run_in_executor(
@@ -366,17 +409,37 @@ class LiveExecutionEngine:
                         )
                     except Exception:
                         pass  # Already filled, cancel may fail — that's fine
-                    return self._parse_order_response(order_status, side, size, limit_price)
+
+                    fill = self._parse_order_response(order_status, side, size, limit_price)
+                    result.fill = fill
+                    result.fill_ts = time.time()
+                    result.fill_source = fill_source
+                    result.final_order_status = status
+                    result.size_matched = sm
+
+                    # Snapshot orderbook at fill
+                    end_ob = await self._refetch_orderbook(token_id)
+                    result.ob_at_end = self._snapshot_ob(end_ob)
+
+                    # Post-fill balance
+                    result.post_balance = await self._get_conditional_balance(token_id)
+                    return result
 
                 if status in ("CANCELLED", "EXPIRED", "REJECTED"):
                     logger.info("GTC order %s (order_id=%s)", status, order_id)
-                    return None
+                    result.final_order_status = status
+                    result.cancel_ts = time.time()
+                    end_ob = await self._refetch_orderbook(token_id)
+                    result.ob_at_end = self._snapshot_ob(end_ob)
+                    return result
 
             except Exception:
                 logger.debug("Error polling order %s (attempt %d/%d)", order_id, i + 1, ttl, exc_info=True)
+                result.polls.append({"ts": time.time(), "status": "ERROR", "size_matched": 0})
 
         # Timeout — cancel the order
         logger.info("GTC order timeout after %ds, cancelling (order_id=%s)", ttl, order_id)
+        result.cancel_ts = time.time()
         try:
             await loop.run_in_executor(
                 None, partial(self._client.cancel, order_id)
@@ -384,28 +447,141 @@ class LiveExecutionEngine:
         except Exception:
             logger.warning("Failed to cancel timed-out order %s", order_id, exc_info=True)
 
-        # Post-cancel verification: the order may have filled between last
-        # poll and cancel. Re-check once to avoid missing a real fill.
+        # Snapshot orderbook at timeout
+        end_ob = await self._refetch_orderbook(token_id)
+        result.ob_at_end = self._snapshot_ob(end_ob)
+
+        # Post-cancel verification: the CLOB API status update is async and
+        # can lag 1-3s behind the matching engine.  Wait briefly, then check
+        # both the order status and the on-chain balance.
+        await asyncio.sleep(1.0)
+
+        # Snapshot orderbook post-cancel (did price come back?)
+        post_cancel_ob = await self._refetch_orderbook(token_id)
+        result.ob_post_cancel = self._snapshot_ob(post_cancel_ob)
+
         try:
             final_status = await loop.run_in_executor(
                 None, partial(self._client.get_order, order_id)
             )
-            status = ""
-            if isinstance(final_status, dict):
-                status = final_status.get("status", "").upper()
-            else:
-                status = getattr(final_status, "status", "").upper()
+            status, sm = self._extract_order_fill_info(final_status)
+            result.final_order_status = status
+            result.size_matched = sm
 
-            if status in ("MATCHED", "FILLED"):
+            if status in ("MATCHED", "FILLED") or sm > 0:
                 logger.warning(
-                    "GTC order filled AFTER cancel attempt (order_id=%s) — capturing fill",
-                    order_id,
+                    "GTC order filled AFTER cancel attempt (order_id=%s, status=%s, "
+                    "size_matched=%.4f) — capturing fill",
+                    order_id, status, sm,
                 )
-                return self._parse_order_response(final_status, side, size, limit_price)
+                fill = self._parse_order_response(final_status, side, size, limit_price)
+                result.fill = fill
+                result.fill_ts = time.time()
+                result.fill_source = "post_cancel"
+                result.post_balance = await self._get_conditional_balance(token_id)
+                return result
         except Exception:
-            logger.warning("Post-cancel verification failed for %s", order_id, exc_info=True)
+            logger.warning("Post-cancel status check failed for %s", order_id, exc_info=True)
 
-        return None
+        # Nuclear fallback: compare on-chain balance to detect stealth fills
+        # where the CLOB API status never propagated to MATCHED.
+        stealth_fill, post_bal = await self._detect_stealth_fill(
+            token_id, side, size, limit_price, pre_balance, order_id,
+        )
+        result.post_balance = post_bal
+        if stealth_fill:
+            result.fill = stealth_fill
+            result.fill_ts = time.time()
+            result.fill_source = "stealth_balance"
+
+        return result
+
+    @staticmethod
+    def _extract_order_fill_info(order_status) -> tuple[str, float]:
+        """Extract status and size_matched from a get_order response.
+
+        The CLOB API may update ``size_matched`` before the ``status``
+        field transitions to MATCHED, so we always check both.
+        """
+        if isinstance(order_status, dict):
+            status = order_status.get("status", "").upper()
+            # size_matched comes as a string decimal from the CLOB API
+            raw_sm = order_status.get("size_matched", order_status.get("sizeMatched", "0"))
+        else:
+            status = getattr(order_status, "status", "").upper()
+            raw_sm = getattr(order_status, "size_matched", getattr(order_status, "sizeMatched", "0"))
+        try:
+            size_matched = float(raw_sm) if raw_sm else 0.0
+        except (ValueError, TypeError):
+            size_matched = 0.0
+        return status, size_matched
+
+    async def _detect_stealth_fill(
+        self,
+        token_id: str,
+        side: Side,
+        size: float,
+        limit_price: float,
+        pre_balance: float | None,
+        order_id: str,
+    ) -> tuple[SimulatedFill | None, float | None]:
+        """Detect a fill by comparing on-chain balance before vs after order.
+
+        If the CLOB API status never propagated (stays LIVE / goes CANCELLED)
+        but the matching engine actually filled the order, the on-chain
+        balance will differ from the pre-order snapshot.
+
+        Returns (fill_or_none, post_balance).
+        """
+        if pre_balance is None:
+            return None, None
+
+        post_balance = await self._get_conditional_balance(token_id)
+        if post_balance is None:
+            return None, None
+
+        if side == Side.BUY:
+            # BUY: we should have MORE conditional tokens
+            delta = post_balance - pre_balance
+            if delta >= size * 0.9:  # allow 10% tolerance for rounding
+                logger.warning(
+                    "STEALTH FILL detected via balance check (order_id=%s): "
+                    "pre=%.4f post=%.4f delta=%.4f (expected ~%.4f)",
+                    order_id, pre_balance, post_balance, delta, size,
+                )
+                return self._make_fill_from_balance(side, delta, limit_price), post_balance
+        else:
+            # SELL: we should have FEWER conditional tokens
+            delta = pre_balance - post_balance
+            if delta >= size * 0.9:
+                logger.warning(
+                    "STEALTH FILL detected via balance check (order_id=%s): "
+                    "pre=%.4f post=%.4f delta=%.4f (expected ~%.4f)",
+                    order_id, pre_balance, post_balance, delta, size,
+                )
+                return self._make_fill_from_balance(side, delta, limit_price), post_balance
+
+        return None, post_balance
+
+    def _make_fill_from_balance(
+        self, side: Side, fill_size: float, limit_price: float,
+    ) -> SimulatedFill:
+        """Construct a SimulatedFill from a balance-detected fill."""
+        notional = limit_price * fill_size
+        fee_bps = 20
+        fee_amount = notional * (fee_bps / 10000)
+        if side == Side.BUY:
+            total_cost = notional + fee_amount
+        else:
+            total_cost = -(notional - fee_amount)
+        return SimulatedFill(
+            side=side,
+            size=fill_size,
+            fill_price=limit_price,
+            slippage_bps=0.0,
+            fee_amount=fee_amount,
+            total_cost=total_cost,
+        )
 
     async def _simulate_limit_order(
         self,
@@ -414,30 +590,46 @@ class LiveExecutionEngine:
         size: float,
         limit_price: float,
         ttl: int,
-    ) -> SimulatedFill | None:
+    ) -> LiveOrderResult:
         """Dry run: simulate a limit order by polling the live orderbook.
 
         Re-fetches the orderbook up to `ttl` times (1s intervals). If the
         market crosses the limit price, returns a fill at the limit price.
+        Returns LiveOrderResult with available telemetry.
         """
+        result = LiveOrderResult(limit_price=limit_price, ttl_used=ttl)
+        result.submit_ts = time.time()
+
         logger.info(
             "DRY RUN: limit order simulation %s %.1f @ %.4f (ttl=%ds)",
             side.value, size, limit_price, ttl,
         )
 
+        # Snapshot initial orderbook
+        first_ob = await self._refetch_orderbook(token_id)
+        result.ob_at_submit = self._snapshot_ob(first_ob)
+
         for i in range(ttl):
             fresh_ob = await self._refetch_orderbook(token_id)
             if fresh_ob is None:
+                result.polls.append({"ts": time.time(), "status": "NO_OB", "size_matched": 0})
                 await asyncio.sleep(1.0)
                 continue
 
+            ob_snap = self._snapshot_ob(fresh_ob)
+            result.polls.append({
+                "ts": time.time(),
+                "status": "POLLING",
+                "size_matched": 0,
+                "best_ask": ob_snap.get("best_ask"),
+                "best_bid": ob_snap.get("best_bid"),
+            })
+
             filled = False
             if side == Side.BUY:
-                # BUY fills if fresh ask <= our limit price
                 if fresh_ob.best_ask is not None and fresh_ob.best_ask <= limit_price:
                     filled = True
             else:
-                # SELL fills if fresh bid >= our limit price
                 if fresh_ob.best_bid is not None and fresh_ob.best_bid >= limit_price:
                     filled = True
 
@@ -453,7 +645,7 @@ class LiveExecutionEngine:
                     total_cost = notional + fee_amount
                 else:
                     total_cost = -(notional - fee_amount)
-                return SimulatedFill(
+                result.fill = SimulatedFill(
                     side=side,
                     size=size,
                     fill_price=limit_price,
@@ -461,12 +653,20 @@ class LiveExecutionEngine:
                     fee_amount=fee_amount,
                     total_cost=total_cost,
                 )
+                result.fill_ts = time.time()
+                result.fill_source = "dry_run"
+                result.ob_at_end = ob_snap
+                return result
 
             if i < ttl - 1:
                 await asyncio.sleep(1.0)
 
         logger.info("DRY RUN: limit order timeout after %ds (limit=%.4f)", ttl, limit_price)
-        return None
+        result.cancel_ts = time.time()
+        # Snapshot final orderbook
+        end_ob = await self._refetch_orderbook(token_id)
+        result.ob_at_end = self._snapshot_ob(end_ob)
+        return result
 
     async def _get_conditional_balance(self, token_id: str) -> float | None:
         """Query actual on-chain conditional token balance from the CLOB server."""

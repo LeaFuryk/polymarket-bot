@@ -189,6 +189,29 @@ class SimulatedFill(BaseModel):
     timestamp: float = Field(default_factory=time.time)
 
 
+class LiveOrderResult(BaseModel):
+    """Rich metadata from a live CLOB limit order attempt."""
+
+    fill: SimulatedFill | None = None
+    order_id: str = ""
+    limit_price: float = 0.0
+    submit_ts: float = 0.0
+    fill_ts: float | None = None
+    cancel_ts: float | None = None
+    fill_source: str = ""  # "status_poll" / "size_matched" / "post_cancel" / "stealth_balance" / ""
+    ttl_used: int = 3
+    polls: list[dict[str, Any]] = Field(default_factory=list)
+    ob_at_submit: dict[str, Any] = Field(default_factory=dict)
+    ob_at_end: dict[str, Any] = Field(default_factory=dict)
+    ob_post_cancel: dict[str, Any] | None = None
+    pre_balance: float | None = None
+    post_balance: float | None = None
+    final_order_status: str = ""
+    size_matched: float = 0.0
+    decision_ob_ask: float | None = None
+    decision_ob_bid: float | None = None
+
+
 class PendingLimitOrder(BaseModel):
     order_id: str = Field(default_factory=lambda: uuid.uuid4().hex[:12])
     side: Side
