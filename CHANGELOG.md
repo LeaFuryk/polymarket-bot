@@ -4,13 +4,13 @@ All notable changes to this project will be documented in this file.
 
 ## [v0.14.2] — 2026-03-01
 
-### Fixed — SELL orders rejected after BUY fill
+### Fixed — SELL orders rejected: "not enough balance"
 
-After a BUY fills, the proxy wallet holds conditional tokens. The CLOB server's cached balance/allowance doesn't automatically update, so subsequent SELL attempts fail with "not enough balance / allowance". Now calls `update_balance_allowance(CONDITIONAL, token_id)` after BUY fills (and `COLLATERAL` after SELL fills) to refresh the server's cached view.
+The AI's paper portfolio tracked 40 shares but the exchange contract's fill math delivered slightly fewer tokens on-chain (e.g. 39.383). The SELL order tried to sell the paper amount (40) but the proxy wallet only held 39.383 → "not enough balance".
 
-### Added — Startup allowance refresh + allowance monitoring
+**Root cause**: The exchange contract's rounding during BUY fills results in fewer conditional tokens than the requested size. The paper portfolio doesn't reflect this on-chain rounding.
 
-On first balance sync, calls `update_balance_allowance(COLLATERAL)` to ensure the server's USDC allowance cache is fresh. Also logs a warning if USDC allowance is less than balance (orders would be rejected).
+**Fix**: Before a live SELL, queries the actual conditional token balance from the CLOB server (`get_balance_allowance(CONDITIONAL, token_id)`) and caps the sell size to the available on-chain balance. Also refreshes the server's cached allowance after each fill.
 
 ### Fixed — Orders rejected with "not enough balance / allowance"
 
