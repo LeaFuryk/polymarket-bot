@@ -793,7 +793,8 @@ class AIDecision:
 
         fill = None
         if self._live_mode and self._live_engine:
-            fill = await self._live_engine.execute(sell_decision, ob)
+            live_result = await self._live_engine.execute(sell_decision, ob)
+            fill = live_result.fill if live_result else None
             paper_fill = self._exec_sim.execute(sell_decision, ob)
             if paper_fill and self._shadow_portfolio:
                 self._shadow_portfolio.apply_fill(paper_fill, token_side)
@@ -1406,12 +1407,14 @@ class AIDecision:
         # Execute (paper_fill is only set in live mode for shadow comparison)
         fill = None
         paper_fill = None
+        live_result = None  # LiveOrderResult telemetry (live mode only)
         if not risk_blocked and decision.action != Action.HOLD:
             target_ob = down_ob if decision.token_side == TokenSide.DOWN else up_ob
 
             if self._live_mode and self._live_engine and decision.order_type == OrderType.MARKET:
                 # Live mode: execute on CLOB + shadow paper sim
-                fill = await self._live_engine.execute(decision, target_ob)
+                live_result = await self._live_engine.execute(decision, target_ob)
+                fill = live_result.fill if live_result else None
                 paper_fill = self._exec_sim.execute(decision, target_ob)
 
                 # Apply shadow paper fill to shadow portfolio
@@ -1504,7 +1507,7 @@ class AIDecision:
             cycle, snapshot,
             decision=decision, latency_ms=latency_ms,
             fill=fill, risk_blocked=risk_blocked, risk_reason=risk_reason,
-            paper_fill=paper_fill,
+            paper_fill=paper_fill, live_result=live_result,
         )
 
         self._record_ai_call_time()
@@ -1516,7 +1519,7 @@ class AIDecision:
     def _log_cycle(
         self, cycle, snapshot, decision=None, latency_ms=0.0,
         fill=None, risk_blocked=False, risk_reason="",
-        paper_fill=None, screen_input=None,
+        paper_fill=None, screen_input=None, live_result=None,
     ) -> None:
         """Log a cycle to trade log and update trade history."""
         ob = snapshot.orderbook
@@ -1593,11 +1596,17 @@ class AIDecision:
             record.paper_fill_price = paper_fill.fill_price
             record.paper_total_cost = paper_fill.total_cost
 
+        if live_result:
+            # Override limit_price with the actual submitted limit price
+            record.limit_price = live_result.limit_price
+            # Store full telemetry blob (excluding the nested fill to avoid duplication)
+            record.extra["live_order"] = live_result.model_dump(exclude={"fill"})
+
         self._trade_log.write(record)
 
         # Queue decision for SQLite analytics
         if self._datastore is not None and self._datastore.current_candle_id is not None:
-            self._queue_decision(cycle, snapshot, decision, latency_ms, fill, risk_blocked, risk_reason)
+            self._queue_decision(cycle, snapshot, decision, latency_ms, fill, risk_blocked, risk_reason, live_result=live_result)
 
         self._recent_trades.append(record)
         if len(self._recent_trades) > 50:
@@ -1607,6 +1616,7 @@ class AIDecision:
     def _queue_decision(
         self, cycle, snapshot, decision=None, latency_ms=0.0,
         fill=None, risk_blocked=False, risk_reason="",
+        live_result=None,
     ) -> None:
         """Build a DecisionRow and queue it for SQLite analytics."""
         import json
@@ -1653,5 +1663,6 @@ class AIDecision:
             ai_cost=self._last_cycle_api_cost,
             ai_latency_ms=latency_ms,
             indicators_json=json.dumps(indicators_dict) if indicators_dict else "{}",
+            live_order_json=json.dumps(live_result.model_dump(exclude={"fill"})) if live_result else "",
         )
         self._datastore.queue_decision(row)

@@ -2,7 +2,7 @@
 
 An AI-powered trading agent that trades Polymarket BTC 5-minute candle prediction markets using Claude as its decision engine. The bot features a self-improving feedback loop where Claude reflects on past outcomes, updates its own knowledge base, and tunes the indicators fed into future decisions.
 
-**Two modes**: paper trading (default, simulated execution) or live trading (real CLOB orders via py-clob-client with shadow paper comparison). In paper mode, no real money is at risk. In live mode, GTC limit orders are placed at the AI's evaluated price with a 3-second TTL — if unfilled, the order is cancelled (you never pay more than the AI evaluated). 9 layers of safety (kill switch, order caps, limit order TTL, dry run).
+**Two modes**: paper trading (default, simulated execution) or live trading (real CLOB orders via py-clob-client with shadow paper comparison). In paper mode, no real money is at risk. In live mode, GTC limit orders are placed at the AI's evaluated price with a 3-second TTL — if unfilled, the order is cancelled (you never pay more than the AI evaluated). Three-layer fill detection (status polling + `size_matched` + balance-based stealth fill detection) handles the CLOB API's async status propagation delay. 9 layers of safety (kill switch, order caps, limit order TTL, dry run).
 
 ---
 
@@ -315,6 +315,8 @@ POLYBOT_TRADING_DRY_RUN=false
 - Kill switch: shuts down if session loss exceeds $40
 - Min wallet balance: refuses BUY below $5 USDC
 - GTC limit orders at AI's evaluated price with 3s TTL (never pays more than evaluated)
+- Three-layer fill detection: status polling, `size_matched` field, balance-based stealth fill detection
+- Full execution telemetry: orderbook snapshots at submit/fill/cancel, poll progression, fill source, balance diffs
 - Unfilled orders auto-cancelled after timeout — no stuck orders
 
 #### 4. Shadow comparison
@@ -680,8 +682,9 @@ TradingAgent (agent.py) — orchestrator, launches 6 concurrent tasks
  │   FeatureVector + feedback + indicators → structured JSON decision
  │
  ├── LiveExecutionEngine (execution/live.py) — live mode only
- │   py-clob-client Level 2 → GTC limit orders (3s TTL) → SimulatedFill
- │   Kill switch, dry run, order size cap, auto-cancel on timeout
+ │   py-clob-client Level 2 → GTC limit orders (3s TTL) → LiveOrderResult
+ │   Kill switch, dry run, order size cap, auto-cancel, stealth fill detection
+ │   Full telemetry: OB snapshots, poll progression, fill source, balance diffs
  │
  ├── ExecutionSimulator
  │   Market orders: slippage model + 20bps fee → SimulatedFill

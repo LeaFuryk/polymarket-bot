@@ -2,7 +2,40 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v0.15.0] — 2026-03-02
+
+### Added — Full limit order execution telemetry
+
+Every live CLOB limit order attempt now records rich execution telemetry via a new `LiveOrderResult` model, enabling post-session analysis of WHY orders fill or miss.
+
+**Recorded per order attempt**:
+- `order_id`, `limit_price`, `submit_ts`, `fill_ts`, `cancel_ts` — order lifecycle
+- `fill_source` — how the fill was detected: `status_poll`, `size_matched`, `post_cancel`, `stealth_balance`, or `dry_run`
+- `polls` — full status progression `[{ts, status, size_matched}, ...]` during TTL window
+- `ob_at_submit`, `ob_at_end`, `ob_post_cancel` — orderbook snapshots (best bid/ask, depth, spread) at submit, resolution, and 1s after cancel
+- `pre_balance`, `post_balance` — conditional token balances for stealth fill detection
+- `decision_ob_ask`, `decision_ob_bid` — stale AI-snapshot orderbook (measures decision-to-submit drift)
+
+**Storage**: telemetry is persisted in `TradeRecord.extra["live_order"]` (JSONL logs), `decisions.live_order_json` (SQLite), and `dashboard_data.json`.
+
+**Dashboard**: trade detail panel now shows:
+- Execution row: fill source + latency (filled) or timeout details + ask movement + post-cancel recovery (missed)
+- Input Data grid: limit price, decision ask, ask drift %, ask at submit/end, fill latency, fill source
+
+Paper-mode trades are unaffected (no `live_order` field).
+
 ## [v0.14.2] — 2026-03-01
+
+### Fixed — Stealth fills: limit order fills missed due to CLOB API status propagation delay
+
+The CLOB REST API has an async status propagation delay — an order can be matched by the matching engine while `get_order()` still reports status "LIVE" for 1-3 seconds. With a 3-second TTL, the bot would poll 3 times, see "LIVE" each time, cancel the order, and report "Live SKIPPED" — even though the order had already filled on-chain. The user would then have untracked positions in their proxy wallet.
+
+**Root cause**: The polling loop only checked the `status` field for "MATCHED"/"FILLED". The CLOB API sometimes updates `size_matched` before the `status` transitions, and in extreme cases neither field updates within the TTL window.
+
+**Fix**: Three-layer fill detection:
+1. **`size_matched` check** — During polling, also checks `size_matched > 0` as a secondary fill indicator (may propagate before `status`)
+2. **Post-cancel delay** — Waits 1s after cancelling before the verification poll, giving the API time to propagate
+3. **Balance-based stealth fill detection** — Snapshots conditional token balance before order submission, then compares after timeout. If the delta matches the expected fill size (within 10% rounding tolerance), the order filled and a SimulatedFill is returned
 
 ### Fixed — SELL orders rejected: "not enough balance"
 

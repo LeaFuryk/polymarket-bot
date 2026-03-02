@@ -3513,13 +3513,57 @@ function buildCandleTimelines(trades, resolutions, currentMarket, candleSnapshot
         if (t.portfolio_value != null) inputDataH += `<div class="td-input-item"><span class="td-input-label">Portfolio</span><span class="td-input-val">$${Number(t.portfolio_value).toFixed(2)}</span></div>`;
         if (t.fee != null) inputDataH += `<div class="td-input-item"><span class="td-input-label">Fee</span><span class="td-input-val">$${Number(t.fee).toFixed(4)}</span></div>`;
         if (t.ai_cost != null) inputDataH += `<div class="td-input-item"><span class="td-input-label">AI Cost</span><span class="td-input-val">$${Number(t.ai_cost).toFixed(4)}</span></div>`;
+        // Live order telemetry fields
+        const lo = t.live_order;
+        if (lo) {
+          inputDataH += `<div class="td-input-item"><span class="td-input-label">Limit Price</span><span class="td-input-val">$${Number(lo.limit_price).toFixed(4)}</span></div>`;
+          if (lo.decision_ob_ask != null) inputDataH += `<div class="td-input-item"><span class="td-input-label">Decision Ask</span><span class="td-input-val">$${Number(lo.decision_ob_ask).toFixed(4)}</span></div>`;
+          if (lo.decision_ob_ask != null && lo.ob_at_submit && lo.ob_at_submit.best_ask != null) {
+            const drift = ((lo.ob_at_submit.best_ask - lo.decision_ob_ask) / lo.decision_ob_ask * 100);
+            const driftColor = Math.abs(drift) < 1 ? 'var(--text-muted)' : drift > 0 ? 'var(--red)' : 'var(--green)';
+            inputDataH += `<div class="td-input-item"><span class="td-input-label">Ask Drift</span><span class="td-input-val" style="color:${driftColor}">${drift >= 0 ? '+' : ''}${drift.toFixed(1)}%</span></div>`;
+          }
+          if (lo.ob_at_submit && lo.ob_at_submit.best_ask != null) inputDataH += `<div class="td-input-item"><span class="td-input-label">Ask@Submit</span><span class="td-input-val">$${Number(lo.ob_at_submit.best_ask).toFixed(4)}</span></div>`;
+          if (lo.ob_at_end && lo.ob_at_end.best_ask != null) inputDataH += `<div class="td-input-item"><span class="td-input-label">Ask@End</span><span class="td-input-val">$${Number(lo.ob_at_end.best_ask).toFixed(4)}</span></div>`;
+          if (lo.fill_ts && lo.submit_ts) {
+            const latency = (lo.fill_ts - lo.submit_ts).toFixed(1);
+            inputDataH += `<div class="td-input-item"><span class="td-input-label">Fill Latency</span><span class="td-input-val">${latency}s</span></div>`;
+          }
+          if (lo.fill_source) inputDataH += `<div class="td-input-item"><span class="td-input-label">Fill Source</span><span class="td-input-val">${esc(lo.fill_source)}</span></div>`;
+        }
         inputDataH += `</div></div>`;
+      }
+
+      // Execution telemetry section (live orders only)
+      let execH = '';
+      const lo2 = t.live_order;
+      if (lo2 && lo2.order_id) {
+        const isFilled = lo2.fill_source && lo2.fill_source !== '';
+        if (isFilled) {
+          const latency = lo2.fill_ts && lo2.submit_ts ? (lo2.fill_ts - lo2.submit_ts).toFixed(1) + 's' : '--';
+          execH = `<div class="td-row"><span class="td-lbl">Exec</span><span class="td-val" style="color:var(--green)">Filled via ${esc(lo2.fill_source)} in ${latency}</span></div>`;
+        } else {
+          let execDetail = `Timeout ${lo2.ttl_used}s`;
+          if (lo2.ob_at_submit && lo2.ob_at_end && lo2.ob_at_submit.best_ask != null && lo2.ob_at_end.best_ask != null) {
+            const askMove = ((lo2.ob_at_end.best_ask - lo2.ob_at_submit.best_ask) / lo2.ob_at_submit.best_ask * 100);
+            execDetail += ` | ask moved ${askMove >= 0 ? '+' : ''}${askMove.toFixed(1)}%`;
+          }
+          if (lo2.ob_post_cancel && lo2.ob_post_cancel.best_ask != null && lo2.ob_at_submit && lo2.ob_at_submit.best_ask != null) {
+            const recovery = ((lo2.ob_post_cancel.best_ask - lo2.ob_at_submit.best_ask) / lo2.ob_at_submit.best_ask * 100);
+            execDetail += ` | post-cancel ${recovery >= 0 ? '+' : ''}${recovery.toFixed(1)}%`;
+          }
+          if (lo2.polls && lo2.polls.length > 0) {
+            const statuses = lo2.polls.map(p => p.status).join(' > ');
+            execDetail += ` | polls: ${statuses}`;
+          }
+          execH = `<div class="td-row"><span class="td-lbl">Exec</span><span class="td-val" style="color:var(--amber)">${esc(execDetail)}</span></div>`;
+        }
       }
 
       return `<div class="tl-detail" id="det-${did}">
         <div class="td-row"><span class="td-lbl">Time</span><span class="td-val">${t.timestamp ? shortTime(t.timestamp) : '--'} — ${Math.round(el)}s/${CANDLE_DUR}s (${Math.round(tr)}s left)</span></div>
         <div class="td-row"><span class="td-lbl">Action</span><span class="td-val"><strong style="color:${ac}">${al}</strong> <span style="color:${sc}">${t.token_side.toUpperCase()}</span></span></div>
-        ${brRow}${modelInfo}
+        ${brRow}${modelInfo}${execH}
         <div class="td-row"><span class="td-lbl">Size</span><span class="td-val">${sz} shares @ ${fp}</span></div>
         <div class="td-row"><span class="td-lbl">Conf</span><span class="td-val">${cw}%<span class="conf-bar"><span class="conf-fill" style="width:${cw}%;background:${confColor(conf)}"></span></span></span></div>
         ${inputDataH}
