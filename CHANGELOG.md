@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [v0.14.2] — 2026-03-01
 
+### Fixed — SELL orders rejected after BUY fill
+
+After a BUY fills, the proxy wallet holds conditional tokens. The CLOB server's cached balance/allowance doesn't automatically update, so subsequent SELL attempts fail with "not enough balance / allowance". Now calls `update_balance_allowance(CONDITIONAL, token_id)` after BUY fills (and `COLLATERAL` after SELL fills) to refresh the server's cached view.
+
 ### Fixed — Orders rejected with "not enough balance / allowance"
 
 The `ClobClient` had `signature_type=2` (POLY_GNOSIS_SAFE) but was missing the `funder` parameter. Without it, the `maker` field in signed orders defaults to the EOA address, but funds live in the Polymarket proxy wallet. The exchange checked the EOA for balance (zero) and rejected with "not enough balance / allowance".
