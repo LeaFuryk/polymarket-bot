@@ -51,12 +51,21 @@ class LiveExecutionEngine:
             api_secret=trading_config.api_secret,
             api_passphrase=trading_config.api_passphrase,
         )
+        funder = trading_config.proxy_wallet_address or None
+        if not funder:
+            logger.warning(
+                "No proxy_wallet_address set — orders will use EOA as maker. "
+                "Set POLYBOT_TRADING_PROXY_WALLET_ADDRESS to your Polymarket profile address."
+            )
+        else:
+            logger.info("CLOB client funder (proxy wallet): %s", funder)
         self._client = ClobClient(
             host=api_config.polymarket_host,
             chain_id=trading_config.chain_id,
             key=trading_config.private_key,
             creds=creds,
-            signature_type=2,  # Polymarket proxy wallet
+            signature_type=2,  # POLY_GNOSIS_SAFE (Polymarket browser wallet proxy)
+            funder=funder,     # proxy wallet address from polymarket.com/settings
         )
 
         # Token IDs for current market (set before each execute call)

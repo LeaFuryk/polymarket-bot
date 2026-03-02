@@ -104,6 +104,7 @@ class TradingConfig(BaseModel):
     max_session_loss_usd: float = 40.0  # kill switch threshold
     min_wallet_balance_usd: float = 5.0  # refuse BUY below this
     max_price_drift_pct: float = 0.03  # 3% — skip if price drifted since AI decision (legacy, unused)
+    proxy_wallet_address: str = ""  # Polymarket proxy wallet (funder) — from polymarket.com/settings
     limit_order_ttl_seconds: int = 3  # how long to keep GTC limit order open before cancel
     dry_run: bool = False  # sign orders but don't post (for testing)
 
@@ -140,6 +141,7 @@ def _apply_env_overrides(config: AppConfig) -> None:
         "POLYBOT_TRADING_API_SECRET": (config.trading, "api_secret", str),
         "POLYBOT_TRADING_API_PASSPHRASE": (config.trading, "api_passphrase", str),
         "POLYBOT_TRADING_DRY_RUN": (config.trading, "dry_run", bool),
+        "POLYBOT_TRADING_PROXY_WALLET_ADDRESS": (config.trading, "proxy_wallet_address", str),
         "POLYBOT_TRADING_MAX_ORDER_SIZE_USD": (config.trading, "max_order_size_usd", float),
         "POLYBOT_TRADING_MAX_SESSION_LOSS_USD": (config.trading, "max_session_loss_usd", float),
     }

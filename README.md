@@ -284,6 +284,15 @@ uv run python scripts/generate_api_key.py
 
 This prints `POLYBOT_TRADING_API_KEY`, `POLYBOT_TRADING_API_SECRET`, and `POLYBOT_TRADING_API_PASSPHRASE` — add them to `.env`.
 
+#### 1b. Set your proxy wallet address
+
+Go to **polymarket.com → Profile → Settings** and copy the **Address** field. Add it to `.env`:
+```
+POLYBOT_TRADING_PROXY_WALLET_ADDRESS=0x...
+```
+
+This is the Polymarket proxy wallet (Gnosis Safe) that holds your USDC. The bot signs orders with your private key but sets this address as the `maker` (funder) in signed orders.
+
 #### 2. Test with dry run
 
 Set live mode with dry run enabled — orders are signed but not posted:
@@ -352,6 +361,7 @@ This gives hard data on how much real CLOB execution costs vs simulation.
 | `POLYBOT_TRADING_API_KEY` | CLOB API key | (required for live) |
 | `POLYBOT_TRADING_API_SECRET` | CLOB API secret | (required for live) |
 | `POLYBOT_TRADING_API_PASSPHRASE` | CLOB API passphrase | (required for live) |
+| `POLYBOT_TRADING_PROXY_WALLET_ADDRESS` | Polymarket proxy wallet (from Profile Settings) | (required for live) |
 | `POLYBOT_TRADING_DRY_RUN` | Sign orders but don't post | `false` |
 | `POLYBOT_TRADING_MAX_ORDER_SIZE_USD` | Hard cap per order | `50.0` |
 | `POLYBOT_TRADING_MAX_SESSION_LOSS_USD` | Kill switch threshold | `40.0` |
