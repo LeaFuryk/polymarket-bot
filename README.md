@@ -462,7 +462,7 @@ polybot-analyze              # reads logs/ by default
 polybot-analyze /path/to/logs
 ```
 
-Prints a Rich table with: Total Cycles, Total Trades, Win Rate, Total PnL, Sharpe Ratio, Max Drawdown, Avg Trade Size, Total Fees, Final Portfolio, Final Cash.
+Prints a Rich table with: Total Cycles, Total Trades, Win Rate, Total PnL, Sharpe Ratio, Max Drawdown, Avg Trade Size, Total Fees, Final Portfolio, Final Cash. If `logs/polybot.db` exists, appends an aggregate **Candle Replay Summary** (fill rates, entry gaps, post-cancel recovery, side accuracy).
 
 ### Iteration Archive & Comparison
 
@@ -474,7 +474,7 @@ polybot-archive --name "baseline"  # → archive/baseline/, then clean
 polybot-archive --no-clean         # archive without cleaning
 ```
 
-Each archive contains all generated artifacts (trade logs, resolutions, SQLite DB, AI knowledge, feature config) plus a `summary.json` with key metrics: bot version, date range, candles, trades, win rate, PnL, fees, AI cost, net result, reflections count, and enabled indicators.
+Each archive contains all generated artifacts (trade logs, resolutions, SQLite DB, AI knowledge, feature config) plus a `summary.json` with key metrics: bot version, date range, candles, trades, win rate, PnL, fees, AI cost, net result, reflections count, enabled indicators, and aggregate replay stats (fill rates, entry gaps, recovery rate, side accuracy).
 
 Compare performance across all archived iterations:
 
@@ -508,6 +508,32 @@ polybot-validate --min-candles 50       # Require 50+ samples for full confidenc
 | `distribution` | Percentiles (10th–95th) of absolute BTC moves at candle close |
 
 Requires `data/market_history.db` — accumulated automatically by the bot across iterations. Low-sample cells are dimmed; cells below `--min-candles` threshold are flagged.
+
+### Candle Replay
+
+Deterministically replay any candle's per-second orderbook timeline to analyze fill opportunities, entry timing, and order execution quality:
+
+```bash
+polybot-replay --slug btc-updown-5m           # Latest candle matching slug
+polybot-replay --slug btc-updown-5m --all     # All candles for slug
+polybot-replay --slug btc-updown-5m --candle-id 15
+polybot-replay --slug btc-updown-5m --ttl 5   # Counterfactual: what if TTL was 5s?
+polybot-replay --slug btc-updown-5m --limit-price 0.45  # Fixed limit price scan
+```
+
+**Report sections:**
+
+| Section | What it shows |
+|---------|--------------|
+| Header | Candle ID, slug, traded side, duration, winner outcome, BTC open/close |
+| Orderbook Summary | Min/max/mean/stdev for best_bid, best_ask, mid, spread, BTC price |
+| Decision Timeline | Each AI decision with confidence, fill price, book state at decision time |
+| Fillability Scan | For each second, simulates a limit order at best_ask — reports fillable seconds, fill rate, best/worst entry, delay distribution |
+| Post-Cancel Recovery | For missed orders: 30s price trajectory after cancel, did price return to fillable range? |
+| Live Order Telemetry | Overlays v0.15.0 `live_order_json`: order lifecycle, polls, decision-to-submit ask drift |
+| Key Insights | Auto-generated: best entry vs actual fill, TTL counterfactuals, recovery analysis |
+
+Reads from `logs/polybot.db` (per-session data with decisions). Use `--db` to point at a different database.
 
 ---
 
@@ -747,6 +773,7 @@ polymarket-bot/
 │   ├── analysis/
 │   │   ├── archive.py            # polybot-archive CLI — iteration snapshots
 │   │   ├── compare.py            # polybot-compare CLI — cross-iteration comparison
+│   │   ├── replay.py             # polybot-replay CLI — candle orderbook replay & fill analysis
 │   │   ├── report.py             # polybot-analyze CLI
 │   │   └── validate.py           # polybot-validate CLI — assumption validation against market history
 │   ├── execution/

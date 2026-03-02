@@ -141,6 +141,15 @@ def main() -> None:
     console.print(table)
     console.print()
 
+    # Replay summary — if polybot.db exists alongside the trade logs
+    db_path = Path(log_dir) / "polybot.db"
+    if db_path.exists():
+        from polybot.analysis.replay import render_aggregate_summary, replay_all_candles
+
+        replay_stats = replay_all_candles(db_path)
+        if replay_stats.get("candles_replayed", 0) > 0:
+            render_aggregate_summary(replay_stats, console)
+
 
 if __name__ == "__main__":
     main()
