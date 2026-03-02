@@ -1,0 +1,141 @@
+{
+  "indicators": [
+    {
+      "name": "token_momentum",
+      "enabled": true,
+      "params": {
+        "window": 10
+      }
+    },
+    {
+      "name": "token_volatility",
+      "enabled": true,
+      "params": {
+        "window": 15
+      }
+    },
+    {
+      "name": "token_ma_crossover",
+      "enabled": false,
+      "params": {
+        "short_window": 5,
+        "long_window": 20
+      }
+    },
+    {
+      "name": "token_mean_reversion",
+      "enabled": true,
+      "params": {
+        "window": 12
+      }
+    },
+    {
+      "name": "orderbook_imbalance",
+      "enabled": true,
+      "params": {}
+    },
+    {
+      "name": "spread_trend",
+      "enabled": true,
+      "params": {}
+    },
+    {
+      "name": "token_price_divergence",
+      "enabled": true,
+      "params": {}
+    },
+    {
+      "name": "btc_momentum",
+      "enabled": true,
+      "params": {
+        "window": 10
+      }
+    },
+    {
+      "name": "btc_volatility",
+      "enabled": true,
+      "params": {
+        "window": 20
+      }
+    },
+    {
+      "name": "btc_candle_momentum",
+      "enabled": true,
+      "params": {
+        "window": 6
+      }
+    },
+    {
+      "name": "btc_candle_ma_cross",
+      "enabled": false,
+      "params": {}
+    },
+    {
+      "name": "session_streak",
+      "enabled": true,
+      "params": {}
+    },
+    {
+      "name": "confidence_calibration",
+      "enabled": true,
+      "params": {}
+    },
+    {
+      "name": "consecutive_streak",
+      "enabled": true,
+      "params": {}
+    },
+    {
+      "name": "streak_magnitude",
+      "enabled": true,
+      "params": {}
+    },
+    {
+      "name": "btc_vs_candle_open",
+      "enabled": true,
+      "params": {}
+    },
+    {
+      "name": "volatility_30m",
+      "enabled": true,
+      "params": {}
+    },
+    {
+      "name": "volume_trend",
+      "enabled": true,
+      "params": {}
+    },
+    {
+      "name": "flat_market_edge",
+      "enabled": false,
+      "params": {
+        "flat_threshold": 5.0
+      }
+    },
+    {
+      "name": "down_orderbook_imbalance",
+      "enabled": true,
+      "params": {}
+    },
+    {
+      "name": "cross_book_flow",
+      "enabled": true,
+      "params": {}
+    },
+    {
+      "name": "best_entry_analysis",
+      "enabled": true,
+      "params": {}
+    },
+    {
+      "name": "chainlink_divergence",
+      "enabled": true,
+      "params": {}
+    },
+    {
+      "name": "market_trend",
+      "enabled": true,
+      "params": {}
+    }
+  ]
+}

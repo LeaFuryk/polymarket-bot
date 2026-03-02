@@ -1,0 +1,1150 @@
+2026-03-01 22:34:06 | INFO     | polybot.agent | TradingAgent starting — v0.14.4, cash=1000.00
+2026-03-01 22:34:06 | INFO     | polybot.datastore | DataStore opened: logs/polybot.db (WAL mode)
+2026-03-01 22:34:06 | INFO     | polybot.datastore | MarketHistoryStore opened: data/market_history.db (iteration=iter_028)
+2026-03-01 22:34:06 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/balance-allowance/update?asset_type=COLLATERAL&signature_type=2 "HTTP/2 200 OK"
+2026-03-01 22:34:06 | INFO     | polybot.execution.live | Refreshed COLLATERAL allowance on startup
+2026-03-01 22:34:06 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/balance-allowance?asset_type=COLLATERAL&signature_type=2 "HTTP/2 200 OK"
+2026-03-01 22:34:06 | WARNING  | polybot.execution.live | USDC allowance $0.00 < balance $132.05 — orders may be rejected
+2026-03-01 22:34:06 | INFO     | polybot.agent | LIVE MODE: wallet balance $132.05, max_order=$50, kill_switch=-$40, dry_run=False
+2026-03-01 22:34:06 | INFO     | polybot.market_data.chainlink_ws | Chainlink WS: background task started
+2026-03-01 22:34:06 | INFO     | polybot.market_data.chainlink_ws | Chainlink WS: connecting to wss://ws-live-data.polymarket.com
+2026-03-01 22:34:07 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=200 "HTTP/1.1 200 OK"
+2026-03-01 22:34:07 | INFO     | polybot.market_data.btc_price | Loaded 199 5-min BTC candles from Binance
+2026-03-01 22:34:07 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1m&limit=60 "HTTP/1.1 200 OK"
+2026-03-01 22:34:07 | INFO     | polybot.adaptive_entry | Adaptive entry updated: reversal_rate=50% (5/10) → signal=UNCERTAIN, btc_thresh=$81 (cap=$100, fakeout, P50=$81), avg_winner_ask=$0.475 → max_entry=$0.57
+2026-03-01 22:34:07 | INFO     | polybot.adaptive_entry | Bootstrapped 10 candles from Binance 1-min klines → reversal_rate=50%, signal=UNCERTAIN, btc_thresh=$81
+2026-03-01 22:34:07 | INFO     | polybot.tasks.market_monitor | MarketMonitor started (interval=1.0s)
+2026-03-01 22:34:07 | INFO     | polybot.tasks.ai_decision | AIDecision task started
+2026-03-01 22:34:07 | INFO     | polybot.tasks.position_monitor | PositionMonitor started (SL=-60%, TP=+80%, dynamic_sl=True, dynamic_tp=True)
+2026-03-01 22:34:07 | INFO     | polybot.agent | RotationLoop started
+2026-03-01 22:34:07 | INFO     | polybot.agent | DashboardLoop started
+2026-03-01 22:34:07 | INFO     | polybot.agent | BalanceSyncLoop started
+2026-03-01 22:34:07 | INFO     | polybot.datastore | DataStore writer_loop started
+2026-03-01 22:34:07 | INFO     | polybot.datastore | MarketHistoryStore writer_loop started
+2026-03-01 22:34:07 | ERROR    | polybot.market_data.chainlink_ws | Chainlink WS: connection error, reconnecting in 5s
+Traceback (most recent call last):
+  File "/Users/lfuryk/Documents/polymarket-bot/src/polybot/market_data/chainlink_ws.py", line 99, in _run
+    await self._connect_and_listen()
+  File "/Users/lfuryk/Documents/polymarket-bot/src/polybot/market_data/chainlink_ws.py", line 112, in _connect_and_listen
+    async with websockets.connect(self._url, ping_interval=None) as ws:
+               ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/lfuryk/Documents/polymarket-bot/.venv/lib/python3.14/site-packages/websockets/asyncio/client.py", line 590, in __aenter__
+    return await self
+           ^^^^^^^^^^
+  File "/Users/lfuryk/Documents/polymarket-bot/.venv/lib/python3.14/site-packages/websockets/asyncio/client.py", line 546, in __await_impl__
+    await self.connection.handshake(
+    ...<2 lines>...
+    )
+  File "/Users/lfuryk/Documents/polymarket-bot/.venv/lib/python3.14/site-packages/websockets/asyncio/client.py", line 115, in handshake
+    raise self.protocol.handshake_exc
+  File "/Users/lfuryk/Documents/polymarket-bot/.venv/lib/python3.14/site-packages/websockets/client.py", line 327, in parse
+    self.process_response(response)
+    ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^
+  File "/Users/lfuryk/Documents/polymarket-bot/.venv/lib/python3.14/site-packages/websockets/client.py", line 144, in process_response
+    raise InvalidStatus(response)
+websockets.exceptions.InvalidStatus: server rejected WebSocket connection: HTTP 429
+2026-03-01 22:34:07 | INFO     | httpx | HTTP Request: GET https://gamma-api.polymarket.com/events?slug=btc-updown-5m-1772415000 "HTTP/1.1 200 OK"
+2026-03-01 22:34:07 | INFO     | polybot.market_data.provider | Market set: btc-updown-5m-1772415000 (up=57504287, down=11425686)
+2026-03-01 22:34:07 | INFO     | polybot.agent | Active market: Bitcoin Up or Down - March 1, 8:30PM-8:35PM ET (ends in 52s)
+2026-03-01 22:34:07 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/balance-allowance?asset_type=COLLATERAL&signature_type=2 "HTTP/2 200 OK"
+2026-03-01 22:34:07 | WARNING  | polybot.execution.live | USDC allowance $0.00 < balance $132.05 — orders may be rejected
+2026-03-01 22:34:08 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:34:08 | INFO     | httpx | HTTP Request: POST https://ethereum.publicnode.com "HTTP/1.1 200 OK"
+2026-03-01 22:34:08 | INFO     | httpx | HTTP Request: GET https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd&include_24hr_change=true "HTTP/1.1 200 OK"
+2026-03-01 22:34:08 | INFO     | polybot.resolution | Recorded candle open: btc-updown-5m-1772415000 BTC=$66580.00
+2026-03-01 22:34:08 | INFO     | polybot.datastore | DataStore: begin_candle id=1 slug=btc-updown-5m-1772415000
+2026-03-01 22:34:08 | INFO     | polybot.datastore | MarketHistoryStore: begin_candle id=776 slug=btc-updown-5m-1772415000
+2026-03-01 22:34:08 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=57504287525633207613620881262228558337123419119592031101973149213376215861364 "HTTP/2 200 OK"
+2026-03-01 22:34:09 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=114256864174118919034810134153032741378275618536235298177797992089012657586921 "HTTP/2 200 OK"
+2026-03-01 22:34:09 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=57504287525633207613620881262228558337123419119592031101973149213376215861364 "HTTP/2 200 OK"
+2026-03-01 22:34:09 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:34:10 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=57504287525633207613620881262228558337123419119592031101973149213376215861364 "HTTP/2 200 OK"
+2026-03-01 22:34:11 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=114256864174118919034810134153032741378275618536235298177797992089012657586921 "HTTP/2 200 OK"
+2026-03-01 22:34:11 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=57504287525633207613620881262228558337123419119592031101973149213376215861364 "HTTP/2 200 OK"
+2026-03-01 22:34:11 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:34:11 | INFO     | httpx | HTTP Request: POST https://ethereum.publicnode.com "HTTP/1.1 200 OK"
+2026-03-01 22:34:12 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:34:12 | INFO     | polybot.market_data.chainlink_ws | Chainlink WS: connecting to wss://ws-live-data.polymarket.com
+2026-03-01 22:34:13 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=57504287525633207613620881262228558337123419119592031101973149213376215861364 "HTTP/2 200 OK"
+2026-03-01 22:34:13 | INFO     | polybot.market_data.chainlink_ws | Chainlink WS: subscribed to btc/usd
+2026-03-01 22:34:13 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=114256864174118919034810134153032741378275618536235298177797992089012657586921 "HTTP/2 200 OK"
+2026-03-01 22:34:13 | INFO     | polybot.market_data.chainlink_ws | Chainlink WS: sample message #0: {'payload': {'data': [{'timestamp': 1772415194000, 'value': 66617.28127483782}, {'timestamp': 1772415195000, 'value': 66617.61782886829}, {'timestamp': 1772415196000, 'value': 66616.29574186412}, {'timestamp': 1772415197000, 'value': 66614.35658932656}, {'timestamp': 1772415198000, 'value': 66612.82630023503}, {'timestamp': 1772415199000, 'value': 66613.15586412633}, {'timestamp': 1772415200000, 'value': 66616.843072777}, {'timestamp': 1772415201000, 'value': 66617.2645390985}, {'timestamp': 177
+2026-03-01 22:34:13 | INFO     | httpx | HTTP Request: GET https://gamma-api.polymarket.com/events?slug=btc-updown-5m-1772415000 "HTTP/1.1 200 OK"
+2026-03-01 22:34:14 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=57504287525633207613620881262228558337123419119592031101973149213376215861364 "HTTP/2 200 OK"
+2026-03-01 22:34:14 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:34:14 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:34:15 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=57504287525633207613620881262228558337123419119592031101973149213376215861364 "HTTP/2 200 OK"
+2026-03-01 22:34:16 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=114256864174118919034810134153032741378275618536235298177797992089012657586921 "HTTP/2 200 OK"
+2026-03-01 22:34:16 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=57504287525633207613620881262228558337123419119592031101973149213376215861364 "HTTP/2 200 OK"
+2026-03-01 22:34:16 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:34:17 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:34:17 | INFO     | polybot.prefilter | Pre-filter SKIP: Time remaining 44s < 45s minimum
+2026-03-01 22:34:18 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=57504287525633207613620881262228558337123419119592031101973149213376215861364 "HTTP/2 200 OK"
+2026-03-01 22:34:18 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=114256864174118919034810134153032741378275618536235298177797992089012657586921 "HTTP/2 200 OK"
+2026-03-01 22:34:18 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=57504287525633207613620881262228558337123419119592031101973149213376215861364 "HTTP/2 200 OK"
+2026-03-01 22:34:18 | INFO     | httpx | HTTP Request: GET https://gamma-api.polymarket.com/events?slug=btc-updown-5m-1772415000 "HTTP/1.1 200 OK"
+2026-03-01 22:34:19 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:34:19 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:34:19 | INFO     | polybot.prefilter | Pre-filter SKIP: Time remaining 42s < 45s minimum
+2026-03-01 22:34:20 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=57504287525633207613620881262228558337123419119592031101973149213376215861364 "HTTP/2 200 OK"
+2026-03-01 22:34:20 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=114256864174118919034810134153032741378275618536235298177797992089012657586921 "HTTP/2 200 OK"
+2026-03-01 22:34:21 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=57504287525633207613620881262228558337123419119592031101973149213376215861364 "HTTP/2 200 OK"
+2026-03-01 22:34:21 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:34:21 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:34:21 | INFO     | polybot.prefilter | Pre-filter SKIP: Time remaining 40s < 45s minimum
+2026-03-01 22:34:23 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=57504287525633207613620881262228558337123419119592031101973149213376215861364 "HTTP/2 200 OK"
+2026-03-01 22:34:23 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=114256864174118919034810134153032741378275618536235298177797992089012657586921 "HTTP/2 200 OK"
+2026-03-01 22:34:23 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=57504287525633207613620881262228558337123419119592031101973149213376215861364 "HTTP/2 200 OK"
+2026-03-01 22:34:23 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:34:24 | INFO     | httpx | HTTP Request: GET https://gamma-api.polymarket.com/events?slug=btc-updown-5m-1772415000 "HTTP/1.1 200 OK"
+2026-03-01 22:34:24 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:34:24 | INFO     | polybot.prefilter | Pre-filter SKIP: Time remaining 37s < 45s minimum
+2026-03-01 22:34:25 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=57504287525633207613620881262228558337123419119592031101973149213376215861364 "HTTP/2 200 OK"
+2026-03-01 22:34:25 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=114256864174118919034810134153032741378275618536235298177797992089012657586921 "HTTP/2 200 OK"
+2026-03-01 22:34:25 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=57504287525633207613620881262228558337123419119592031101973149213376215861364 "HTTP/2 200 OK"
+2026-03-01 22:34:26 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:34:26 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:34:26 | INFO     | polybot.prefilter | Pre-filter SKIP: Time remaining 35s < 45s minimum
+2026-03-01 22:34:27 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=57504287525633207613620881262228558337123419119592031101973149213376215861364 "HTTP/2 200 OK"
+2026-03-01 22:34:28 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=114256864174118919034810134153032741378275618536235298177797992089012657586921 "HTTP/2 200 OK"
+2026-03-01 22:34:28 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=57504287525633207613620881262228558337123419119592031101973149213376215861364 "HTTP/2 200 OK"
+2026-03-01 22:34:28 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:34:29 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:34:29 | INFO     | polybot.prefilter | Pre-filter SKIP: Time remaining 32s < 45s minimum
+2026-03-01 22:34:29 | INFO     | httpx | HTTP Request: GET https://gamma-api.polymarket.com/events?slug=btc-updown-5m-1772415000 "HTTP/1.1 200 OK"
+2026-03-01 22:34:30 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=57504287525633207613620881262228558337123419119592031101973149213376215861364 "HTTP/2 200 OK"
+2026-03-01 22:34:30 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=114256864174118919034810134153032741378275618536235298177797992089012657586921 "HTTP/2 200 OK"
+2026-03-01 22:34:30 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=57504287525633207613620881262228558337123419119592031101973149213376215861364 "HTTP/2 200 OK"
+2026-03-01 22:34:31 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:34:31 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:34:31 | INFO     | polybot.prefilter | Pre-filter SKIP: Time remaining 30s < 45s minimum
+2026-03-01 22:34:32 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=57504287525633207613620881262228558337123419119592031101973149213376215861364 "HTTP/2 200 OK"
+2026-03-01 22:34:33 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=114256864174118919034810134153032741378275618536235298177797992089012657586921 "HTTP/2 200 OK"
+2026-03-01 22:34:33 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=57504287525633207613620881262228558337123419119592031101973149213376215861364 "HTTP/2 200 OK"
+2026-03-01 22:34:33 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:34:33 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:34:33 | INFO     | polybot.prefilter | Pre-filter SKIP: Time remaining 27s < 45s minimum
+2026-03-01 22:34:34 | INFO     | httpx | HTTP Request: GET https://gamma-api.polymarket.com/events?slug=btc-updown-5m-1772415000 "HTTP/1.1 200 OK"
+2026-03-01 22:34:35 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=57504287525633207613620881262228558337123419119592031101973149213376215861364 "HTTP/2 200 OK"
+2026-03-01 22:34:35 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=114256864174118919034810134153032741378275618536235298177797992089012657586921 "HTTP/2 200 OK"
+2026-03-01 22:34:35 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=57504287525633207613620881262228558337123419119592031101973149213376215861364 "HTTP/2 200 OK"
+2026-03-01 22:34:35 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:34:36 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:34:36 | INFO     | polybot.prefilter | Pre-filter SKIP: Time remaining 25s < 45s minimum
+2026-03-01 22:34:37 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=57504287525633207613620881262228558337123419119592031101973149213376215861364 "HTTP/2 200 OK"
+2026-03-01 22:34:37 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=114256864174118919034810134153032741378275618536235298177797992089012657586921 "HTTP/2 200 OK"
+2026-03-01 22:34:37 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=57504287525633207613620881262228558337123419119592031101973149213376215861364 "HTTP/2 200 OK"
+2026-03-01 22:34:38 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:34:38 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:34:38 | INFO     | polybot.prefilter | Pre-filter SKIP: Time remaining 23s < 45s minimum
+2026-03-01 22:34:39 | INFO     | httpx | HTTP Request: GET https://gamma-api.polymarket.com/events?slug=btc-updown-5m-1772415000 "HTTP/1.1 200 OK"
+2026-03-01 22:34:39 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=57504287525633207613620881262228558337123419119592031101973149213376215861364 "HTTP/2 200 OK"
+2026-03-01 22:34:40 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=114256864174118919034810134153032741378275618536235298177797992089012657586921 "HTTP/2 200 OK"
+2026-03-01 22:34:40 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=57504287525633207613620881262228558337123419119592031101973149213376215861364 "HTTP/2 200 OK"
+2026-03-01 22:34:40 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:34:40 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:34:40 | INFO     | polybot.prefilter | Pre-filter SKIP: Time remaining 20s < 45s minimum
+2026-03-01 22:34:42 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=57504287525633207613620881262228558337123419119592031101973149213376215861364 "HTTP/2 200 OK"
+2026-03-01 22:34:42 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=114256864174118919034810134153032741378275618536235298177797992089012657586921 "HTTP/2 200 OK"
+2026-03-01 22:34:42 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=57504287525633207613620881262228558337123419119592031101973149213376215861364 "HTTP/2 200 OK"
+2026-03-01 22:34:43 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:34:43 | INFO     | httpx | HTTP Request: POST https://ethereum.publicnode.com "HTTP/1.1 200 OK"
+2026-03-01 22:34:43 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:34:43 | INFO     | polybot.prefilter | Pre-filter SKIP: Time remaining 18s < 45s minimum
+2026-03-01 22:34:44 | INFO     | httpx | HTTP Request: GET https://gamma-api.polymarket.com/events?slug=btc-updown-5m-1772415000 "HTTP/1.1 200 OK"
+2026-03-01 22:34:44 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=57504287525633207613620881262228558337123419119592031101973149213376215861364 "HTTP/2 200 OK"
+2026-03-01 22:34:45 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=114256864174118919034810134153032741378275618536235298177797992089012657586921 "HTTP/2 200 OK"
+2026-03-01 22:34:45 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=57504287525633207613620881262228558337123419119592031101973149213376215861364 "HTTP/2 200 OK"
+2026-03-01 22:34:45 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:34:46 | INFO     | httpx | HTTP Request: POST https://ethereum.publicnode.com "HTTP/1.1 200 OK"
+2026-03-01 22:34:46 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:34:46 | INFO     | polybot.prefilter | Pre-filter SKIP: Time remaining 15s < 45s minimum
+2026-03-01 22:34:47 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=57504287525633207613620881262228558337123419119592031101973149213376215861364 "HTTP/2 200 OK"
+2026-03-01 22:34:48 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=114256864174118919034810134153032741378275618536235298177797992089012657586921 "HTTP/2 200 OK"
+2026-03-01 22:34:48 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=57504287525633207613620881262228558337123419119592031101973149213376215861364 "HTTP/2 200 OK"
+2026-03-01 22:34:48 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:34:48 | INFO     | httpx | HTTP Request: POST https://ethereum.publicnode.com "HTTP/1.1 200 OK"
+2026-03-01 22:34:49 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:34:49 | INFO     | polybot.prefilter | Pre-filter SKIP: Time remaining 12s < 45s minimum
+2026-03-01 22:34:49 | INFO     | httpx | HTTP Request: GET https://gamma-api.polymarket.com/events?slug=btc-updown-5m-1772415000 "HTTP/1.1 200 OK"
+2026-03-01 22:34:50 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=57504287525633207613620881262228558337123419119592031101973149213376215861364 "HTTP/2 200 OK"
+2026-03-01 22:34:50 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=114256864174118919034810134153032741378275618536235298177797992089012657586921 "HTTP/2 200 OK"
+2026-03-01 22:34:50 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=57504287525633207613620881262228558337123419119592031101973149213376215861364 "HTTP/2 200 OK"
+2026-03-01 22:34:51 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:34:51 | INFO     | httpx | HTTP Request: POST https://ethereum.publicnode.com "HTTP/1.1 200 OK"
+2026-03-01 22:34:51 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:34:51 | INFO     | polybot.prefilter | Pre-filter SKIP: Time remaining 10s < 45s minimum
+2026-03-01 22:34:53 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=57504287525633207613620881262228558337123419119592031101973149213376215861364 "HTTP/2 200 OK"
+2026-03-01 22:34:53 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=114256864174118919034810134153032741378275618536235298177797992089012657586921 "HTTP/2 200 OK"
+2026-03-01 22:34:53 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=57504287525633207613620881262228558337123419119592031101973149213376215861364 "HTTP/2 200 OK"
+2026-03-01 22:34:53 | WARNING  | polybot.market_data.chainlink_ws | Chainlink WS: no messages for 40s — forcing reconnect
+2026-03-01 22:34:54 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:34:54 | INFO     | httpx | HTTP Request: GET https://gamma-api.polymarket.com/events?slug=btc-updown-5m-1772415000 "HTTP/1.1 200 OK"
+2026-03-01 22:34:54 | INFO     | httpx | HTTP Request: POST https://ethereum.publicnode.com "HTTP/1.1 200 OK"
+2026-03-01 22:34:54 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:34:54 | INFO     | polybot.prefilter | Pre-filter SKIP: Time remaining 7s < 45s minimum
+2026-03-01 22:34:56 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=57504287525633207613620881262228558337123419119592031101973149213376215861364 "HTTP/2 200 OK"
+2026-03-01 22:34:56 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=114256864174118919034810134153032741378275618536235298177797992089012657586921 "HTTP/2 200 OK"
+2026-03-01 22:34:56 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=57504287525633207613620881262228558337123419119592031101973149213376215861364 "HTTP/2 200 OK"
+2026-03-01 22:34:57 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:34:57 | INFO     | httpx | HTTP Request: POST https://ethereum.publicnode.com "HTTP/1.1 200 OK"
+2026-03-01 22:34:58 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:34:58 | INFO     | polybot.prefilter | Pre-filter SKIP: Time remaining 4s < 45s minimum
+2026-03-01 22:34:58 | INFO     | polybot.market_data.chainlink_ws | Chainlink WS: connecting to wss://ws-live-data.polymarket.com
+2026-03-01 22:34:59 | INFO     | httpx | HTTP Request: GET https://gamma-api.polymarket.com/events?slug=btc-updown-5m-1772415000 "HTTP/1.1 200 OK"
+2026-03-01 22:34:59 | INFO     | polybot.market_data.chainlink_ws | Chainlink WS: subscribed to btc/usd
+2026-03-01 22:34:59 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=57504287525633207613620881262228558337123419119592031101973149213376215861364 "HTTP/2 200 OK"
+2026-03-01 22:35:00 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=114256864174118919034810134153032741378275618536235298177797992089012657586921 "HTTP/2 200 OK"
+2026-03-01 22:35:00 | INFO     | polybot.market_data.chainlink_ws | Chainlink WS: sample message #0: {'payload': {'data': [{'timestamp': 1772415241000, 'value': 66606.5559449441}, {'timestamp': 1772415242000, 'value': 66602.60629300617}, {'timestamp': 1772415243000, 'value': 66596.4205995}, {'timestamp': 1772415244000, 'value': 66583.70230589884}, {'timestamp': 1772415245000, 'value': 66585.03021923076}, {'timestamp': 1772415246000, 'value': 66583.93260103345}, {'timestamp': 1772415247000, 'value': 66584.32717661303}, {'timestamp': 1772415248000, 'value': 66584.51425388525}, {'timestamp': 17724
+2026-03-01 22:35:00 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=57504287525633207613620881262228558337123419119592031101973149213376215861364 "HTTP/2 200 OK"
+2026-03-01 22:35:00 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:35:01 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:35:01 | INFO     | polybot.prefilter | Pre-filter SKIP: Time remaining 0s < 45s minimum
+2026-03-01 22:35:04 | INFO     | httpx | HTTP Request: GET https://gamma-api.polymarket.com/events?slug=btc-updown-5m-1772415300 "HTTP/1.1 200 OK"
+2026-03-01 22:35:04 | INFO     | polybot.agent | Market rotation: btc-updown-5m-1772415000 → btc-updown-5m-1772415300
+2026-03-01 22:35:05 | INFO     | httpx | HTTP Request: DELETE https://clob.polymarket.com/cancel-all "HTTP/2 200 OK"
+2026-03-01 22:35:05 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:35:05 | INFO     | polybot.resolution | BTC resolution for btc-updown-5m-1772415000: open=$66580.00 close=$66618.84 → up
+2026-03-01 22:35:08 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/balance-allowance?asset_type=COLLATERAL&signature_type=2 "HTTP/2 200 OK"
+2026-03-01 22:35:08 | WARNING  | polybot.execution.live | USDC allowance $0.00 < balance $132.05 — orders may be rejected
+2026-03-01 22:35:08 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=57504287525633207613620881262228558337123419119592031101973149213376215861364 "HTTP/2 200 OK"
+2026-03-01 22:35:08 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=114256864174118919034810134153032741378275618536235298177797992089012657586921 "HTTP/2 200 OK"
+2026-03-01 22:35:08 | INFO     | polybot.resolution | Polymarket verification for btc-updown-5m-1772415000: UP=0.9900 DOWN=0.0100 (BTC says: up)
+2026-03-01 22:35:08 | INFO     | polybot.resolution | Winner verified for btc-updown-5m-1772415000: up (BTC and Polymarket agree)
+2026-03-01 22:35:08 | INFO     | polybot.simulator.portfolio | Market resolved: winner=up, resolution_pnl=0.0000 (trading=0.0000, settlement=0.0000)
+2026-03-01 22:35:08 | INFO     | polybot.simulator.portfolio | Market resolved: winner=up, resolution_pnl=0.0000 (trading=0.0000, settlement=0.0000)
+2026-03-01 22:35:08 | INFO     | polybot.agent | Shadow paper PnL: $0.0000 | Live PnL: $0.0000 | Diff: $0.0000
+2026-03-01 22:35:08 | INFO     | polybot.logging.trade_log | Resolution logged: btc-updown-5m-1772415000 winner=up pnl=0.0000
+2026-03-01 22:35:08 | INFO     | polybot.adaptive_entry | Adaptive entry updated: reversal_rate=50% (5/10) → signal=UNCERTAIN, btc_thresh=$20 (cap=$97, fakeout, P50=$1), avg_winner_ask=$0.520 → max_entry=$0.62
+2026-03-01 22:35:08 | INFO     | polybot.adaptive_entry | Adaptive entry recorded: btc-updown-5m-1772415000 winner=up, dir@$20=up, reversed=False, winner_ask@$20=$1.000, peak_up=$58, peak_down=$0
+2026-03-01 22:35:08 | INFO     | polybot.datastore | DataStore: resolve_candle id=1 winner=up pnl=0.0000
+2026-03-01 22:35:08 | INFO     | polybot.datastore | MarketHistoryStore: resolve_candle id=776 winner=up
+2026-03-01 22:35:08 | INFO     | polybot.agent | Resolution: btc-updown-5m-1772415000 winner=up pnl=0.0000 | Session: W0/L0 total_pnl=0.0000
+2026-03-01 22:35:08 | INFO     | polybot.market_data.provider | Market set: btc-updown-5m-1772415300 (up=10307420, down=63847191)
+2026-03-01 22:35:08 | INFO     | polybot.agent | Active market: Bitcoin Up or Down - March 1, 8:35PM-8:40PM ET (ends in 291s)
+2026-03-01 22:35:09 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:35:09 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:35:09 | INFO     | polybot.resolution | Recorded candle open: btc-updown-5m-1772415300 BTC=$66633.99
+2026-03-01 22:35:09 | INFO     | polybot.datastore | DataStore: begin_candle id=2 slug=btc-updown-5m-1772415300
+2026-03-01 22:35:09 | INFO     | polybot.datastore | MarketHistoryStore: begin_candle id=777 slug=btc-updown-5m-1772415300
+2026-03-01 22:35:09 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:35:09 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:35:10 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:35:11 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:35:11 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:35:11 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:35:12 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:35:12 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:35:13 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:35:13 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:35:14 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:35:14 | INFO     | httpx | HTTP Request: GET https://gamma-api.polymarket.com/events?slug=btc-updown-5m-1772415300 "HTTP/1.1 200 OK"
+2026-03-01 22:35:14 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:35:14 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:35:16 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:35:16 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:35:16 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:35:16 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:35:17 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:35:18 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:35:18 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:35:18 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:35:19 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:35:19 | INFO     | httpx | HTTP Request: GET https://gamma-api.polymarket.com/events?slug=btc-updown-5m-1772415300 "HTTP/1.1 200 OK"
+2026-03-01 22:35:19 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:35:20 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:35:21 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:35:21 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:35:21 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:35:22 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:35:22 | INFO     | polybot.tasks.market_monitor | AI triggered: adaptive btc_thresh=$20, max_entry=$0.62, min_ask=$0.47 (down), btc_move=$-24 (cooldown=1772415322s elapsed)
+2026-03-01 22:35:22 | INFO     | polybot.tasks.ai_decision | === AI Decision Cycle 1 (trigger: adaptive btc_thresh=$20, max_entry=$0.62, min_ask=$0.47 (down), btc_move=$-24) ===
+2026-03-01 22:35:23 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:35:23 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:35:23 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:35:24 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:35:24 | INFO     | httpx | HTTP Request: GET https://gamma-api.polymarket.com/events?slug=btc-updown-5m-1772415300 "HTTP/1.1 200 OK"
+2026-03-01 22:35:24 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:35:24 | INFO     | httpx | HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-03-01 22:35:24 | INFO     | polybot.decision_engine.engine | Screen: TRADE — BTC move magnitude $24 exceeds $15 threshold and has cleared fakeout noise ($20  (2771ms, cost=$0.0024)
+2026-03-01 22:35:25 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:35:26 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:35:26 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:35:26 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:35:27 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:35:28 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:35:28 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:35:28 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:35:29 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:35:29 | INFO     | httpx | HTTP Request: GET https://gamma-api.polymarket.com/events?slug=btc-updown-5m-1772415300 "HTTP/1.1 200 OK"
+2026-03-01 22:35:29 | INFO     | httpx | HTTP Request: POST https://ethereum.publicnode.com "HTTP/1.1 200 OK"
+2026-03-01 22:35:29 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:35:31 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:35:31 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:35:31 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:35:31 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:35:32 | INFO     | httpx | HTTP Request: POST https://ethereum.publicnode.com "HTTP/1.1 200 OK"
+2026-03-01 22:35:32 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:35:34 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:35:34 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:35:34 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:35:34 | INFO     | httpx | HTTP Request: GET https://gamma-api.polymarket.com/events?slug=btc-updown-5m-1772415300 "HTTP/1.1 200 OK"
+2026-03-01 22:35:34 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:35:35 | INFO     | httpx | HTTP Request: POST https://ethereum.publicnode.com "HTTP/1.1 200 OK"
+2026-03-01 22:35:35 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:35:37 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:35:37 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:35:37 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:35:37 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:35:38 | INFO     | httpx | HTTP Request: POST https://ethereum.publicnode.com "HTTP/1.1 200 OK"
+2026-03-01 22:35:38 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:35:39 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:35:39 | INFO     | httpx | HTTP Request: GET https://gamma-api.polymarket.com/events?slug=btc-updown-5m-1772415300 "HTTP/1.1 200 OK"
+2026-03-01 22:35:39 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:35:39 | WARNING  | polybot.market_data.chainlink_ws | Chainlink WS: no messages for 40s — forcing reconnect
+2026-03-01 22:35:40 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:35:40 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:35:40 | INFO     | httpx | HTTP Request: POST https://ethereum.publicnode.com "HTTP/1.1 200 OK"
+2026-03-01 22:35:40 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:35:42 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:35:42 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:35:42 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:35:42 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:35:43 | INFO     | httpx | HTTP Request: POST https://ethereum.publicnode.com "HTTP/1.1 200 OK"
+2026-03-01 22:35:44 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:35:44 | INFO     | polybot.prefilter | Pre-filter SKIP: No clear setup: streak=1, best entry=0.510 > 0.500
+2026-03-01 22:35:44 | INFO     | httpx | HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-03-01 22:35:44 | INFO     | polybot.decision_engine.engine | AI decision: HOLD MARKET 0.00 @ confidence=0.58 (19233ms, cost=$0.0265)
+2026-03-01 22:35:44 | INFO     | polybot.tasks.ai_decision | API cost: $0.0265 (session total: $0.0289)
+2026-03-01 22:35:44 | INFO     | polybot.logging.trade_log | Logging trades to logs/trades_20260302.jsonl
+2026-03-01 22:35:44 | INFO     | httpx | HTTP Request: GET https://gamma-api.polymarket.com/events?slug=btc-updown-5m-1772415300 "HTTP/1.1 200 OK"
+2026-03-01 22:35:45 | INFO     | polybot.market_data.chainlink_ws | Chainlink WS: connecting to wss://ws-live-data.polymarket.com
+2026-03-01 22:35:45 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:35:45 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:35:45 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:35:46 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:35:46 | INFO     | polybot.market_data.chainlink_ws | Chainlink WS: subscribed to btc/usd
+2026-03-01 22:35:46 | INFO     | httpx | HTTP Request: POST https://ethereum.publicnode.com "HTTP/1.1 200 OK"
+2026-03-01 22:35:46 | INFO     | polybot.market_data.chainlink_ws | Chainlink WS: sample message #0: {'payload': {'data': [{'timestamp': 1772415287000, 'value': 66591.31198588813}, {'timestamp': 1772415288000, 'value': 66590.779309}, {'timestamp': 1772415289000, 'value': 66594.2673027918}, {'timestamp': 1772415290000, 'value': 66594.74678025802}, {'timestamp': 1772415291000, 'value': 66595.26449089052}, {'timestamp': 1772415292000, 'value': 66595.76825237492}, {'timestamp': 1772415293000, 'value': 66593.87682633336}, {'timestamp': 1772415294000, 'value': 66591.81708696584}, {'timestamp': 177241
+2026-03-01 22:35:46 | INFO     | polybot.market_data.chainlink_ws | Chainlink WS: completed candle 1772415000.0 → $66592.31 (ticks=131, dir=down)
+2026-03-01 22:35:46 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:35:47 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:35:48 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:35:48 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:35:49 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:35:49 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:35:49 | INFO     | httpx | HTTP Request: GET https://gamma-api.polymarket.com/events?slug=btc-updown-5m-1772415300 "HTTP/1.1 200 OK"
+2026-03-01 22:35:50 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:35:51 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:35:51 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:35:51 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:35:52 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:35:53 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:35:53 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:35:53 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:35:54 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:35:54 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:35:54 | INFO     | httpx | HTTP Request: GET https://gamma-api.polymarket.com/events?slug=btc-updown-5m-1772415300 "HTTP/1.1 200 OK"
+2026-03-01 22:35:55 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:35:55 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:35:56 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:35:56 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:35:56 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:35:58 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:35:58 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:35:58 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:35:58 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:35:59 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:36:00 | INFO     | httpx | HTTP Request: GET https://gamma-api.polymarket.com/events?slug=btc-updown-5m-1772415300 "HTTP/1.1 200 OK"
+2026-03-01 22:36:00 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:36:00 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:36:00 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:36:01 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:36:01 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:36:02 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:36:03 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:36:03 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:36:03 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:36:04 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:36:05 | INFO     | httpx | HTTP Request: GET https://gamma-api.polymarket.com/events?slug=btc-updown-5m-1772415300 "HTTP/1.1 200 OK"
+2026-03-01 22:36:05 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:36:05 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:36:05 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:36:06 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:36:06 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:36:07 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:36:07 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:36:08 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:36:08 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/balance-allowance?asset_type=COLLATERAL&signature_type=2 "HTTP/2 200 OK"
+2026-03-01 22:36:08 | WARNING  | polybot.execution.live | USDC allowance $0.00 < balance $132.05 — orders may be rejected
+2026-03-01 22:36:08 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:36:08 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:36:10 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:36:10 | INFO     | httpx | HTTP Request: GET https://gamma-api.polymarket.com/events?slug=btc-updown-5m-1772415300 "HTTP/1.1 200 OK"
+2026-03-01 22:36:10 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:36:10 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:36:10 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:36:11 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:36:12 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:36:12 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:36:12 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:36:13 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:36:13 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:36:14 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:36:15 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:36:15 | INFO     | httpx | HTTP Request: GET https://gamma-api.polymarket.com/events?slug=btc-updown-5m-1772415300 "HTTP/1.1 200 OK"
+2026-03-01 22:36:15 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:36:15 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:36:16 | INFO     | httpx | HTTP Request: POST https://ethereum.publicnode.com "HTTP/1.1 200 OK"
+2026-03-01 22:36:16 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:36:17 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:36:17 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:36:18 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:36:18 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:36:18 | INFO     | httpx | HTTP Request: POST https://ethereum.publicnode.com "HTTP/1.1 200 OK"
+2026-03-01 22:36:19 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:36:20 | INFO     | httpx | HTTP Request: GET https://gamma-api.polymarket.com/events?slug=btc-updown-5m-1772415300 "HTTP/1.1 200 OK"
+2026-03-01 22:36:20 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:36:20 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:36:21 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:36:21 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:36:21 | INFO     | httpx | HTTP Request: POST https://ethereum.publicnode.com "HTTP/1.1 200 OK"
+2026-03-01 22:36:21 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:36:23 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:36:23 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:36:23 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:36:24 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:36:24 | INFO     | httpx | HTTP Request: POST https://ethereum.publicnode.com "HTTP/1.1 200 OK"
+2026-03-01 22:36:24 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:36:25 | INFO     | httpx | HTTP Request: GET https://gamma-api.polymarket.com/events?slug=btc-updown-5m-1772415300 "HTTP/1.1 200 OK"
+2026-03-01 22:36:25 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:36:25 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:36:26 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:36:26 | WARNING  | polybot.market_data.chainlink_ws | Chainlink WS: no messages for 40s — forcing reconnect
+2026-03-01 22:36:26 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:36:26 | INFO     | httpx | HTTP Request: POST https://ethereum.publicnode.com "HTTP/1.1 200 OK"
+2026-03-01 22:36:27 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:36:28 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:36:28 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:36:28 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:36:29 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:36:29 | INFO     | httpx | HTTP Request: POST https://ethereum.publicnode.com "HTTP/1.1 200 OK"
+2026-03-01 22:36:29 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:36:30 | INFO     | httpx | HTTP Request: GET https://gamma-api.polymarket.com/events?slug=btc-updown-5m-1772415300 "HTTP/1.1 200 OK"
+2026-03-01 22:36:31 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:36:31 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:36:31 | INFO     | polybot.market_data.chainlink_ws | Chainlink WS: connecting to wss://ws-live-data.polymarket.com
+2026-03-01 22:36:31 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:36:32 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:36:32 | INFO     | httpx | HTTP Request: POST https://ethereum.publicnode.com "HTTP/1.1 200 OK"
+2026-03-01 22:36:32 | INFO     | polybot.market_data.chainlink_ws | Chainlink WS: subscribed to btc/usd
+2026-03-01 22:36:32 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:36:32 | INFO     | polybot.market_data.chainlink_ws | Chainlink WS: sample message #0: {'payload': {'data': [{'timestamp': 1772415333000, 'value': 66626.20000533453}, {'timestamp': 1772415334000, 'value': 66626.35874513457}, {'timestamp': 1772415335000, 'value': 66626.2235133607}, {'timestamp': 1772415336000, 'value': 66627.2969772606}, {'timestamp': 1772415337000, 'value': 66627.24892722353}, {'timestamp': 1772415338000, 'value': 66621.58330559306}, {'timestamp': 1772415339000, 'value': 66621.48848838704}, {'timestamp': 1772415340000, 'value': 66621.20909823343}, {'timestamp': 17
+2026-03-01 22:36:33 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:36:33 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:36:34 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:36:34 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:36:35 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:36:35 | INFO     | httpx | HTTP Request: GET https://gamma-api.polymarket.com/events?slug=btc-updown-5m-1772415300 "HTTP/1.1 200 OK"
+2026-03-01 22:36:36 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:36:36 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:36:36 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:36:37 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:36:37 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:36:38 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:36:38 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:36:39 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:36:39 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:36:39 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:36:40 | INFO     | httpx | HTTP Request: GET https://gamma-api.polymarket.com/events?slug=btc-updown-5m-1772415300 "HTTP/1.1 200 OK"
+2026-03-01 22:36:41 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:36:41 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:36:41 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:36:42 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:36:43 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:36:44 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:36:44 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:36:45 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:36:45 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:36:45 | INFO     | httpx | HTTP Request: GET https://gamma-api.polymarket.com/events?slug=btc-updown-5m-1772415300 "HTTP/1.1 200 OK"
+2026-03-01 22:36:46 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:36:46 | INFO     | polybot.tasks.market_monitor | AI triggered: adaptive btc_thresh=$20, max_entry=$0.62, min_ask=$0.44 (down), btc_move=$-21 (cooldown=62s elapsed)
+2026-03-01 22:36:46 | INFO     | polybot.tasks.ai_decision | === AI Decision Cycle 2 (trigger: adaptive btc_thresh=$20, max_entry=$0.62, min_ask=$0.44 (down), btc_move=$-21) ===
+2026-03-01 22:36:47 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:36:47 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:36:48 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:36:48 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:36:48 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:36:48 | INFO     | httpx | HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-03-01 22:36:48 | INFO     | polybot.decision_engine.engine | Screen: TRADE — BTC move magnitude $20.68 exceeds $15 threshold with momentum signal (velocity a (2414ms, cost=$0.0024)
+2026-03-01 22:36:49 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:36:50 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:36:50 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:36:50 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:36:50 | INFO     | httpx | HTTP Request: GET https://gamma-api.polymarket.com/events?slug=btc-updown-5m-1772415300 "HTTP/1.1 200 OK"
+2026-03-01 22:36:51 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:36:52 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:36:52 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:36:52 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:36:53 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:36:53 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:36:54 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:36:54 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:36:55 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:36:55 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:36:55 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:36:55 | INFO     | httpx | HTTP Request: GET https://gamma-api.polymarket.com/events?slug=btc-updown-5m-1772415300 "HTTP/1.1 200 OK"
+2026-03-01 22:36:56 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:36:57 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:36:57 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:36:57 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:36:58 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:36:59 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:36:59 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:36:59 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:37:00 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:37:00 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:37:00 | INFO     | httpx | HTTP Request: GET https://gamma-api.polymarket.com/events?slug=btc-updown-5m-1772415300 "HTTP/1.1 200 OK"
+2026-03-01 22:37:01 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:37:02 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:37:02 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:37:02 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:37:03 | INFO     | httpx | HTTP Request: POST https://ethereum.publicnode.com "HTTP/1.1 200 OK"
+2026-03-01 22:37:03 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:37:04 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:37:04 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:37:05 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:37:05 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:37:05 | INFO     | httpx | HTTP Request: POST https://ethereum.publicnode.com "HTTP/1.1 200 OK"
+2026-03-01 22:37:05 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:37:06 | INFO     | httpx | HTTP Request: GET https://gamma-api.polymarket.com/events?slug=btc-updown-5m-1772415300 "HTTP/1.1 200 OK"
+2026-03-01 22:37:07 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:37:07 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:37:07 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:37:07 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:37:08 | INFO     | httpx | HTTP Request: POST https://ethereum.publicnode.com "HTTP/1.1 200 OK"
+2026-03-01 22:37:08 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/balance-allowance?asset_type=COLLATERAL&signature_type=2 "HTTP/2 200 OK"
+2026-03-01 22:37:08 | WARNING  | polybot.execution.live | USDC allowance $0.00 < balance $132.05 — orders may be rejected
+2026-03-01 22:37:08 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:37:08 | INFO     | httpx | HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-03-01 22:37:08 | INFO     | polybot.decision_engine.engine | AI decision: BUY MARKET 35.00 @ confidence=0.62 (20144ms, cost=$0.0271)
+2026-03-01 22:37:08 | INFO     | polybot.tasks.ai_decision | API cost: $0.0271 (session total: $0.0584)
+2026-03-01 22:37:08 | INFO     | polybot.tasks.ai_decision | Position sizing: 35.0 → 28.4 (R/R=0.72×90%, move=$21×90%)
+2026-03-01 22:37:08 | INFO     | polybot.tasks.ai_decision | Min size floor: 28.4 → 40 shares
+2026-03-01 22:37:09 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/tick-size?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:37:09 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/neg-risk?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:37:09 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/fee-rate?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:37:09 | INFO     | httpx | HTTP Request: POST https://clob.polymarket.com/order "HTTP/2 200 OK"
+2026-03-01 22:37:09 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:37:09 | INFO     | polybot.execution.live | GTC limit order posted: BUY 10307420 40.0 @ 0.5800 (order_id=0x7430ac184f445d8d792f40add84a37a285121a975f948ff43c63fa8ae16f5a95, ttl=3s)
+2026-03-01 22:37:10 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:37:10 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:37:11 | INFO     | httpx | HTTP Request: GET https://gamma-api.polymarket.com/events?slug=btc-updown-5m-1772415300 "HTTP/1.1 200 OK"
+2026-03-01 22:37:11 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/data/order/0x7430ac184f445d8d792f40add84a37a285121a975f948ff43c63fa8ae16f5a95 "HTTP/2 200 OK"
+2026-03-01 22:37:11 | INFO     | polybot.execution.live | GTC order filled after 1s (order_id=0x7430ac184f445d8d792f40add84a37a285121a975f948ff43c63fa8ae16f5a95)
+2026-03-01 22:37:11 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:37:11 | INFO     | httpx | HTTP Request: POST https://ethereum.publicnode.com "HTTP/1.1 200 OK"
+2026-03-01 22:37:11 | INFO     | httpx | HTTP Request: DELETE https://clob.polymarket.com/order "HTTP/2 200 OK"
+2026-03-01 22:37:11 | INFO     | polybot.execution.live | LIVE BUY up 40.0 @ 0.5800 (cost=$23.25, fee=$0.0464)
+2026-03-01 22:37:11 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/balance-allowance/update?asset_type=CONDITIONAL&token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930&signature_type=2 "HTTP/2 200 OK"
+2026-03-01 22:37:11 | INFO     | polybot.execution.live | Refreshed conditional allowance after BUY fill
+2026-03-01 22:37:11 | INFO     | polybot.simulator.portfolio | BUY up 40.00 shares @ 0.5810 | cash=976.72 | shares=40.00
+2026-03-01 22:37:11 | INFO     | polybot.tasks.ai_decision | Live fill $0.5800 vs Paper fill $0.5810 (drift -0.2%)
+2026-03-01 22:37:11 | INFO     | polybot.simulator.portfolio | BUY up 40.00 shares @ 0.5800 | cash=976.70 | shares=40.00
+2026-03-01 22:37:11 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:37:12 | WARNING  | polybot.market_data.chainlink_ws | Chainlink WS: no messages for 40s — forcing reconnect
+2026-03-01 22:37:13 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:37:13 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:37:13 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:37:13 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:37:14 | INFO     | httpx | HTTP Request: POST https://ethereum.publicnode.com "HTTP/1.1 200 OK"
+2026-03-01 22:37:14 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:37:15 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:37:15 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:37:16 | INFO     | httpx | HTTP Request: GET https://gamma-api.polymarket.com/events?slug=btc-updown-5m-1772415300 "HTTP/1.1 200 OK"
+2026-03-01 22:37:16 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:37:16 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:37:16 | INFO     | httpx | HTTP Request: POST https://ethereum.publicnode.com "HTTP/1.1 200 OK"
+2026-03-01 22:37:17 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:37:17 | INFO     | polybot.market_data.chainlink_ws | Chainlink WS: connecting to wss://ws-live-data.polymarket.com
+2026-03-01 22:37:18 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:37:18 | INFO     | polybot.market_data.chainlink_ws | Chainlink WS: subscribed to btc/usd
+2026-03-01 22:37:18 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:37:18 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:37:18 | INFO     | polybot.market_data.chainlink_ws | Chainlink WS: sample message #0: {'payload': {'data': [{'timestamp': 1772415379000, 'value': 66589.42461658952}, {'timestamp': 1772415380000, 'value': 66588.84293881906}, {'timestamp': 1772415381000, 'value': 66588.8509946107}, {'timestamp': 1772415382000, 'value': 66587.34879931284}, {'timestamp': 1772415383000, 'value': 66583.6999624163}, {'timestamp': 1772415384000, 'value': 66583.39991180213}, {'timestamp': 1772415385000, 'value': 66582.948697}, {'timestamp': 1772415387000, 'value': 66582.29342094337}, {'timestamp': 1772415
+2026-03-01 22:37:19 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:37:19 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:37:20 | WARNING  | polybot.tasks.position_monitor | STOP-LOSS triggered: UP P&L=-40.5% <= -38.6% [time=159s, rr=0.50, regime=CHOPPY, vel=agn 5.0, entry=$0.58, ml=neutral]
+2026-03-01 22:37:20 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:37:21 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:37:21 | INFO     | httpx | HTTP Request: GET https://gamma-api.polymarket.com/events?slug=btc-updown-5m-1772415300 "HTTP/1.1 200 OK"
+2026-03-01 22:37:21 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:37:21 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:37:21 | INFO     | polybot.tasks.ai_decision | === AI Exit Decision Cycle 3 (SL/TP: up stop_loss (-40.5%, dynamic SL=-39%), P&L=-40.5%) ===
+2026-03-01 22:37:22 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:37:23 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:37:23 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:37:23 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:37:24 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:37:24 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:37:25 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:37:25 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:37:26 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:37:26 | INFO     | httpx | HTTP Request: GET https://gamma-api.polymarket.com/events?slug=btc-updown-5m-1772415300 "HTTP/1.1 200 OK"
+2026-03-01 22:37:26 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:37:26 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:37:28 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:37:28 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:37:28 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:37:28 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:37:29 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:37:30 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:37:30 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:37:31 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:37:31 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:37:31 | INFO     | httpx | HTTP Request: GET https://gamma-api.polymarket.com/events?slug=btc-updown-5m-1772415300 "HTTP/1.1 200 OK"
+2026-03-01 22:37:31 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:37:32 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:37:33 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:37:33 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:37:33 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:37:34 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:37:35 | INFO     | httpx | HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-03-01 22:37:35 | INFO     | polybot.decision_engine.engine | AI decision: SELL MARKET 40.00 @ confidence=0.72 (13531ms, cost=$0.0257)
+2026-03-01 22:37:35 | INFO     | polybot.tasks.ai_decision | API cost: $0.0257 (session total: $0.0841)
+2026-03-01 22:37:35 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:37:35 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:37:35 | INFO     | httpx | HTTP Request: POST https://clob.polymarket.com/order "HTTP/2 400 Bad Request"
+2026-03-01 22:37:35 | ERROR    | polybot.execution.live | Live execution failed
+Traceback (most recent call last):
+  File "/Users/lfuryk/Documents/polymarket-bot/src/polybot/execution/live.py", line 257, in execute
+    fill = await self._submit_limit_order(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<5 lines>...
+    )
+    ^
+  File "/Users/lfuryk/Documents/polymarket-bot/src/polybot/execution/live.py", line 316, in _submit_limit_order
+    response = await loop.run_in_executor(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<5 lines>...
+    )
+    ^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.3_1/Frameworks/Python.framework/Versions/3.14/lib/python3.14/concurrent/futures/thread.py", line 86, in run
+    result = ctx.run(self.task)
+  File "/opt/homebrew/Cellar/python@3.14/3.14.3_1/Frameworks/Python.framework/Versions/3.14/lib/python3.14/concurrent/futures/thread.py", line 73, in run
+    return fn(*args, **kwargs)
+  File "/Users/lfuryk/Documents/polymarket-bot/.venv/lib/python3.14/site-packages/py_clob_client/client.py", line 648, in post_order
+    return post(
+        "{}{}".format(self.host, POST_ORDER),
+        headers=headers,
+        data=request_args.serialized_body,
+    )
+  File "/Users/lfuryk/Documents/polymarket-bot/.venv/lib/python3.14/site-packages/py_clob_client/http_helpers/helpers.py", line 69, in post
+    return request(endpoint, POST, headers, data)
+  File "/Users/lfuryk/Documents/polymarket-bot/.venv/lib/python3.14/site-packages/py_clob_client/http_helpers/helpers.py", line 57, in request
+    raise PolyApiException(resp)
+py_clob_client.exceptions.PolyApiException: PolyApiException[status_code=400, error_message={'error': 'not enough balance / allowance'}]
+2026-03-01 22:37:35 | INFO     | polybot.simulator.portfolio | SELL up 40.00 shares @ 0.3393 | pnl=-9.6654 | cash=990.26 | shares=0.00
+2026-03-01 22:37:35 | INFO     | polybot.tasks.ai_decision | Live SKIPPED but Paper would have filled at $0.3393
+2026-03-01 22:37:35 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:37:36 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:37:36 | INFO     | httpx | HTTP Request: GET https://gamma-api.polymarket.com/events?slug=btc-updown-5m-1772415300 "HTTP/1.1 200 OK"
+2026-03-01 22:37:37 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:37:38 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:37:38 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:37:39 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:37:39 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:37:39 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:37:40 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:37:41 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:37:41 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:37:41 | INFO     | httpx | HTTP Request: GET https://gamma-api.polymarket.com/events?slug=btc-updown-5m-1772415300 "HTTP/1.1 200 OK"
+2026-03-01 22:37:41 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:37:42 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:37:43 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:37:43 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:37:43 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:37:44 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:37:44 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:37:45 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:37:45 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:37:46 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:37:46 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:37:46 | INFO     | httpx | HTTP Request: GET https://gamma-api.polymarket.com/events?slug=btc-updown-5m-1772415300 "HTTP/1.1 200 OK"
+2026-03-01 22:37:46 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:37:48 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:37:48 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:37:48 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:37:48 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:37:49 | INFO     | httpx | HTTP Request: POST https://ethereum.publicnode.com "HTTP/1.1 200 OK"
+2026-03-01 22:37:49 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:37:50 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:37:50 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:37:51 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:37:51 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:37:51 | INFO     | httpx | HTTP Request: GET https://gamma-api.polymarket.com/events?slug=btc-updown-5m-1772415300 "HTTP/1.1 200 OK"
+2026-03-01 22:37:51 | INFO     | httpx | HTTP Request: POST https://ethereum.publicnode.com "HTTP/1.1 200 OK"
+2026-03-01 22:37:52 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:37:53 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:37:53 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:37:53 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:37:54 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:37:54 | INFO     | httpx | HTTP Request: POST https://ethereum.publicnode.com "HTTP/1.1 200 OK"
+2026-03-01 22:37:54 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:37:56 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:37:56 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:37:56 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:37:56 | INFO     | httpx | HTTP Request: GET https://gamma-api.polymarket.com/events?slug=btc-updown-5m-1772415300 "HTTP/1.1 200 OK"
+2026-03-01 22:37:56 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:37:57 | INFO     | httpx | HTTP Request: POST https://ethereum.publicnode.com "HTTP/1.1 200 OK"
+2026-03-01 22:37:57 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:37:58 | WARNING  | polybot.market_data.chainlink_ws | Chainlink WS: no messages for 40s — forcing reconnect
+2026-03-01 22:37:58 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:37:58 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:37:59 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:38:00 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:38:00 | INFO     | httpx | HTTP Request: POST https://ethereum.publicnode.com "HTTP/1.1 200 OK"
+2026-03-01 22:38:00 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:38:01 | INFO     | httpx | HTTP Request: GET https://gamma-api.polymarket.com/events?slug=btc-updown-5m-1772415300 "HTTP/1.1 200 OK"
+2026-03-01 22:38:01 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:38:02 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:38:02 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:38:02 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:38:03 | INFO     | httpx | HTTP Request: POST https://ethereum.publicnode.com "HTTP/1.1 200 OK"
+2026-03-01 22:38:03 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:38:03 | INFO     | polybot.market_data.chainlink_ws | Chainlink WS: connecting to wss://ws-live-data.polymarket.com
+2026-03-01 22:38:04 | INFO     | polybot.market_data.chainlink_ws | Chainlink WS: subscribed to btc/usd
+2026-03-01 22:38:04 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:38:04 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:38:04 | INFO     | polybot.market_data.chainlink_ws | Chainlink WS: sample message #0: {'message': 'Too Many Requests', 'connectionId': 'Zkl_gevHrPECFTA=', 'requestId': 'Zkl_jE1CLPEEf8Q='}
+2026-03-01 22:38:05 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:38:05 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:38:05 | INFO     | httpx | HTTP Request: POST https://ethereum.publicnode.com "HTTP/1.1 200 OK"
+2026-03-01 22:38:05 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:38:06 | INFO     | httpx | HTTP Request: GET https://gamma-api.polymarket.com/events?slug=btc-updown-5m-1772415300 "HTTP/1.1 200 OK"
+2026-03-01 22:38:07 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:38:07 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:38:07 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:38:07 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:38:08 | INFO     | httpx | HTTP Request: POST https://ethereum.publicnode.com "HTTP/1.1 200 OK"
+2026-03-01 22:38:08 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/balance-allowance?asset_type=COLLATERAL&signature_type=2 "HTTP/2 200 OK"
+2026-03-01 22:38:08 | WARNING  | polybot.execution.live | USDC allowance $0.00 < balance $110.45 — orders may be rejected
+2026-03-01 22:38:09 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:38:10 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:38:10 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:38:10 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:38:11 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:38:11 | INFO     | httpx | HTTP Request: POST https://ethereum.publicnode.com "HTTP/1.1 200 OK"
+2026-03-01 22:38:11 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:38:11 | INFO     | httpx | HTTP Request: GET https://gamma-api.polymarket.com/events?slug=btc-updown-5m-1772415300 "HTTP/1.1 200 OK"
+2026-03-01 22:38:13 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:38:13 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:38:13 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:38:13 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:38:14 | INFO     | httpx | HTTP Request: POST https://ethereum.publicnode.com "HTTP/1.1 200 OK"
+2026-03-01 22:38:15 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:38:16 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:38:16 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:38:16 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:38:17 | INFO     | httpx | HTTP Request: GET https://gamma-api.polymarket.com/events?slug=btc-updown-5m-1772415300 "HTTP/1.1 200 OK"
+2026-03-01 22:38:17 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:38:17 | INFO     | httpx | HTTP Request: POST https://ethereum.publicnode.com "HTTP/1.1 200 OK"
+2026-03-01 22:38:17 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:38:18 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:38:19 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:38:19 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:38:19 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:38:19 | INFO     | httpx | HTTP Request: POST https://ethereum.publicnode.com "HTTP/1.1 200 OK"
+2026-03-01 22:38:20 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:38:21 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:38:21 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:38:21 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:38:22 | INFO     | httpx | HTTP Request: GET https://gamma-api.polymarket.com/events?slug=btc-updown-5m-1772415300 "HTTP/1.1 200 OK"
+2026-03-01 22:38:22 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:38:22 | INFO     | httpx | HTTP Request: POST https://ethereum.publicnode.com "HTTP/1.1 200 OK"
+2026-03-01 22:38:22 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:38:24 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:38:24 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:38:24 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:38:24 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:38:25 | INFO     | httpx | HTTP Request: POST https://ethereum.publicnode.com "HTTP/1.1 200 OK"
+2026-03-01 22:38:25 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:38:26 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:38:26 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:38:27 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:38:27 | INFO     | httpx | HTTP Request: GET https://gamma-api.polymarket.com/events?slug=btc-updown-5m-1772415300 "HTTP/1.1 200 OK"
+2026-03-01 22:38:27 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:38:27 | INFO     | httpx | HTTP Request: POST https://ethereum.publicnode.com "HTTP/1.1 200 OK"
+2026-03-01 22:38:28 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:38:29 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:38:29 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:38:29 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:38:30 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:38:30 | INFO     | httpx | HTTP Request: POST https://ethereum.publicnode.com "HTTP/1.1 200 OK"
+2026-03-01 22:38:31 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:38:32 | INFO     | httpx | HTTP Request: GET https://gamma-api.polymarket.com/events?slug=btc-updown-5m-1772415300 "HTTP/1.1 200 OK"
+2026-03-01 22:38:33 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:38:33 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:38:33 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:38:33 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:38:34 | INFO     | httpx | HTTP Request: POST https://ethereum.publicnode.com "HTTP/1.1 200 OK"
+2026-03-01 22:38:34 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:38:35 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:38:35 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:38:36 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:38:37 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:38:37 | INFO     | httpx | HTTP Request: POST https://ethereum.publicnode.com "HTTP/1.1 200 OK"
+2026-03-01 22:38:37 | INFO     | httpx | HTTP Request: GET https://gamma-api.polymarket.com/events?slug=btc-updown-5m-1772415300 "HTTP/1.1 200 OK"
+2026-03-01 22:38:37 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:38:38 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:38:39 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:38:39 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:38:39 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:38:40 | INFO     | httpx | HTTP Request: POST https://ethereum.publicnode.com "HTTP/1.1 200 OK"
+2026-03-01 22:38:40 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:38:41 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:38:41 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:38:42 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:38:42 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:38:42 | INFO     | httpx | HTTP Request: GET https://gamma-api.polymarket.com/events?slug=btc-updown-5m-1772415300 "HTTP/1.1 200 OK"
+2026-03-01 22:38:42 | INFO     | httpx | HTTP Request: POST https://ethereum.publicnode.com "HTTP/1.1 200 OK"
+2026-03-01 22:38:43 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:38:44 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:38:44 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:38:44 | WARNING  | polybot.market_data.chainlink_ws | Chainlink WS: no messages for 40s — forcing reconnect
+2026-03-01 22:38:44 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:38:45 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:38:45 | INFO     | httpx | HTTP Request: POST https://ethereum.publicnode.com "HTTP/1.1 200 OK"
+2026-03-01 22:38:45 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:38:46 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:38:47 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:38:47 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:38:47 | INFO     | httpx | HTTP Request: GET https://gamma-api.polymarket.com/events?slug=btc-updown-5m-1772415300 "HTTP/1.1 200 OK"
+2026-03-01 22:38:47 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:38:47 | INFO     | httpx | HTTP Request: POST https://ethereum.publicnode.com "HTTP/1.1 200 OK"
+2026-03-01 22:38:48 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:38:49 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:38:49 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:38:49 | INFO     | polybot.market_data.chainlink_ws | Chainlink WS: connecting to wss://ws-live-data.polymarket.com
+2026-03-01 22:38:49 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:38:50 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:38:50 | INFO     | httpx | HTTP Request: POST https://ethereum.publicnode.com "HTTP/1.1 200 OK"
+2026-03-01 22:38:50 | INFO     | polybot.market_data.chainlink_ws | Chainlink WS: subscribed to btc/usd
+2026-03-01 22:38:50 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:38:51 | INFO     | polybot.market_data.chainlink_ws | Chainlink WS: sample message #0: {'payload': {'data': [{'timestamp': 1772415471000, 'value': 66565.60244380817}, {'timestamp': 1772415472000, 'value': 66565.15667313231}, {'timestamp': 1772415473000, 'value': 66567.21150994273}, {'timestamp': 1772415474000, 'value': 66564.34840605166}, {'timestamp': 1772415475000, 'value': 66560.34495474354}, {'timestamp': 1772415476000, 'value': 66559.68438573222}, {'timestamp': 1772415477000, 'value': 66552.20871560047}, {'timestamp': 1772415478000, 'value': 66548.93298081134}, {'timestamp': 
+2026-03-01 22:38:52 | INFO     | httpx | HTTP Request: GET https://gamma-api.polymarket.com/events?slug=btc-updown-5m-1772415300 "HTTP/1.1 200 OK"
+2026-03-01 22:38:52 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:38:53 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:38:53 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:38:53 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:38:54 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:38:55 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:38:55 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:38:55 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:38:56 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:38:56 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:38:57 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:38:57 | INFO     | httpx | HTTP Request: GET https://gamma-api.polymarket.com/events?slug=btc-updown-5m-1772415300 "HTTP/1.1 200 OK"
+2026-03-01 22:38:57 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:38:58 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:38:58 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:38:58 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:39:00 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:39:00 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:39:00 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:39:00 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:39:01 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:39:02 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:39:02 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:39:02 | INFO     | httpx | HTTP Request: GET https://gamma-api.polymarket.com/events?slug=btc-updown-5m-1772415300 "HTTP/1.1 200 OK"
+2026-03-01 22:39:02 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:39:03 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:39:03 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:39:04 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:39:05 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:39:05 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:39:05 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:39:05 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:39:07 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:39:07 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:39:07 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:39:07 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:39:07 | INFO     | httpx | HTTP Request: GET https://gamma-api.polymarket.com/events?slug=btc-updown-5m-1772415300 "HTTP/1.1 200 OK"
+2026-03-01 22:39:08 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:39:08 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/balance-allowance?asset_type=COLLATERAL&signature_type=2 "HTTP/2 200 OK"
+2026-03-01 22:39:08 | WARNING  | polybot.execution.live | USDC allowance $0.00 < balance $110.45 — orders may be rejected
+2026-03-01 22:39:09 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:39:09 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:39:10 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:39:10 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:39:10 | INFO     | httpx | HTTP Request: GET https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd&include_24hr_change=true "HTTP/1.1 200 OK"
+2026-03-01 22:39:11 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:39:12 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:39:12 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:39:12 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:39:13 | INFO     | httpx | HTTP Request: GET https://gamma-api.polymarket.com/events?slug=btc-updown-5m-1772415300 "HTTP/1.1 200 OK"
+2026-03-01 22:39:13 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:39:13 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:39:14 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:39:15 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:39:15 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:39:15 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:39:15 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:39:17 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:39:17 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:39:17 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:39:17 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:39:18 | INFO     | httpx | HTTP Request: GET https://gamma-api.polymarket.com/events?slug=btc-updown-5m-1772415300 "HTTP/1.1 200 OK"
+2026-03-01 22:39:18 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:39:19 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:39:19 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:39:20 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:39:20 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:39:20 | INFO     | httpx | HTTP Request: POST https://ethereum.publicnode.com "HTTP/1.1 200 OK"
+2026-03-01 22:39:20 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:39:22 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:39:22 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:39:22 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:39:22 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:39:23 | INFO     | httpx | HTTP Request: POST https://ethereum.publicnode.com "HTTP/1.1 200 OK"
+2026-03-01 22:39:23 | INFO     | httpx | HTTP Request: GET https://gamma-api.polymarket.com/events?slug=btc-updown-5m-1772415300 "HTTP/1.1 200 OK"
+2026-03-01 22:39:23 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:39:24 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:39:24 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:39:25 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:39:25 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:39:25 | INFO     | httpx | HTTP Request: POST https://ethereum.publicnode.com "HTTP/1.1 200 OK"
+2026-03-01 22:39:26 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:39:27 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:39:28 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:39:28 | INFO     | httpx | HTTP Request: GET https://gamma-api.polymarket.com/events?slug=btc-updown-5m-1772415300 "HTTP/1.1 200 OK"
+2026-03-01 22:39:28 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:39:28 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:39:28 | INFO     | httpx | HTTP Request: POST https://ethereum.publicnode.com "HTTP/1.1 200 OK"
+2026-03-01 22:39:29 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:39:30 | WARNING  | polybot.market_data.chainlink_ws | Chainlink WS: no messages for 40s — forcing reconnect
+2026-03-01 22:39:31 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:39:31 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:39:31 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:39:31 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:39:32 | INFO     | httpx | HTTP Request: POST https://ethereum.publicnode.com "HTTP/1.1 200 OK"
+2026-03-01 22:39:32 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:39:33 | INFO     | httpx | HTTP Request: GET https://gamma-api.polymarket.com/events?slug=btc-updown-5m-1772415300 "HTTP/1.1 200 OK"
+2026-03-01 22:39:33 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:39:34 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:39:34 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:39:34 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:39:34 | INFO     | httpx | HTTP Request: POST https://ethereum.publicnode.com "HTTP/1.1 200 OK"
+2026-03-01 22:39:35 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:39:36 | INFO     | polybot.market_data.chainlink_ws | Chainlink WS: connecting to wss://ws-live-data.polymarket.com
+2026-03-01 22:39:36 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:39:36 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:39:36 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:39:37 | ERROR    | polybot.market_data.chainlink_ws | Chainlink WS: connection error, reconnecting in 5s
+Traceback (most recent call last):
+  File "/Users/lfuryk/Documents/polymarket-bot/src/polybot/market_data/chainlink_ws.py", line 99, in _run
+    await self._connect_and_listen()
+  File "/Users/lfuryk/Documents/polymarket-bot/src/polybot/market_data/chainlink_ws.py", line 112, in _connect_and_listen
+    async with websockets.connect(self._url, ping_interval=None) as ws:
+               ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/lfuryk/Documents/polymarket-bot/.venv/lib/python3.14/site-packages/websockets/asyncio/client.py", line 590, in __aenter__
+    return await self
+           ^^^^^^^^^^
+  File "/Users/lfuryk/Documents/polymarket-bot/.venv/lib/python3.14/site-packages/websockets/asyncio/client.py", line 546, in __await_impl__
+    await self.connection.handshake(
+    ...<2 lines>...
+    )
+  File "/Users/lfuryk/Documents/polymarket-bot/.venv/lib/python3.14/site-packages/websockets/asyncio/client.py", line 115, in handshake
+    raise self.protocol.handshake_exc
+  File "/Users/lfuryk/Documents/polymarket-bot/.venv/lib/python3.14/site-packages/websockets/client.py", line 327, in parse
+    self.process_response(response)
+    ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^
+  File "/Users/lfuryk/Documents/polymarket-bot/.venv/lib/python3.14/site-packages/websockets/client.py", line 144, in process_response
+    raise InvalidStatus(response)
+websockets.exceptions.InvalidStatus: server rejected WebSocket connection: HTTP 429
+2026-03-01 22:39:37 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:39:37 | INFO     | httpx | HTTP Request: POST https://ethereum.publicnode.com "HTTP/1.1 200 OK"
+2026-03-01 22:39:37 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:39:38 | INFO     | httpx | HTTP Request: GET https://gamma-api.polymarket.com/events?slug=btc-updown-5m-1772415300 "HTTP/1.1 200 OK"
+2026-03-01 22:39:39 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:39:39 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:39:39 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:39:39 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:39:40 | INFO     | httpx | HTTP Request: POST https://ethereum.publicnode.com "HTTP/1.1 200 OK"
+2026-03-01 22:39:40 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:39:41 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:39:41 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:39:42 | INFO     | polybot.market_data.chainlink_ws | Chainlink WS: connecting to wss://ws-live-data.polymarket.com
+2026-03-01 22:39:42 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:39:42 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:39:42 | INFO     | httpx | HTTP Request: POST https://ethereum.publicnode.com "HTTP/1.1 200 OK"
+2026-03-01 22:39:42 | INFO     | polybot.market_data.chainlink_ws | Chainlink WS: subscribed to btc/usd
+2026-03-01 22:39:42 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:39:43 | INFO     | polybot.market_data.chainlink_ws | Chainlink WS: sample message #0: {'payload': {'data': [{'timestamp': 1772415524000, 'value': 66599.80798038589}, {'timestamp': 1772415525000, 'value': 66599.6813415974}, {'timestamp': 1772415526000, 'value': 66599.436219974}, {'timestamp': 1772415527000, 'value': 66599.47978153528}, {'timestamp': 1772415528000, 'value': 66593.73815784777}, {'timestamp': 1772415529000, 'value': 66592.76214327409}, {'timestamp': 1772415530000, 'value': 66592.11175413881}, {'timestamp': 1772415531000, 'value': 66590.58324674705}, {'timestamp': 177
+2026-03-01 22:39:43 | INFO     | httpx | HTTP Request: GET https://gamma-api.polymarket.com/events?slug=btc-updown-5m-1772415300 "HTTP/1.1 200 OK"
+2026-03-01 22:39:44 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:39:44 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:39:44 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:39:45 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:39:45 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:39:46 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:39:46 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:39:47 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:39:47 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:39:47 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:39:48 | INFO     | httpx | HTTP Request: GET https://gamma-api.polymarket.com/events?slug=btc-updown-5m-1772415300 "HTTP/1.1 200 OK"
+2026-03-01 22:39:49 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:39:49 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:39:49 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:39:49 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:39:50 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:39:51 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:39:51 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:39:51 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:39:52 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:39:53 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:39:53 | INFO     | httpx | HTTP Request: GET https://gamma-api.polymarket.com/events?slug=btc-updown-5m-1772415300 "HTTP/1.1 200 OK"
+2026-03-01 22:39:54 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:39:54 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:39:54 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:39:55 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:39:55 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:39:56 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:39:57 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:39:57 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:39:57 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:39:57 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:39:58 | INFO     | httpx | HTTP Request: GET https://gamma-api.polymarket.com/events?slug=btc-updown-5m-1772415300 "HTTP/1.1 200 OK"
+2026-03-01 22:39:59 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:39:59 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:39:59 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:40:00 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:40:00 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:40:03 | INFO     | httpx | HTTP Request: GET https://gamma-api.polymarket.com/events?slug=btc-updown-5m-1772415600 "HTTP/1.1 200 OK"
+2026-03-01 22:40:03 | INFO     | polybot.agent | Market rotation: btc-updown-5m-1772415300 → btc-updown-5m-1772415600
+2026-03-01 22:40:04 | INFO     | httpx | HTTP Request: DELETE https://clob.polymarket.com/cancel-all "HTTP/2 200 OK"
+2026-03-01 22:40:04 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:40:04 | INFO     | polybot.resolution | BTC resolution for btc-updown-5m-1772415300: open=$66633.99 close=$66667.10 → up
+2026-03-01 22:40:07 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=103074205058225501590305284959095402507887563669965387609123202141313775130930 "HTTP/2 200 OK"
+2026-03-01 22:40:07 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=63847191823143033927119725054137068127622363951102194721646829093766256662637 "HTTP/2 200 OK"
+2026-03-01 22:40:07 | INFO     | polybot.resolution | Polymarket verification for btc-updown-5m-1772415300: UP=0.9900 DOWN=0.0100 (BTC says: up)
+2026-03-01 22:40:07 | INFO     | polybot.resolution | Winner verified for btc-updown-5m-1772415300: up (BTC and Polymarket agree)
+2026-03-01 22:40:07 | INFO     | polybot.simulator.portfolio | Market resolved: winner=up, resolution_pnl=16.8000 (trading=0.0000, settlement=16.8000)
+2026-03-01 22:40:07 | INFO     | polybot.simulator.portfolio | Market resolved: winner=up, resolution_pnl=-9.6654 (trading=-9.6654, settlement=0.0000)
+2026-03-01 22:40:07 | INFO     | polybot.agent | Shadow paper PnL: $-9.6654 | Live PnL: $16.8000 | Diff: $26.4654
+2026-03-01 22:40:07 | INFO     | polybot.logging.trade_log | Resolution logged: btc-updown-5m-1772415300 winner=up pnl=16.8000
+2026-03-01 22:40:07 | INFO     | polybot.calibration | Calibration: conf=0.62 side=up winner=up → WIN (bin 0.60-0.70: 1/1 = 100%)
+2026-03-01 22:40:07 | INFO     | polybot.calibration | Shadow prediction: predicted=down winner=up → WRONG (accuracy: 0/1 = 0%)
+2026-03-01 22:40:07 | INFO     | polybot.adaptive_entry | Adaptive entry updated: reversal_rate=60% (6/10) → signal=UNCERTAIN, btc_thresh=$20 (cap=$97, fakeout, P50=$1), avg_winner_ask=$0.519 → max_entry=$0.62
+2026-03-01 22:40:07 | INFO     | polybot.adaptive_entry | Adaptive entry recorded: btc-updown-5m-1772415300 winner=up, dir@$20=down, reversed=True, winner_ask@$20=$0.540, peak_up=$0, peak_down=$91
+2026-03-01 22:40:07 | INFO     | polybot.datastore | DataStore: resolve_candle id=2 winner=up pnl=16.8000
+2026-03-01 22:40:07 | INFO     | polybot.datastore | MarketHistoryStore: resolve_candle id=777 winner=up
+2026-03-01 22:40:07 | INFO     | polybot.agent | Resolution: btc-updown-5m-1772415300 winner=up pnl=16.8000 | Session: W1/L0 total_pnl=16.8000
+2026-03-01 22:40:07 | INFO     | polybot.market_data.provider | Market set: btc-updown-5m-1772415600 (up=27280693, down=38946012)
+2026-03-01 22:40:07 | INFO     | polybot.agent | Active market: Bitcoin Up or Down - March 1, 8:40PM-8:45PM ET (ends in 292s)
+2026-03-01 22:40:08 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:40:08 | INFO     | polybot.resolution | Recorded candle open: btc-updown-5m-1772415600 BTC=$66669.74
+2026-03-01 22:40:08 | INFO     | polybot.datastore | DataStore: begin_candle id=3 slug=btc-updown-5m-1772415600
+2026-03-01 22:40:08 | INFO     | polybot.datastore | MarketHistoryStore: begin_candle id=778 slug=btc-updown-5m-1772415600
+2026-03-01 22:40:08 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=27280693789542114371465863264933383668455414927395401787559423095109960250911 "HTTP/2 200 OK"
+2026-03-01 22:40:08 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=38946012607107691080497142521406013734689525961656605883579687181948145396921 "HTTP/2 200 OK"
+2026-03-01 22:40:08 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=27280693789542114371465863264933383668455414927395401787559423095109960250911 "HTTP/2 200 OK"
+2026-03-01 22:40:09 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:40:09 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/balance-allowance?asset_type=COLLATERAL&signature_type=2 "HTTP/2 200 OK"
+2026-03-01 22:40:09 | WARNING  | polybot.execution.live | USDC allowance $0.00 < balance $110.45 — orders may be rejected
+2026-03-01 22:40:10 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=27280693789542114371465863264933383668455414927395401787559423095109960250911 "HTTP/2 200 OK"
+2026-03-01 22:40:10 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=38946012607107691080497142521406013734689525961656605883579687181948145396921 "HTTP/2 200 OK"
+2026-03-01 22:40:10 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=27280693789542114371465863264933383668455414927395401787559423095109960250911 "HTTP/2 200 OK"
+2026-03-01 22:40:11 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:40:11 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:40:12 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=27280693789542114371465863264933383668455414927395401787559423095109960250911 "HTTP/2 200 OK"
+2026-03-01 22:40:13 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=38946012607107691080497142521406013734689525961656605883579687181948145396921 "HTTP/2 200 OK"
+2026-03-01 22:40:13 | INFO     | httpx | HTTP Request: GET https://gamma-api.polymarket.com/events?slug=btc-updown-5m-1772415600 "HTTP/1.1 200 OK"
+2026-03-01 22:40:13 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=27280693789542114371465863264933383668455414927395401787559423095109960250911 "HTTP/2 200 OK"
+2026-03-01 22:40:13 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:40:13 | INFO     | httpx | HTTP Request: POST https://ethereum.publicnode.com "HTTP/1.1 200 OK"
+2026-03-01 22:40:14 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:40:15 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=27280693789542114371465863264933383668455414927395401787559423095109960250911 "HTTP/2 200 OK"
+2026-03-01 22:40:15 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=38946012607107691080497142521406013734689525961656605883579687181948145396921 "HTTP/2 200 OK"
+2026-03-01 22:40:15 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=27280693789542114371465863264933383668455414927395401787559423095109960250911 "HTTP/2 200 OK"
+2026-03-01 22:40:16 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:40:16 | INFO     | httpx | HTTP Request: POST https://ethereum.publicnode.com "HTTP/1.1 200 OK"
+2026-03-01 22:40:16 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:40:18 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=27280693789542114371465863264933383668455414927395401787559423095109960250911 "HTTP/2 200 OK"
+2026-03-01 22:40:18 | INFO     | httpx | HTTP Request: GET https://gamma-api.polymarket.com/events?slug=btc-updown-5m-1772415600 "HTTP/1.1 200 OK"
+2026-03-01 22:40:18 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=38946012607107691080497142521406013734689525961656605883579687181948145396921 "HTTP/2 200 OK"
+2026-03-01 22:40:18 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=27280693789542114371465863264933383668455414927395401787559423095109960250911 "HTTP/2 200 OK"
+2026-03-01 22:40:19 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:40:19 | INFO     | httpx | HTTP Request: POST https://ethereum.publicnode.com "HTTP/1.1 200 OK"
+2026-03-01 22:40:20 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:40:21 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=27280693789542114371465863264933383668455414927395401787559423095109960250911 "HTTP/2 200 OK"
+2026-03-01 22:40:21 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=38946012607107691080497142521406013734689525961656605883579687181948145396921 "HTTP/2 200 OK"
+2026-03-01 22:40:21 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=27280693789542114371465863264933383668455414927395401787559423095109960250911 "HTTP/2 200 OK"
+2026-03-01 22:40:22 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:40:22 | INFO     | httpx | HTTP Request: POST https://ethereum.publicnode.com "HTTP/1.1 200 OK"
+2026-03-01 22:40:22 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:40:22 | INFO     | polybot.tasks.market_monitor | AI triggered: adaptive btc_thresh=$20, max_entry=$0.62, min_ask=$0.45 (down), btc_move=$-20 (cooldown=167s elapsed)
+2026-03-01 22:40:22 | INFO     | polybot.tasks.ai_decision | === AI Decision Cycle 4 (trigger: adaptive btc_thresh=$20, max_entry=$0.62, min_ask=$0.45 (down), btc_move=$-20) ===
+2026-03-01 22:40:22 | WARNING  | polybot.market_data.chainlink_ws | Chainlink WS: no messages for 40s — forcing reconnect
+2026-03-01 22:40:23 | INFO     | httpx | HTTP Request: GET https://gamma-api.polymarket.com/events?slug=btc-updown-5m-1772415600 "HTTP/1.1 200 OK"
+2026-03-01 22:40:24 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=27280693789542114371465863264933383668455414927395401787559423095109960250911 "HTTP/2 200 OK"
+2026-03-01 22:40:24 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=38946012607107691080497142521406013734689525961656605883579687181948145396921 "HTTP/2 200 OK"
+2026-03-01 22:40:24 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=27280693789542114371465863264933383668455414927395401787559423095109960250911 "HTTP/2 200 OK"
+2026-03-01 22:40:24 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:40:24 | INFO     | httpx | HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-03-01 22:40:24 | INFO     | polybot.decision_engine.engine | Screen: TRADE — BTC move magnitude $20.35 exceeds $15 threshold with clear downside momentum sig (2063ms, cost=$0.0024)
+2026-03-01 22:40:25 | INFO     | httpx | HTTP Request: POST https://ethereum.publicnode.com "HTTP/1.1 200 OK"
+2026-03-01 22:40:25 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:40:26 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=27280693789542114371465863264933383668455414927395401787559423095109960250911 "HTTP/2 200 OK"
+2026-03-01 22:40:26 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=38946012607107691080497142521406013734689525961656605883579687181948145396921 "HTTP/2 200 OK"
+2026-03-01 22:40:27 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=27280693789542114371465863264933383668455414927395401787559423095109960250911 "HTTP/2 200 OK"
+2026-03-01 22:40:27 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:40:27 | INFO     | httpx | HTTP Request: POST https://ethereum.publicnode.com "HTTP/1.1 200 OK"
+2026-03-01 22:40:28 | INFO     | polybot.market_data.chainlink_ws | Chainlink WS: connecting to wss://ws-live-data.polymarket.com
+2026-03-01 22:40:28 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:40:28 | INFO     | httpx | HTTP Request: GET https://gamma-api.polymarket.com/events?slug=btc-updown-5m-1772415600 "HTTP/1.1 200 OK"
+2026-03-01 22:40:28 | ERROR    | polybot.market_data.chainlink_ws | Chainlink WS: connection error, reconnecting in 5s
+Traceback (most recent call last):
+  File "/Users/lfuryk/Documents/polymarket-bot/src/polybot/market_data/chainlink_ws.py", line 99, in _run
+    await self._connect_and_listen()
+  File "/Users/lfuryk/Documents/polymarket-bot/src/polybot/market_data/chainlink_ws.py", line 112, in _connect_and_listen
+    async with websockets.connect(self._url, ping_interval=None) as ws:
+               ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/lfuryk/Documents/polymarket-bot/.venv/lib/python3.14/site-packages/websockets/asyncio/client.py", line 590, in __aenter__
+    return await self
+           ^^^^^^^^^^
+  File "/Users/lfuryk/Documents/polymarket-bot/.venv/lib/python3.14/site-packages/websockets/asyncio/client.py", line 546, in __await_impl__
+    await self.connection.handshake(
+    ...<2 lines>...
+    )
+  File "/Users/lfuryk/Documents/polymarket-bot/.venv/lib/python3.14/site-packages/websockets/asyncio/client.py", line 115, in handshake
+    raise self.protocol.handshake_exc
+  File "/Users/lfuryk/Documents/polymarket-bot/.venv/lib/python3.14/site-packages/websockets/client.py", line 327, in parse
+    self.process_response(response)
+    ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^
+  File "/Users/lfuryk/Documents/polymarket-bot/.venv/lib/python3.14/site-packages/websockets/client.py", line 144, in process_response
+    raise InvalidStatus(response)
+websockets.exceptions.InvalidStatus: server rejected WebSocket connection: HTTP 429
+2026-03-01 22:40:29 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=27280693789542114371465863264933383668455414927395401787559423095109960250911 "HTTP/2 200 OK"
+2026-03-01 22:40:29 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=38946012607107691080497142521406013734689525961656605883579687181948145396921 "HTTP/2 200 OK"
+2026-03-01 22:40:29 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=27280693789542114371465863264933383668455414927395401787559423095109960250911 "HTTP/2 200 OK"
+2026-03-01 22:40:30 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:40:30 | INFO     | httpx | HTTP Request: POST https://ethereum.publicnode.com "HTTP/1.1 200 OK"
+2026-03-01 22:40:30 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:40:31 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=27280693789542114371465863264933383668455414927395401787559423095109960250911 "HTTP/2 200 OK"
+2026-03-01 22:40:32 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/book?token_id=38946012607107691080497142521406013734689525961656605883579687181948145396921 "HTTP/2 200 OK"
+2026-03-01 22:40:32 | INFO     | httpx | HTTP Request: GET https://clob.polymarket.com/last-trade-price?token_id=27280693789542114371465863264933383668455414927395401787559423095109960250911 "HTTP/2 200 OK"
+2026-03-01 22:40:32 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT "HTTP/1.1 200 OK"
+2026-03-01 22:40:32 | INFO     | httpx | HTTP Request: POST https://ethereum.publicnode.com "HTTP/1.1 200 OK"
+2026-03-01 22:40:33 | INFO     | polybot.agent | Shutdown signal received
+2026-03-01 22:40:33 | INFO     | polybot.agent | Shutdown signal received
+2026-03-01 22:40:33 | INFO     | httpx | HTTP Request: GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=2 "HTTP/1.1 200 OK"
+2026-03-01 22:40:33 | INFO     | polybot.agent | Shutdown signal received
+2026-03-01 22:40:33 | INFO     | polybot.agent | Shutdown: waiting for tasks to complete...
+2026-03-01 22:40:33 | INFO     | polybot.datastore | DataStore writer_loop stopped
+2026-03-01 22:40:33 | INFO     | polybot.datastore | MarketHistoryStore writer_loop stopped
+2026-03-01 22:40:33 | INFO     | polybot.agent | Shutting down components...
+2026-03-01 22:40:33 | INFO     | polybot.market_data.chainlink_ws | Chainlink WS: stopped
+2026-03-01 22:40:33 | INFO     | polybot.datastore | DataStore closed
+2026-03-01 22:40:33 | INFO     | polybot.datastore | MarketHistoryStore closed
+2026-03-01 22:40:33 | INFO     | polybot.agent | Final state — cash=1016.67 up_shares=0.00 down_shares=0.00 total=1016.67
