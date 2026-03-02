@@ -66,6 +66,7 @@ trading:
   api_key: ""
   api_secret: ""
   api_passphrase: ""
+  proxy_wallet_address: ""           # Polymarket proxy wallet (funder) — from polymarket.com/settings
   chain_id: 137                     # Polygon mainnet
   max_order_size_usd: 50.0          # hard cap per single order
   max_session_loss_usd: 40.0        # kill switch: shutdown if session loss exceeds this

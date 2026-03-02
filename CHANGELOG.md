@@ -6,7 +6,11 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed — Orders rejected with "not enough balance / allowance"
 
-The `ClobClient` was created without `signature_type=2`, so orders were signed for the EOA wallet (type 0) which has no funds. Added `signature_type=2` (Polymarket proxy wallet) to match where the USDC balance and allowances live.
+The `ClobClient` had `signature_type=2` (POLY_GNOSIS_SAFE) but was missing the `funder` parameter. Without it, the `maker` field in signed orders defaults to the EOA address, but funds live in the Polymarket proxy wallet. The exchange checked the EOA for balance (zero) and rejected with "not enough balance / allowance".
+
+**Root cause**: Polymarket browser wallets use a 1-of-1 Gnosis Safe proxy. The EOA signs orders, but the proxy wallet is the `maker` (funder) that holds USDC. Both `signature_type=2` AND `funder=<proxy_address>` are required.
+
+**Fix**: Added `proxy_wallet_address` config field (`POLYBOT_TRADING_PROXY_WALLET_ADDRESS` env var). This is passed as the `funder` parameter to `ClobClient`, setting the correct `maker` address in signed orders. The proxy wallet address is found on the Polymarket Profile Settings page.
 
 ## [v0.14.1] — 2026-03-01
 
