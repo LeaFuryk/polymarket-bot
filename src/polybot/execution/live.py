@@ -109,14 +109,28 @@ class LiveExecutionEngine:
                 asset_type=AssetType.COLLATERAL,
                 signature_type=2,
             )
+            # On first sync, refresh server's cached allowance to ensure it's current
+            if self._last_balance_sync == 0.0:
+                try:
+                    await loop.run_in_executor(
+                        None, partial(self._client.update_balance_allowance, params)
+                    )
+                    logger.info("Refreshed COLLATERAL allowance on startup")
+                except Exception:
+                    logger.warning("Failed to refresh COLLATERAL allowance on startup", exc_info=True)
+
             result = await loop.run_in_executor(
                 None, partial(self._client.get_balance_allowance, params)
             )
-            # Balance is in raw USDC units (6 decimals)
+            # Balance and allowance are in raw USDC units (6 decimals)
             raw = float(result.get("balance", 0)) if isinstance(result, dict) else 0.0
             balance = raw / 1e6
+            raw_allowance = float(result.get("allowance", 0)) if isinstance(result, dict) else 0.0
+            allowance = raw_allowance / 1e6
             self._wallet_balance = balance
             self._last_balance_sync = time.time()
+            if allowance < balance:
+                logger.warning("USDC allowance $%.2f < balance $%.2f — orders may be rejected", allowance, balance)
             return balance
         except Exception:
             logger.exception("Failed to sync wallet balance")
