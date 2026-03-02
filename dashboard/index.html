@@ -2213,6 +2213,17 @@ function render(d) {
     <div class="metric-value v-red">${fmt$(feesVal, 4)}</div>
     <div class="metric-sub">${feesSub}</div></div>`;
 
+  // Live trading: shadow portfolio comparison
+  if (showLive && d.live_trading) {
+    const lt = d.live_trading;
+    mh += `<div class="metric" data-tip="What the paper simulator would have made on the same trades. Compare to live PnL to gauge execution quality."><div class="metric-label">Shadow PnL</div>
+      <div class="metric-value ${signCls(lt.shadow_paper_pnl)}">${fmt$(lt.shadow_paper_pnl, 4)}</div>
+      <div class="metric-sub">paper sim</div></div>`;
+    mh += `<div class="metric" data-tip="Difference between live PnL and shadow paper PnL (slippage + real fees vs simulated). Negative means live performed worse."><div class="metric-label">Exec Cost</div>
+      <div class="metric-value ${signCls(lt.execution_cost)}">${fmt$(lt.execution_cost, 4)}</div>
+      <div class="metric-sub">live vs paper</div></div>`;
+  }
+
   mh += `<div class="metric" data-tip="Average confidence level the AI assigned to its BUY/SELL decisions. Higher means the bot was more certain about its trades."><div class="metric-label">Avg Conf</div>
     <div class="metric-value ${ts.avgConf >= 0.6 ? 'v-green' : ts.avgConf > 0 ? 'v-amber' : ''}">${ts.avgConf > 0 ? fmtPct(ts.avgConf * 100, 0) : '--'}</div>
     <div class="metric-sub">${ts.buys + ts.sells} decisions</div></div>`;
