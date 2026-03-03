@@ -9,7 +9,7 @@
 
 ## Skills
 - `notion-tasks` — Task management from Notion board
-- `pr-create` — PR creation via tars-bot-01 GitHub App
+- `tars` — All GitHub operations via tars-bot-01 GitHub App (push, PRs, comments, reviews)
 
 ## Conventions
 - Package manager: `uv`
