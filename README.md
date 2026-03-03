@@ -894,14 +894,22 @@ polymarket-bot/
 
 ## CI
 
-Two GitHub Actions workflows run in parallel on every push to `main`:
+Three GitHub Actions workflows run on push to `main`, each scoped by `paths` filters so they only trigger when relevant code changes:
 
-- **Python Tests** (`python.yml`) — Ruff lint + format check, then pytest with JUnit report posted as check annotations
-- **Frontend Tests** (`frontend.yml`) — TypeScript type checking (`tsc --noEmit`) + Jest test suite for `dashboard-next/`
+| Workflow | File | Triggers on | Checks |
+|----------|------|-------------|--------|
+| **Bot Python** | `python.yml` | `src/`, `tests/`, `pyproject.toml` | `Bot Python - Lint` (ruff check + format), `Bot Python - Tests` (pytest + JUnit report) |
+| **Next Dashboard - Tests** | `frontend.yml` | `dashboard-next/` | TypeScript type checking (`tsc --noEmit`) + Jest test suite |
+| **Next Dashboard - Lint** | `frontend-lint.yml` | `dashboard-next/` | ESLint (`eslint-config-next/core-web-vitals`) + Prettier (`prettier-plugin-tailwindcss`) |
 
 ### Pre-commit Hooks
 
-Ruff lint (with auto-fix) and format run on staged files before each commit. Install with:
+Linters run on staged files before each commit:
+
+- **Python** — Ruff lint (with `--fix`) + Ruff format
+- **Dashboard** — ESLint + Prettier (on `dashboard-next/src/` files)
+
+Install with:
 
 ```bash
 uv sync --extra dev

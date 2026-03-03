@@ -15,34 +15,37 @@ function hasTimestamp(r: ResItem): r is ResolutionEntry {
   return "timestamp" in r;
 }
 
-export function ResolutionTable({ resolutions, maxItems = 20 }: ResolutionTableProps) {
+export function ResolutionTable({
+  resolutions,
+  maxItems = 20,
+}: ResolutionTableProps) {
   const displayed = resolutions.slice(-maxItems).reverse();
 
   if (displayed.length === 0) {
     return (
-      <div className="rounded-lg bg-[#131720] border border-white/5 p-4">
-        <h3 className="text-xs uppercase tracking-wider text-zinc-500 font-semibold mb-2">
+      <div className="rounded-lg border border-white/5 bg-[#131720] p-4">
+        <h3 className="mb-2 text-xs font-semibold tracking-wider text-zinc-500 uppercase">
           Resolutions
         </h3>
-        <div className="text-zinc-600 text-sm">No resolutions yet</div>
+        <div className="text-sm text-zinc-600">No resolutions yet</div>
       </div>
     );
   }
 
   return (
-    <div className="rounded-lg bg-[#131720] border border-white/5 p-4">
-      <h3 className="text-xs uppercase tracking-wider text-zinc-500 font-semibold mb-3">
+    <div className="rounded-lg border border-white/5 bg-[#131720] p-4">
+      <h3 className="mb-3 text-xs font-semibold tracking-wider text-zinc-500 uppercase">
         Resolutions ({resolutions.length})
       </h3>
       <div className="overflow-x-auto">
         <table className="w-full text-xs">
           <thead>
-            <tr className="text-zinc-500 uppercase tracking-wider border-b border-white/5">
-              <th className="text-left pb-2 pr-3">Time</th>
-              <th className="text-left pb-2 pr-3">Candle</th>
-              <th className="text-left pb-2 pr-3">Winner</th>
-              <th className="text-right pb-2 pr-3">BTC Move</th>
-              <th className="text-right pb-2">PnL</th>
+            <tr className="border-b border-white/5 tracking-wider text-zinc-500 uppercase">
+              <th className="pr-3 pb-2 text-left">Time</th>
+              <th className="pr-3 pb-2 text-left">Candle</th>
+              <th className="pr-3 pb-2 text-left">Winner</th>
+              <th className="pr-3 pb-2 text-right">BTC Move</th>
+              <th className="pb-2 text-right">PnL</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-white/5">
@@ -51,7 +54,7 @@ export function ResolutionTable({ resolutions, maxItems = 20 }: ResolutionTableP
                 <td className="py-2 pr-3 font-mono text-zinc-400">
                   {hasTimestamp(r) ? formatTime(r.timestamp) : "---"}
                 </td>
-                <td className="py-2 pr-3 text-zinc-300 max-w-[150px] truncate">
+                <td className="max-w-[150px] truncate py-2 pr-3 text-zinc-300">
                   {r.slug}
                 </td>
                 <td className="py-2 pr-3">

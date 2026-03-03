@@ -4,6 +4,27 @@ All notable changes to this project will be documented in this file.
 
 ## [v0.15.0] — 2026-03-02
 
+### Added — ESLint + Prettier for dashboard-next
+
+Integrated ESLint (via `eslint-config-next/core-web-vitals`) and Prettier (with `prettier-plugin-tailwindcss`) for the Next.js dashboard:
+
+- **`eslint.config.mjs`** — Flat ESLint config extending `next/core-web-vitals` (native ESLint 9 flat config from eslint-config-next v16)
+- **`prettier.config.mjs`** — Prettier config with Tailwind CSS class sorting plugin
+- **`package.json`** — Added `lint` and `format:check` scripts, plus `eslint`, `eslint-config-next`, `prettier`, `prettier-plugin-tailwindcss` devDeps
+- **`.pre-commit-config.yaml`** — Added ESLint + Prettier hooks (run on staged `dashboard-next/src/` files only)
+- Fixed all existing violations: anonymous default export, custom font `<link>` (migrated to `next/font/google`), React hooks circular dependency in `useWebSocket`
+- Auto-formatted all 37 source files to Prettier style
+
+### Changed — CI workflow naming + path filtering
+
+Renamed all GitHub Actions workflow checks for consistency, split the Python workflow into parallel jobs, and added `paths` filters so workflows only run when relevant code changes:
+
+- **`frontend-lint.yml`** (new) — "Next Dashboard - Lint": ESLint + Prettier check (runs on `dashboard-next/**` changes only)
+- **`frontend.yml`** — Renamed to "Next Dashboard - Tests" (runs on `dashboard-next/**` changes only)
+- **`python.yml`** — Renamed to "Bot Python" with two parallel jobs: "Bot Python - Lint" (ruff) and "Bot Python - Tests" (pytest) (runs on `src/**`, `tests/**`, `pyproject.toml` changes only)
+
+Four CI check names: `Next Dashboard - Lint`, `Next Dashboard - Tests`, `Bot Python - Lint`, `Bot Python - Tests`
+
 ### Added — Ruff linter + pre-commit hooks
 
 Integrated [ruff](https://docs.astral.sh/ruff/) for linting and formatting across the Python codebase:
