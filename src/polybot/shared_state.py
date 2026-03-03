@@ -115,5 +115,10 @@ class SharedState:
         # Shows the full gate pipeline: prefilter → adaptive → cooldown → trigger
         self.monitor_status: dict = {}
 
+        # Tech metrics for WS status updates
+        self.api_latencies: dict[str, float] = {}
+        self.ws_client_count: int = 0
+        self.sqlite_queue_depth: int = 0
+
         # Shutdown flag
         self.shutdown: bool = False

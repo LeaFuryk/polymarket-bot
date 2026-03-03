@@ -4,6 +4,41 @@ All notable changes to this project will be documented in this file.
 
 ## [v0.15.0] — 2026-03-02
 
+### Added — Real-time WebSocket dashboard with Next.js frontend
+
+Embedded WebSocket server inside the bot process pushes live state directly to a modern Next.js frontend at `dashboard-next/`. The frontend updates in real-time with animated numbers and cleanly separates Trading data from Tech/Status data.
+
+**Python WS server (`src/polybot/ws/`):**
+- `protocol.py` — Message type constants: `snapshot`, `trade`, `resolution`, `market`, `position`, `status`
+- `broadcaster.py` — Client set management + message builders (build_snapshot, build_market_update, etc.)
+- `server.py` — WebSocket server lifecycle (start/stop/handler with auto-reconnect cleanup)
+- Broadcasts snapshot + status every 2s, market + position every 1s
+- Immediate push of trade and resolution events as they happen
+- `_assemble_dashboard_data()` refactored from `_write_dashboard_json()` (JSON file still written as fallback)
+
+**Next.js app (`dashboard-next/`):**
+- `/` — Trading dashboard: PnL summary, market info with countdown, positions with dynamic SL/TP, BTC panel, trade timeline, resolution table, risk bar
+- `/status` — Live Status with Infrastructure (API latencies, gate pipeline, system health) and Execution (AI engine, risk state) tabs
+- `/history` — Iteration history with expandable cards, PnL, win rate
+- `/forensics` — Connects to existing `polybot-server` on port 8888
+- `useWebSocket` hook with exponential backoff reconnect (1s → 30s max)
+- `AnimatedNumber` component with requestAnimationFrame interpolation + easeOutCubic
+- Offline fallback: fetches `dashboard_data.json` via API route when WS disconnects
+- Dark theme ported from existing dashboard CSS vars
+
+**Config:** `ws_enabled: bool = True`, `ws_port: int = 8765` in `LoggingConfig`
+
+**New SharedState fields:** `api_latencies`, `ws_client_count`, `sqlite_queue_depth`
+
+**New entry point:** `polybot-check` — runs Python tests + TypeScript type check + frontend tests
+
+**Tests:** 17 Python tests in `tests/test_ws.py` covering protocol, broadcaster, and server
+
+```bash
+cd dashboard-next && npm run dev    # Start frontend at http://localhost:3000
+uv run polybot-check                # Run all quality checks
+```
+
 ### Added — `polybot-forensics` execution forensics system
 
 New CLI + API + dashboard for deep post-session analysis of order execution. Six feature modules extract and cross-reference data from `polybot.db` to answer *why* orders fill or miss, *what they cost*, and *how to improve*.

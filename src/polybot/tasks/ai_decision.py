@@ -405,6 +405,9 @@ class AIDecision:
         self._session_trades = session_trades
         self._pending_ml_features = pending_ml_features
 
+        # Optional callback for WS trade event push
+        self.on_trade_callback = None  # set by agent: Callable[[TradeRecord], Awaitable[None]]
+
         # Track sold sides per candle to block side-flips (sell A → buy B)
         self._sold_sides: dict[str, set[str]] = {}  # slug → {UP, DOWN}
         # Track bought sides per candle to prevent double-entry on same side
@@ -1612,6 +1615,13 @@ class AIDecision:
         if len(self._recent_trades) > 50:
             del self._recent_trades[:-50]
         self._session_trades.append(record)
+
+        # Push trade event to WS clients
+        if self.on_trade_callback is not None:
+            try:
+                await self.on_trade_callback(record)
+            except Exception:
+                logger.debug("on_trade_callback failed", exc_info=True)
 
     def _queue_decision(
         self, cycle, snapshot, decision=None, latency_ms=0.0,

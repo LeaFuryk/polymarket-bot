@@ -39,6 +39,7 @@ polybot-validate = "polybot.analysis.validate:main"
 polybot-replay = "polybot.analysis.replay:main"
 polybot-forensics = "polybot.forensics.cli:main"
 polybot-server = "polybot.server.run:main"
+polybot-check = "polybot.scripts.check:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

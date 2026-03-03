@@ -15,7 +15,7 @@ An AI-powered trading agent that trades Polymarket BTC 5-minute candle predictio
 | Market Data | Chainlink RTDS WebSocket (primary price + 5-min candle builder), Binance BTC/USDT spot (fallback), CoinGecko (24h change), Binance 5-min OHLCV (startup backfill) |
 | Data Models | Pydantic v2 |
 | Config | YAML + `.env` overrides |
-| Dashboard | Rich live terminal UI + standalone web dashboard |
+| Dashboard | Rich live terminal UI + Next.js real-time web dashboard (WebSocket) |
 | Logging | JSONL (daily-rotating trade + resolution logs) + SQLite analytics |
 | Package | `setuptools` with `src/` layout |
 
@@ -78,7 +78,9 @@ TradingAgent.run()  (orchestrator)
     +-- AIDecision (event-driven) -- makes trades when triggered, has cooldown
     +-- PositionMonitor (1s loop) -- tracks P&L, triggers exits at SL/TP
     +-- RotationLoop (5s loop) -- handles candle transitions
-    +-- DashboardLoop (2s loop) -- writes dashboard JSON
+    +-- DashboardLoop (2s loop) -- writes dashboard JSON + broadcasts WS snapshot
+    +-- WSBroadcastLoop (1s loop) -- pushes market + position updates via WebSocket
+    +-- WS Server (port 8765) -- websockets.serve(), on_connect sends full snapshot
     +-- DataStore writer (async) -- batched SQLite inserts from queue
 ```
 
@@ -250,9 +252,27 @@ A live Rich dashboard will appear showing: current candle market, orderbook stat
 python -m polybot path/to/custom-config.yaml
 ```
 
-### Optional: Web dashboard
+### Optional: Next.js real-time dashboard (recommended)
 
-The bot writes `logs/dashboard_data.json` every cycle. Open the web dashboard in a browser:
+The bot embeds a WebSocket server (port 8765) that pushes live state to a Next.js frontend. Market prices, positions, and PnL animate in real time.
+
+```bash
+cd dashboard-next
+npm install        # First time only
+npm run dev        # Start at http://localhost:3000
+```
+
+**Pages:**
+- `/` — Trading: PnL, market countdown, positions, BTC, trades, resolutions
+- `/status` — Live Status: API latencies, gate pipeline, risk state, AI engine
+- `/history` — Iteration cards with expandable stats
+- `/forensics` — Connects to `polybot-server` (port 8888)
+
+Config: `ws_enabled: true` and `ws_port: 8765` in `config/default.yaml` under `logging:`. The bot also still writes `dashboard_data.json` as fallback — the Next.js app reads it when the WebSocket is offline.
+
+### Optional: Legacy web dashboard
+
+The bot writes `logs/dashboard_data.json` every cycle. Open the legacy dashboard in a browser:
 
 ```bash
 # From the project root:
@@ -848,10 +868,21 @@ polymarket-bot/
 │   │   ├── engine.py             # Market order execution simulation
 │   │   ├── orderbook.py          # Limit order lifecycle
 │   │   └── portfolio.py          # Dual-position portfolio tracking
+│   ├── ws/
+│   │   ├── protocol.py           # WS message types + make_message helper
+│   │   ├── broadcaster.py        # Client set management + message builders
+│   │   └── server.py             # WebSocket server lifecycle
+│   ├── scripts/
+│   │   └── check.py              # polybot-check — combined quality check runner
 │   └── tasks/
 │       ├── market_monitor.py     # 1s market data polling + prefilter + AI trigger
 │       ├── ai_decision.py        # Event-driven AI decision pipeline
 │       └── position_monitor.py   # Real-time P&L tracking + SL/TP exits
+├── dashboard-next/               # Next.js real-time dashboard (WebSocket)
+│   ├── src/app/                  # Pages: / (trading), /status, /history, /forensics
+│   ├── src/components/           # Shared + trading + status components
+│   ├── src/hooks/                # useWebSocket, useTradingData, useStatusData, useFallbackData
+│   └── src/lib/                  # types.ts, format.ts, constants.ts
 ├── scripts/
 │   └── generate_api_key.py      # Derive CLOB API credentials from wallet key
 ├── tests/                        # pytest + pytest-asyncio
