@@ -17,7 +17,7 @@ import argparse
 import json
 import sqlite3
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from statistics import mean, stdev
 
@@ -161,7 +161,14 @@ def replay_candle(
 
     # Key insights
     insights = _generate_insights(
-        candle, snapshots, decisions, ob_stats, fill_scan, post_cancel, side, ttl,
+        candle,
+        snapshots,
+        decisions,
+        ob_stats,
+        fill_scan,
+        post_cancel,
+        side,
+        ttl,
     )
 
     return {
@@ -221,7 +228,6 @@ def fillability_scan(
     """
     prefix = "up_" if side == "up" else "down_"
     ask_key = f"{prefix}best_ask"
-    bid_key = f"{prefix}best_bid"
 
     fillable_seconds = 0
     total_seconds = 0
@@ -263,13 +269,15 @@ def fillability_scan(
         if filled:
             fillable_seconds += 1
             entry_prices.append(fill_price_actual if fill_price_actual is not None else price)
-            fill_windows.append({
-                "entry_second": i,
-                "entry_ts": t0,
-                "limit_price": price,
-                "fill_price": fill_price_actual,
-                "fill_delay": fill_at,
-            })
+            fill_windows.append(
+                {
+                    "entry_second": i,
+                    "entry_ts": t0,
+                    "limit_price": price,
+                    "fill_price": fill_price_actual,
+                    "fill_delay": fill_at,
+                }
+            )
 
     # Best/worst entry points
     best_entry = min(entry_prices) if entry_prices else None
@@ -315,20 +323,22 @@ def _build_decision_timeline(
         d_ts = d["timestamp"]
         closest = min(snapshots, key=lambda s: abs(s["timestamp"] - d_ts))
 
-        timeline.append({
-            "action": d["action"],
-            "token_side": d.get("token_side", "?"),
-            "confidence": d.get("confidence", 0),
-            "fill_price": d.get("fill_price"),
-            "fill_size": d.get("fill_size"),
-            "decision_ts": d_ts,
-            "offset_s": d_ts - t0,
-            "book_ask": closest.get(ask_key),
-            "book_bid": closest.get(bid_key),
-            "book_mid": closest.get(f"{prefix}mid"),
-            "btc_price": closest.get("btc_price"),
-            "time_remaining": closest.get("time_remaining"),
-        })
+        timeline.append(
+            {
+                "action": d["action"],
+                "token_side": d.get("token_side", "?"),
+                "confidence": d.get("confidence", 0),
+                "fill_price": d.get("fill_price"),
+                "fill_size": d.get("fill_size"),
+                "decision_ts": d_ts,
+                "offset_s": d_ts - t0,
+                "book_ask": closest.get(ask_key),
+                "book_bid": closest.get(bid_key),
+                "book_mid": closest.get(f"{prefix}mid"),
+                "btc_price": closest.get("btc_price"),
+                "time_remaining": closest.get("time_remaining"),
+            }
+        )
 
     return timeline
 
@@ -348,8 +358,7 @@ def _post_cancel_recovery(
 
     # Find missed (unfilled) BUY decisions
     missed_buys = [
-        d for d in decisions
-        if d["action"] == "BUY" and (d.get("fill_price") is None or d.get("risk_blocked"))
+        d for d in decisions if d["action"] == "BUY" and (d.get("fill_price") is None or d.get("risk_blocked"))
     ]
 
     if not missed_buys:
@@ -367,18 +376,12 @@ def _post_cancel_recovery(
         return None
 
     # Look at the 30s window after the decision
-    recovery_window = [
-        s for s in snapshots
-        if 0 <= s["timestamp"] - missed_ts <= 30
-    ]
+    recovery_window = [s for s in snapshots if 0 <= s["timestamp"] - missed_ts <= 30]
 
     if not recovery_window:
         return None
 
-    recovery_asks = [
-        s.get(ask_key) for s in recovery_window
-        if s.get(ask_key) is not None
-    ]
+    recovery_asks = [s.get(ask_key) for s in recovery_window if s.get(ask_key) is not None]
 
     if not recovery_asks:
         return None
@@ -436,26 +439,28 @@ def _live_order_telemetry(
                 "mid": closest.get(f"{prefix}mid"),
             }
 
-        results.append({
-            "order_id": lo.get("order_id", "?"),
-            "limit_price": lo.get("limit_price"),
-            "submit_ts": submit_ts,
-            "submit_offset": submit_ts - t0 if submit_ts and t0 else None,
-            "fill_ts": fill_ts,
-            "cancel_ts": cancel_ts,
-            "fill_source": lo.get("fill_source", ""),
-            "ttl_used": lo.get("ttl_used"),
-            "polls": lo.get("polls", []),
-            "ob_at_submit": lo.get("ob_at_submit", {}),
-            "ob_at_end": lo.get("ob_at_end", {}),
-            "ob_post_cancel": lo.get("ob_post_cancel"),
-            "decision_ob_ask": lo.get("decision_ob_ask"),
-            "decision_ob_bid": lo.get("decision_ob_bid"),
-            "book_at_submit": _book_at(submit_ts),
-            "book_at_fill": _book_at(fill_ts) if fill_ts else None,
-            "book_at_cancel": _book_at(cancel_ts) if cancel_ts else None,
-            "filled": bool(fill_ts),
-        })
+        results.append(
+            {
+                "order_id": lo.get("order_id", "?"),
+                "limit_price": lo.get("limit_price"),
+                "submit_ts": submit_ts,
+                "submit_offset": submit_ts - t0 if submit_ts and t0 else None,
+                "fill_ts": fill_ts,
+                "cancel_ts": cancel_ts,
+                "fill_source": lo.get("fill_source", ""),
+                "ttl_used": lo.get("ttl_used"),
+                "polls": lo.get("polls", []),
+                "ob_at_submit": lo.get("ob_at_submit", {}),
+                "ob_at_end": lo.get("ob_at_end", {}),
+                "ob_post_cancel": lo.get("ob_post_cancel"),
+                "decision_ob_ask": lo.get("decision_ob_ask"),
+                "decision_ob_bid": lo.get("decision_ob_bid"),
+                "book_at_submit": _book_at(submit_ts),
+                "book_at_fill": _book_at(fill_ts) if fill_ts else None,
+                "book_at_cancel": _book_at(cancel_ts) if cancel_ts else None,
+                "filled": bool(fill_ts),
+            }
+        )
 
     return {"orders": results}
 
@@ -487,9 +492,7 @@ def _generate_insights(
         for s in snapshots:
             if s.get(ask_key) == best_ask:
                 offset = s["timestamp"] - t0
-                insights.append(
-                    f"Best entry was at T+{offset:.0f}s (ask={best_ask:.3f})"
-                )
+                insights.append(f"Best entry was at T+{offset:.0f}s (ask={best_ask:.3f})")
                 break
 
     # 2. Compare actual trade to best entry
@@ -503,41 +506,32 @@ def _generate_insights(
                 f"(could have saved {savings:.3f}/share)"
             )
         elif actual_price <= best_ask:
-            insights.append(
-                f"Actual fill at {actual_price:.3f} — matched or beat the best ask ({best_ask:.3f})"
-            )
+            insights.append(f"Actual fill at {actual_price:.3f} — matched or beat the best ask ({best_ask:.3f})")
 
     # 3. Fill rate analysis
     fill_rate = fill_scan.get("fill_rate", 0)
     total = fill_scan.get("total_seconds", 0)
     fillable = fill_scan.get("fillable_seconds", 0)
     if total > 0:
-        insights.append(
-            f"Fillability: {fillable}/{total} seconds ({fill_rate:.0%}) would fill within {ttl}s TTL"
-        )
+        insights.append(f"Fillability: {fillable}/{total} seconds ({fill_rate:.0%}) would fill within {ttl}s TTL")
 
     # 4. TTL counterfactual
     missed_buys = [
-        d for d in decisions
-        if d["action"] == "BUY" and d.get("fill_price") is None and not d.get("risk_blocked")
+        d for d in decisions if d["action"] == "BUY" and d.get("fill_price") is None and not d.get("risk_blocked")
     ]
     if missed_buys:
         missed_ts = missed_buys[-1]["timestamp"]
         # Check if a longer TTL would have helped
         for extra_ttl in [5, 8, 10]:
             # Find snapshots within extra_ttl of the missed decision
-            window = [
-                s for s in snapshots
-                if 0 <= s["timestamp"] - missed_ts <= extra_ttl
-            ]
+            window = [s for s in snapshots if 0 <= s["timestamp"] - missed_ts <= extra_ttl]
             closest = min(snapshots, key=lambda s: abs(s["timestamp"] - missed_ts))
             decision_ask = closest.get(ask_key)
             if decision_ask is not None and window:
                 future_asks = [s.get(ask_key) for s in window if s.get(ask_key) is not None]
                 if future_asks and min(future_asks) <= decision_ask:
                     insights.append(
-                        f"Missed order would have filled with TTL={extra_ttl}s "
-                        f"(ask dropped to {min(future_asks):.3f})"
+                        f"Missed order would have filled with TTL={extra_ttl}s (ask dropped to {min(future_asks):.3f})"
                     )
                     break
 
@@ -545,8 +539,7 @@ def _generate_insights(
     if post_cancel and post_cancel.get("recovered"):
         depth = post_cancel["recovery_depth"]
         insights.append(
-            f"Price recovered to fillable {post_cancel['snapshots_in_window']}s after cancel "
-            f"(ask dropped {depth:+.3f})"
+            f"Price recovered to fillable {post_cancel['snapshots_in_window']}s after cancel (ask dropped {depth:+.3f})"
         )
     elif post_cancel and not post_cancel.get("recovered"):
         insights.append(
@@ -557,10 +550,9 @@ def _generate_insights(
     # 6. Winner outcome
     winner = candle.get("winner")
     if winner:
-        correct = (winner == side)
+        correct = winner == side
         insights.append(
-            f"Candle winner: {winner.upper()} — traded side {side.upper()} was "
-            f"{'CORRECT' if correct else 'WRONG'}"
+            f"Candle winner: {winner.upper()} — traded side {side.upper()} was {'CORRECT' if correct else 'WRONG'}"
         )
 
     if not insights:
@@ -617,8 +609,8 @@ def _render_header(candle: dict, side: str, analysis: dict, console: Console) ->
     duration = ob_stats.get("duration_s", 0)
     snap_count = ob_stats.get("total_snapshots", 0)
 
-    start_str = datetime.fromtimestamp(start_ts, tz=timezone.utc).strftime("%H:%M:%S") if start_ts else "?"
-    end_str = datetime.fromtimestamp(end_ts, tz=timezone.utc).strftime("%H:%M:%S") if end_ts else "?"
+    start_str = datetime.fromtimestamp(start_ts, tz=UTC).strftime("%H:%M:%S") if start_ts else "?"
+    end_str = datetime.fromtimestamp(end_ts, tz=UTC).strftime("%H:%M:%S") if end_ts else "?"
 
     winner_color = "green" if winner == side else "red" if winner and winner != side else "yellow"
 
@@ -630,7 +622,11 @@ def _render_header(candle: dict, side: str, analysis: dict, console: Console) ->
     ]
     if btc_open is not None:
         btc_move = (btc_close - btc_open) if btc_close else 0
-        lines.append(f"  BTC:      ${btc_open:,.2f} → ${btc_close:,.2f} ({btc_move:+.2f})" if btc_close else f"  BTC:      ${btc_open:,.2f} → pending")
+        lines.append(
+            f"  BTC:      ${btc_open:,.2f} → ${btc_close:,.2f} ({btc_move:+.2f})"
+            if btc_close
+            else f"  BTC:      ${btc_open:,.2f} → pending"
+        )
 
     console.print(Panel("\n".join(lines), title="Candle Replay", border_style="cyan"))
 
@@ -717,7 +713,12 @@ def _render_fillability(scan: dict, side: str, console: Console) -> None:
     rate_color = "green" if rate >= 0.7 else "yellow" if rate >= 0.4 else "red"
 
     lines = [
-        f"  TTL:              {ttl}s" + (f"  (reference price: {scan['reference_price']:.3f})" if scan.get("reference_price") else "  (per-second best_ask)"),
+        f"  TTL:              {ttl}s"
+        + (
+            f"  (reference price: {scan['reference_price']:.3f})"
+            if scan.get("reference_price")
+            else "  (per-second best_ask)"
+        ),
         f"  Fillable seconds: [{rate_color}]{fillable}/{total} ({rate:.0%})[/{rate_color}]",
     ]
     if scan.get("best_entry") is not None:
@@ -796,7 +797,6 @@ def _render_telemetry(telemetry: dict | None, console: Console) -> None:
         if polls:
             lines.append(f"  Polls:            {len(polls)} status checks")
             for p in polls[:5]:
-                ts = p.get("ts", 0)
                 status_str = p.get("status", "?")
                 sm = p.get("size_matched", 0)
                 lines.append(f"    - {status_str} (size_matched={sm})")
@@ -811,11 +811,13 @@ def _render_telemetry(telemetry: dict | None, console: Console) -> None:
         if ob_pc and ob_pc.get("best_ask"):
             lines.append(f"  Ask post-cancel:  {ob_pc['best_ask']:.3f}")
 
-        console.print(Panel(
-            "\n".join(lines),
-            title="Live Order Telemetry",
-            border_style="yellow",
-        ))
+        console.print(
+            Panel(
+                "\n".join(lines),
+                title="Live Order Telemetry",
+                border_style="yellow",
+            )
+        )
     console.print()
 
 
@@ -851,9 +853,7 @@ def replay_all_candles(db_path: str | Path, ttl: int = 3) -> dict:
     conn.row_factory = sqlite3.Row
 
     try:
-        all_candles = conn.execute(
-            "SELECT * FROM candles ORDER BY candle_id"
-        ).fetchall()
+        all_candles = conn.execute("SELECT * FROM candles ORDER BY candle_id").fetchall()
         all_candles = [dict(r) for r in all_candles]
 
         if not all_candles:
@@ -925,19 +925,21 @@ def replay_all_candles(db_path: str | Path, ttl: int = 3) -> dict:
                     side_correct += 1
 
             # Compact per-candle row
-            per_candle.append({
-                "candle_id": candle["candle_id"],
-                "slug": candle.get("slug", ""),
-                "winner": winner,
-                "side": side,
-                "side_correct": winner == side if winner else None,
-                "fill_rate": fr,
-                "book_best_ask": fill_scan.get("book_best_ask"),
-                "had_trade": bool(buys),
-                "had_fill": bool(fills),
-                "had_missed": bool(missed),
-                "recovered": post_cancel.get("recovered") if post_cancel else None,
-            })
+            per_candle.append(
+                {
+                    "candle_id": candle["candle_id"],
+                    "slug": candle.get("slug", ""),
+                    "winner": winner,
+                    "side": side,
+                    "side_correct": winner == side if winner else None,
+                    "fill_rate": fr,
+                    "book_best_ask": fill_scan.get("book_best_ask"),
+                    "had_trade": bool(buys),
+                    "had_fill": bool(fills),
+                    "had_missed": bool(missed),
+                    "recovered": post_cancel.get("recovered") if post_cancel else None,
+                }
+            )
 
         return {
             "candles_replayed": len(per_candle),

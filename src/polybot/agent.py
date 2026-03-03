@@ -7,51 +7,40 @@ import json
 import logging
 import signal
 import time
+from datetime import UTC
 from pathlib import Path
-
-from rich.live import Live
-from rich.table import Table
-from rich.text import Text
 
 from polybot import __version__
 from polybot.adaptive_entry import AdaptiveEntryTracker
 from polybot.calibration import ConfidenceCalibrator
 from polybot.config import AppConfig
 from polybot.datastore import DataStore, MarketHistoryStore
-from polybot.exit_tracker import ExitTracker
 from polybot.decision_engine.engine import DecisionEngine
+from polybot.execution.live import LiveExecutionEngine
+from polybot.exit_tracker import ExitTracker
 from polybot.indicators import (
     FeatureConfig,
-    SessionContext,
-    compute_indicators,
-    format_indicators,
 )
 from polybot.knowledge import KnowledgeManager
-from polybot.ml_scorer import MLScorer
-from polybot.prefilter import PreFilter
 from polybot.logging.trade_log import TradeLog
 from polybot.market_data.chainlink_ws import ChainlinkWSFeed
 from polybot.market_data.discovery import MarketDiscovery
 from polybot.market_data.provider import MarketDataProvider
+from polybot.ml_scorer import MLScorer
 from polybot.models import (
-    Action,
     CandleMarket,
-    FeatureVector,
-    OrderType,
     ResolutionRecord,
-    TokenSide,
     TradeRecord,
-    TradingDecision,
 )
+from polybot.prefilter import PreFilter
 from polybot.resolution import ResolutionTracker
 from polybot.risk.manager import RiskManager
 from polybot.shared_state import CandleMicrostructure, SharedState
-from polybot.execution.live import LiveExecutionEngine
 from polybot.simulator.engine import ExecutionSimulator
 from polybot.simulator.orderbook import SimulatedOrderBook
 from polybot.simulator.portfolio import Portfolio
-from polybot.tasks.market_monitor import MarketMonitor
 from polybot.tasks.ai_decision import AIDecision
+from polybot.tasks.market_monitor import MarketMonitor
 from polybot.tasks.position_monitor import PositionMonitor
 
 logger = logging.getLogger(__name__)
@@ -287,11 +276,16 @@ class TradingAgent:
                 return
             initial_balance = await self._live_engine.sync_balance()
             if initial_balance <= 0 and not tc.dry_run:
-                logger.critical("LIVE MODE: wallet balance is $%.2f — aborting (fund wallet or use dry_run=true)", initial_balance)
+                logger.critical(
+                    "LIVE MODE: wallet balance is $%.2f — aborting (fund wallet or use dry_run=true)", initial_balance
+                )
                 return
             logger.info(
                 "LIVE MODE: wallet balance $%.2f, max_order=$%.0f, kill_switch=-$%.0f, dry_run=%s",
-                initial_balance, tc.max_order_size_usd, tc.max_session_loss_usd, tc.dry_run,
+                initial_balance,
+                tc.max_order_size_usd,
+                tc.max_session_loss_usd,
+                tc.dry_run,
             )
 
         # Start Chainlink WebSocket feed (primary BTC price — matches resolution)
@@ -351,9 +345,8 @@ class TradingAgent:
         # Wire up WS trade event push
         async def _on_trade(record):
             if self._ws_broadcaster.has_clients:
-                await self._ws_broadcaster.broadcast(
-                    self._ws_broadcaster.build_trade_event(record)
-                )
+                await self._ws_broadcaster.broadcast(self._ws_broadcaster.build_trade_event(record))
+
         self._ai_decision.on_trade_callback = _on_trade
 
         self._position_monitor = PositionMonitor(
@@ -375,20 +368,12 @@ class TradingAgent:
             asyncio.create_task(self._dashboard_loop(), name="dashboard_loop"),
         ]
         if self._config.logging.ws_enabled:
-            tasks.append(
-                asyncio.create_task(self._ws_broadcast_loop(), name="ws_broadcast")
-            )
+            tasks.append(asyncio.create_task(self._ws_broadcast_loop(), name="ws_broadcast"))
         if self._live_mode and self._live_engine:
-            tasks.append(
-                asyncio.create_task(self._balance_sync_loop(), name="balance_sync")
-            )
+            tasks.append(asyncio.create_task(self._balance_sync_loop(), name="balance_sync"))
         if self._datastore is not None:
-            tasks.append(
-                asyncio.create_task(self._datastore.writer_loop(), name="datastore_writer")
-            )
-        tasks.append(
-            asyncio.create_task(self._market_history.writer_loop(), name="market_history_writer")
-        )
+            tasks.append(asyncio.create_task(self._datastore.writer_loop(), name="datastore_writer"))
+        tasks.append(asyncio.create_task(self._market_history.writer_loop(), name="market_history_writer"))
 
         try:
             # Wait until shutdown
@@ -492,16 +477,19 @@ class TradingAgent:
             "avg_loss_pnl": round(sum(loss_pnls) / len(loss_pnls), 4) if loss_pnls else 0,
             "biggest_win": round(max(win_pnls), 4) if win_pnls else 0,
             "biggest_loss": round(min(loss_pnls), 4) if loss_pnls else 0,
-            "cumulative_pnl": [round(sum(pnls[:i + 1]), 4) for i in range(len(pnls))],
+            "cumulative_pnl": [round(sum(pnls[: i + 1]), 4) for i in range(len(pnls))],
         }
 
         # Per-resolution detail for table view
-        summary["resolutions_detail"] = [{
-            "slug": r.get("slug", ""),
-            "pnl": r.get("pnl", 0),
-            "btc_move": r.get("btc_move", 0),
-            "resolution": r.get("resolution", ""),
-        } for r in ress]
+        summary["resolutions_detail"] = [
+            {
+                "slug": r.get("slug", ""),
+                "pnl": r.get("pnl", 0),
+                "btc_move": r.get("btc_move", 0),
+                "resolution": r.get("resolution", ""),
+            }
+            for r in ress
+        ]
 
         # Observations from knowledge base
         if archive_dir:
@@ -512,11 +500,13 @@ class TradingAgent:
                     if line.strip():
                         try:
                             rec = json.loads(line)
-                            observations.append({
-                                "category": rec.get("category", ""),
-                                "text": rec.get("text", ""),
-                                "timestamp": rec.get("timestamp", ""),
-                            })
+                            observations.append(
+                                {
+                                    "category": rec.get("category", ""),
+                                    "text": rec.get("text", ""),
+                                    "timestamp": rec.get("timestamp", ""),
+                                }
+                            )
                         except json.JSONDecodeError:
                             pass
                 summary["observations"] = observations
@@ -530,6 +520,7 @@ class TradingAgent:
             db_path = archive_dir / "logs" / "polybot.db"
             if db_path.exists():
                 import sqlite3
+
                 try:
                     conn = sqlite3.connect(str(db_path))
                     # Snapshots — match live dashboard query (includes ask prices, R/R, streak)
@@ -561,26 +552,28 @@ class TradingAgent:
                             }
                         sample_counter += 1
                         if sample_counter % 10 == 0:
-                            candle_snapshots[slug]["points"].append({
-                                "tr": round(row[3], 0),
-                                "up": round(row[4], 4) if row[4] else None,
-                                "dn": round(row[5], 4) if row[5] else None,
-                                "btc_mv": round(row[6], 1) if row[6] else None,
-                                "pf": row[7],
-                                "pfr": row[8],
-                                "ind": row[9],
-                                "u_sp": round(row[10], 2) if row[10] else None,
-                                "d_sp": round(row[11], 2) if row[11] else None,
-                                "u_dep": round(row[12], 1) if row[12] else None,
-                                "d_dep": round(row[13], 1) if row[13] else None,
-                                "btc": round(row[14], 2) if row[14] else None,
-                                "u_ask": round(row[15], 4) if row[15] else None,
-                                "d_ask": round(row[16], 4) if row[16] else None,
-                                "rr_u": round(row[17], 3) if row[17] else None,
-                                "rr_d": round(row[18], 3) if row[18] else None,
-                                "stk": row[19],
-                                "stk_d": row[20],
-                            })
+                            candle_snapshots[slug]["points"].append(
+                                {
+                                    "tr": round(row[3], 0),
+                                    "up": round(row[4], 4) if row[4] else None,
+                                    "dn": round(row[5], 4) if row[5] else None,
+                                    "btc_mv": round(row[6], 1) if row[6] else None,
+                                    "pf": row[7],
+                                    "pfr": row[8],
+                                    "ind": row[9],
+                                    "u_sp": round(row[10], 2) if row[10] else None,
+                                    "d_sp": round(row[11], 2) if row[11] else None,
+                                    "u_dep": round(row[12], 1) if row[12] else None,
+                                    "d_dep": round(row[13], 1) if row[13] else None,
+                                    "btc": round(row[14], 2) if row[14] else None,
+                                    "u_ask": round(row[15], 4) if row[15] else None,
+                                    "d_ask": round(row[16], 4) if row[16] else None,
+                                    "rr_u": round(row[17], 3) if row[17] else None,
+                                    "rr_d": round(row[18], 3) if row[18] else None,
+                                    "stk": row[19],
+                                    "stk_d": row[20],
+                                }
+                            )
                     conn.close()
                     if candle_snapshots:
                         summary["candle_snapshots"] = candle_snapshots
@@ -606,10 +599,7 @@ class TradingAgent:
         archive_dir = Path.cwd() / "archive"
         if not archive_dir.exists():
             return "iter_001"
-        existing = sorted(
-            d.name for d in archive_dir.iterdir()
-            if d.is_dir() and d.name.startswith("iter_")
-        )
+        existing = sorted(d.name for d in archive_dir.iterdir() if d.is_dir() and d.name.startswith("iter_"))
         if not existing:
             return "iter_001"
         last_num = max(int(d.split("_")[1]) for d in existing)
@@ -641,12 +631,8 @@ class TradingAgent:
                     self._write_dashboard_json(0, snapshot)
                     # Broadcast snapshot + status to WS clients
                     if self._ws_broadcaster.has_clients:
-                        await self._ws_broadcaster.broadcast(
-                            self._ws_broadcaster.build_snapshot(self)
-                        )
-                        await self._ws_broadcaster.broadcast(
-                            self._ws_broadcaster.build_status_update(self)
-                        )
+                        await self._ws_broadcaster.broadcast(self._ws_broadcaster.build_snapshot(self))
+                        await self._ws_broadcaster.broadcast(self._ws_broadcaster.build_status_update(self))
                         self._shared.ws_client_count = self._ws_broadcaster.client_count
             except Exception:
                 logger.debug("DashboardLoop error", exc_info=True)
@@ -659,12 +645,8 @@ class TradingAgent:
         while not self._shared.shutdown:
             try:
                 if self._ws_broadcaster.has_clients:
-                    await self._ws_broadcaster.broadcast(
-                        self._ws_broadcaster.build_market_update(self)
-                    )
-                    await self._ws_broadcaster.broadcast(
-                        self._ws_broadcaster.build_position_update(self)
-                    )
+                    await self._ws_broadcaster.broadcast(self._ws_broadcaster.build_market_update(self))
+                    await self._ws_broadcaster.broadcast(self._ws_broadcaster.build_position_update(self))
             except Exception:
                 logger.debug("WSBroadcastLoop error", exc_info=True)
             await asyncio.sleep(1.0)
@@ -727,7 +709,8 @@ class TradingAgent:
                 if self._discovery_failures % 12 == 0:  # every ~60s
                     logger.warning(
                         "Polymarket outage ongoing: %.0fs elapsed (%d failures)",
-                        elapsed, self._discovery_failures,
+                        elapsed,
+                        self._discovery_failures,
                     )
             return self._current_market
 
@@ -739,7 +722,8 @@ class TradingAgent:
             self._outage_recovered = time.time()
             logger.info(
                 "Polymarket outage recovered after %.0fs (%d failures)",
-                duration, self._discovery_failures,
+                duration,
+                self._discovery_failures,
             )
         self._discovery_failures = 0
         self._outage_start = None
@@ -753,7 +737,8 @@ class TradingAgent:
                 # After outage: skip resolution of missed candles — just jump to new market
                 logger.info(
                     "Post-outage recovery: skipping resolution of %s, jumping to %s",
-                    self._current_market.slug, new_market.slug,
+                    self._current_market.slug,
+                    new_market.slug,
                 )
                 # Cancel any stale orders from the pre-outage market
                 cancelled = self._orderbook.cancel_all()
@@ -762,7 +747,8 @@ class TradingAgent:
             else:
                 logger.info(
                     "Market rotation: %s → %s",
-                    self._current_market.slug, new_market.slug,
+                    self._current_market.slug,
+                    new_market.slug,
                 )
                 await self._handle_market_transition()
 
@@ -776,7 +762,8 @@ class TradingAgent:
             # Set token IDs on live engine for CLOB orders
             if self._live_engine:
                 self._live_engine.set_current_token_ids(
-                    new_market.up_token_id, new_market.down_token_id,
+                    new_market.up_token_id,
+                    new_market.down_token_id,
                 )
 
             logger.info("Active market: %s (ends in %.0fs)", new_market.title, new_market.time_remaining())
@@ -830,7 +817,8 @@ class TradingAgent:
                 btc_price = btc_snapshot.price_usd if btc_snapshot else 0.0
 
                 resolution = await self._resolution_tracker.resolve(
-                    self._current_market, btc_price,
+                    self._current_market,
+                    btc_price,
                 )
 
                 resolution_pnl = self._portfolio.resolve_market(resolution.winner)
@@ -843,7 +831,9 @@ class TradingAgent:
                     shadow_pnl = self._shadow_portfolio.resolve_market(resolution.winner)
                     logger.info(
                         "Shadow paper PnL: $%.4f | Live PnL: $%.4f | Diff: $%.4f",
-                        shadow_pnl, resolution_pnl, resolution_pnl - shadow_pnl,
+                        shadow_pnl,
+                        resolution_pnl,
+                        resolution_pnl - shadow_pnl,
                     )
 
                 self._trade_log.write_resolution(resolution)
@@ -902,8 +892,12 @@ class TradingAgent:
 
                 logger.info(
                     "Resolution: %s winner=%s pnl=%.4f | Session: W%d/L%d total_pnl=%.4f",
-                    resolution.slug, resolution.winner, resolution_pnl,
-                    self._session_wins, self._session_losses, self._session_resolution_pnl,
+                    resolution.slug,
+                    resolution.winner,
+                    resolution_pnl,
+                    self._session_wins,
+                    self._session_losses,
+                    self._session_resolution_pnl,
                 )
 
                 self._recent_resolutions.append(resolution)
@@ -911,9 +905,7 @@ class TradingAgent:
 
                 # Push resolution event to WS clients
                 if self._ws_broadcaster.has_clients:
-                    await self._ws_broadcaster.broadcast(
-                        self._ws_broadcaster.build_resolution_event(resolution)
-                    )
+                    await self._ws_broadcaster.broadcast(self._ws_broadcaster.build_resolution_event(resolution))
 
                 if len(self._recent_resolutions) > 20:
                     self._recent_resolutions = self._recent_resolutions[-20:]
@@ -928,11 +920,14 @@ class TradingAgent:
                 if self._resolutions_since_reflection >= reflection_threshold:
                     logger.info(
                         "Triggering reflection after %d resolutions (threshold=%d, recent_pnl=$%.2f)",
-                        self._resolutions_since_reflection, reflection_threshold, recent_pnl,
+                        self._resolutions_since_reflection,
+                        reflection_threshold,
+                        recent_pnl,
                     )
                     self._resolutions_since_reflection = 0
                     await self._knowledge_manager.reflect(
-                        self._recent_resolutions, self._recent_trades,
+                        self._recent_resolutions,
+                        self._recent_trades,
                     )
                     reflection_cost = self._knowledge_manager.last_reflection_cost
                     if reflection_cost > 0:
@@ -940,7 +935,9 @@ class TradingAgent:
                         self._total_api_cost += reflection_cost
                         if self._ai_decision:
                             self._ai_decision.total_api_cost = self._total_api_cost
-                        logger.info("Reflection API cost: $%.4f (session total: $%.4f)", reflection_cost, self._total_api_cost)
+                        logger.info(
+                            "Reflection API cost: $%.4f (session total: $%.4f)", reflection_cost, self._total_api_cost
+                        )
 
             # Reset positions and triggers for new market
             self._portfolio.reset_positions()
@@ -1037,14 +1034,12 @@ class TradingAgent:
 
     def _assemble_dashboard_data(self) -> dict:
         """Assemble full dashboard state as a dict (used by both JSON writer and WS)."""
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         snapshot = self._shared.latest_snapshot
         up_mid = snapshot.orderbook.midpoint if snapshot else None
         down_mid = snapshot.down_orderbook.midpoint if snapshot else None
-        portfolio_value = self._portfolio.total_value_at_market(
-            up_mid or 0.5, down_mid
-        )
+        portfolio_value = self._portfolio.total_value_at_market(up_mid or 0.5, down_mid)
 
         total_games = self._session_wins + self._session_losses
         win_rate = (self._session_wins / total_games * 100) if total_games > 0 else 0.0
@@ -1068,9 +1063,7 @@ class TradingAgent:
             btc_info = {
                 "price_usd": snapshot.btc_price.price_usd,
                 "change_24h_pct": snapshot.btc_price.change_24h_pct,
-                "last_candle_direction": (
-                    snapshot.btc_candles[-1].direction if snapshot.btc_candles else "unknown"
-                ),
+                "last_candle_direction": (snapshot.btc_candles[-1].direction if snapshot.btc_candles else "unknown"),
                 "chainlink_price": snapshot.btc_price.chainlink_price,
                 "price_divergence": snapshot.btc_price.price_divergence,
                 "price_source": snapshot.btc_price.price_source,
@@ -1100,7 +1093,7 @@ class TradingAgent:
         trades = []
         for t in self._session_trades:
             trade_entry = {
-                "timestamp": datetime.fromtimestamp(t.timestamp, tz=timezone.utc).isoformat(),
+                "timestamp": datetime.fromtimestamp(t.timestamp, tz=UTC).isoformat(),
                 "cycle": t.cycle_number,
                 "action": t.action.value,
                 "token_side": t.token_side.value,
@@ -1110,9 +1103,7 @@ class TradingAgent:
                 "reasoning": t.reasoning,
                 "market_view": t.market_view,
                 "candle_slug": t.candle_slug,
-                "polymarket_url": (
-                    f"https://polymarket.com/event/{t.candle_slug}" if t.candle_slug else ""
-                ),
+                "polymarket_url": (f"https://polymarket.com/event/{t.candle_slug}" if t.candle_slug else ""),
                 "time_remaining_at_trade": t.extra.get("time_remaining", 0),
                 "risk_blocked": t.risk_blocked,
                 "risk_block_reason": t.risk_block_reason,
@@ -1131,15 +1122,17 @@ class TradingAgent:
         # Resolutions list (use uncapped session list, not the reflection window)
         resolutions = []
         for r in self._session_resolutions:
-            resolutions.append({
-                "timestamp": datetime.fromtimestamp(r.timestamp, tz=timezone.utc).isoformat(),
-                "slug": r.slug,
-                "winner": r.winner,
-                "btc_open": r.btc_open,
-                "btc_close": r.btc_close,
-                "btc_move": r.btc_close - r.btc_open,
-                "pnl": r.total_pnl,
-            })
+            resolutions.append(
+                {
+                    "timestamp": datetime.fromtimestamp(r.timestamp, tz=UTC).isoformat(),
+                    "slug": r.slug,
+                    "winner": r.winner,
+                    "btc_open": r.btc_open,
+                    "btc_close": r.btc_close,
+                    "btc_move": r.btc_close - r.btc_open,
+                    "pnl": r.total_pnl,
+                }
+            )
 
         # Merge historical + current session data (dedup resolutions by slug)
         all_trades = self._historical_trades + trades
@@ -1190,32 +1183,34 @@ class TradingAgent:
                         }
                     sample_counter += 1
                     if sample_counter % 10 == 0:  # downsample ~every 10s
-                        candle_snapshots[slug]["points"].append({
-                            "tr": round(row[3], 0),
-                            "up": round(row[4], 4) if row[4] else None,
-                            "dn": round(row[5], 4) if row[5] else None,
-                            "btc_mv": round(row[6], 1) if row[6] else None,
-                            "pf": row[7],
-                            "pfr": row[8],
-                            "ind": row[9],
-                            "u_sp": round(row[10], 2) if row[10] else None,
-                            "d_sp": round(row[11], 2) if row[11] else None,
-                            "u_dep": round(row[12], 1) if row[12] else None,
-                            "d_dep": round(row[13], 1) if row[13] else None,
-                            "btc": round(row[14], 2) if row[14] else None,
-                            "u_ask": round(row[15], 4) if row[15] else None,
-                            "d_ask": round(row[16], 4) if row[16] else None,
-                            "rr_u": round(row[17], 3) if row[17] else None,
-                            "rr_d": round(row[18], 3) if row[18] else None,
-                            "stk": row[19],
-                            "stk_d": row[20],
-                        })
+                        candle_snapshots[slug]["points"].append(
+                            {
+                                "tr": round(row[3], 0),
+                                "up": round(row[4], 4) if row[4] else None,
+                                "dn": round(row[5], 4) if row[5] else None,
+                                "btc_mv": round(row[6], 1) if row[6] else None,
+                                "pf": row[7],
+                                "pfr": row[8],
+                                "ind": row[9],
+                                "u_sp": round(row[10], 2) if row[10] else None,
+                                "d_sp": round(row[11], 2) if row[11] else None,
+                                "u_dep": round(row[12], 1) if row[12] else None,
+                                "d_dep": round(row[13], 1) if row[13] else None,
+                                "btc": round(row[14], 2) if row[14] else None,
+                                "u_ask": round(row[15], 4) if row[15] else None,
+                                "d_ask": round(row[16], 4) if row[16] else None,
+                                "rr_u": round(row[17], 3) if row[17] else None,
+                                "rr_d": round(row[18], 3) if row[18] else None,
+                                "stk": row[19],
+                                "stk_d": row[20],
+                            }
+                        )
             except Exception:
                 logger.debug("Failed to build candle snapshots", exc_info=True)
 
         data = {
             "bot_version": self._bot_version,
-            "updated_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(UTC).isoformat(),
             "session": {
                 "wins": self._session_wins,
                 "losses": self._session_losses,
@@ -1264,9 +1259,9 @@ class TradingAgent:
                 "total_records": self._calibrator.total_records,
                 "shadow_correct": self._calibrator._shadow_correct,
                 "shadow_total": self._calibrator._shadow_total,
-                "shadow_accuracy": round(
-                    self._calibrator._shadow_correct / self._calibrator._shadow_total, 3
-                ) if self._calibrator._shadow_total > 0 else None,
+                "shadow_accuracy": round(self._calibrator._shadow_correct / self._calibrator._shadow_total, 3)
+                if self._calibrator._shadow_total > 0
+                else None,
                 "bins": [
                     {
                         "range": f"{b.bin_lower:.0%}-{b.bin_upper:.0%}",
@@ -1288,7 +1283,9 @@ class TradingAgent:
             },
             "monitor": {
                 "prefilter_snapshots": len(self._shared.prefilter_history),
-                "ai_cooldown_remaining": max(0, self._config.monitor.ai_cooldown_seconds - (time.time() - self._shared.ai_last_call_time)),
+                "ai_cooldown_remaining": max(
+                    0, self._config.monitor.ai_cooldown_seconds - (time.time() - self._shared.ai_last_call_time)
+                ),
                 "last_trigger_reason": self._shared.ai_trigger_reason,
                 "status": self._shared.monitor_status,
             },
@@ -1388,10 +1385,7 @@ class TradingAgent:
         for slug, trades in trades_by_slug.items():
             if slug in resolved_slugs:
                 continue
-            has_fill = any(
-                t.get("action") in ("BUY", "SELL") and t.get("fill_price")
-                for t in trades
-            )
+            has_fill = any(t.get("action") in ("BUY", "SELL") and t.get("fill_price") for t in trades)
             if not has_fill:
                 continue
             unresolved.append(slug)
@@ -1410,7 +1404,7 @@ class TradingAgent:
 
     async def _resolve_single_pending_bet(self, slug: str, trades: list[dict]) -> None:
         """Resolve a single pending bet by looking up the actual outcome."""
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         market = await self._discovery.fetch_market_by_slug(slug)
         if market is None:
@@ -1426,7 +1420,9 @@ class TradingAgent:
         btc_close = await self._market_data.btc_feed.get_price_at(market.end_time)
 
         if btc_open is None or btc_close is None:
-            logger.warning("Could not fetch BTC prices for pending bet: %s (open=%s close=%s)", slug, btc_open, btc_close)
+            logger.warning(
+                "Could not fetch BTC prices for pending bet: %s (open=%s close=%s)", slug, btc_open, btc_close
+            )
             return
 
         resolution = await self._resolution_tracker.resolve(market, btc_close)
@@ -1438,19 +1434,25 @@ class TradingAgent:
 
         self._trade_log.write_resolution(resolution)
 
-        self._historical_resolutions.append({
-            "timestamp": datetime.fromtimestamp(resolution.timestamp, tz=timezone.utc).isoformat(),
-            "slug": resolution.slug,
-            "winner": resolution.winner,
-            "btc_open": resolution.btc_open,
-            "btc_close": resolution.btc_close,
-            "btc_move": resolution.btc_close - resolution.btc_open,
-            "pnl": resolution.total_pnl,
-        })
+        self._historical_resolutions.append(
+            {
+                "timestamp": datetime.fromtimestamp(resolution.timestamp, tz=UTC).isoformat(),
+                "slug": resolution.slug,
+                "winner": resolution.winner,
+                "btc_open": resolution.btc_open,
+                "btc_close": resolution.btc_close,
+                "btc_move": resolution.btc_close - resolution.btc_open,
+                "pnl": resolution.total_pnl,
+            }
+        )
 
         logger.info(
             "Resolving pending bet: %s — winner=%s, pnl=%.4f (open=$%.2f close=$%.2f)",
-            slug, resolution.winner, pnl, btc_open, btc_close,
+            slug,
+            resolution.winner,
+            pnl,
+            btc_open,
+            btc_close,
         )
 
     # --- Agent State Persistence ---
@@ -1472,7 +1474,7 @@ class TradingAgent:
 
     def _load_history_from_logs(self) -> None:
         """Load past resolutions and trades from JSONL log files."""
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         log_dir = Path(self._config.logging.log_dir)
 
@@ -1482,17 +1484,17 @@ class TradingAgent:
                     if not line.strip():
                         continue
                     r = json.loads(line)
-                    self._historical_resolutions.append({
-                        "timestamp": datetime.fromtimestamp(
-                            r.get("timestamp", 0), tz=timezone.utc
-                        ).isoformat(),
-                        "slug": r.get("slug", ""),
-                        "winner": r.get("winner", ""),
-                        "btc_open": r.get("btc_open", 0),
-                        "btc_close": r.get("btc_close", 0),
-                        "btc_move": r.get("btc_close", 0) - r.get("btc_open", 0),
-                        "pnl": r.get("total_pnl", 0),
-                    })
+                    self._historical_resolutions.append(
+                        {
+                            "timestamp": datetime.fromtimestamp(r.get("timestamp", 0), tz=UTC).isoformat(),
+                            "slug": r.get("slug", ""),
+                            "winner": r.get("winner", ""),
+                            "btc_open": r.get("btc_open", 0),
+                            "btc_close": r.get("btc_close", 0),
+                            "btc_move": r.get("btc_close", 0) - r.get("btc_open", 0),
+                            "pnl": r.get("total_pnl", 0),
+                        }
+                    )
             except Exception:
                 logger.debug("Could not load resolution file %s", res_file, exc_info=True)
 
@@ -1502,34 +1504,35 @@ class TradingAgent:
                     if not line.strip():
                         continue
                     t = json.loads(line)
-                    self._historical_trades.append({
-                        "timestamp": datetime.fromtimestamp(
-                            t.get("timestamp", 0), tz=timezone.utc
-                        ).isoformat(),
-                        "cycle": t.get("cycle_number", 0),
-                        "action": t.get("action", "HOLD"),
-                        "token_side": t.get("token_side", "up"),
-                        "size": t.get("decision_size", 0),
-                        "fill_price": t.get("fill_price"),
-                        "confidence": t.get("confidence", 0),
-                        "reasoning": t.get("reasoning", ""),
-                        "market_view": t.get("market_view", ""),
-                        "candle_slug": t.get("candle_slug", ""),
-                        "polymarket_url": (
-                            f"https://polymarket.com/event/{t.get('candle_slug', '')}"
-                            if t.get("candle_slug") else ""
-                        ),
-                        "time_remaining_at_trade": t.get("extra", {}).get("time_remaining", 0),
-                        "risk_blocked": t.get("risk_blocked", False),
-                        "risk_block_reason": t.get("risk_block_reason", ""),
-                        "cash": t.get("cash"),
-                        "portfolio_value": t.get("portfolio_value"),
-                        "fee": t.get("fee_amount", 0),
-                        "realized_pnl": t.get("realized_pnl", 0),
-                        "unrealized_pnl": t.get("unrealized_pnl", 0),
-                        "ai_cost": t.get("ai_cost", 0),
-                        "live_order": t.get("extra", {}).get("live_order"),
-                    })
+                    self._historical_trades.append(
+                        {
+                            "timestamp": datetime.fromtimestamp(t.get("timestamp", 0), tz=UTC).isoformat(),
+                            "cycle": t.get("cycle_number", 0),
+                            "action": t.get("action", "HOLD"),
+                            "token_side": t.get("token_side", "up"),
+                            "size": t.get("decision_size", 0),
+                            "fill_price": t.get("fill_price"),
+                            "confidence": t.get("confidence", 0),
+                            "reasoning": t.get("reasoning", ""),
+                            "market_view": t.get("market_view", ""),
+                            "candle_slug": t.get("candle_slug", ""),
+                            "polymarket_url": (
+                                f"https://polymarket.com/event/{t.get('candle_slug', '')}"
+                                if t.get("candle_slug")
+                                else ""
+                            ),
+                            "time_remaining_at_trade": t.get("extra", {}).get("time_remaining", 0),
+                            "risk_blocked": t.get("risk_blocked", False),
+                            "risk_block_reason": t.get("risk_block_reason", ""),
+                            "cash": t.get("cash"),
+                            "portfolio_value": t.get("portfolio_value"),
+                            "fee": t.get("fee_amount", 0),
+                            "realized_pnl": t.get("realized_pnl", 0),
+                            "unrealized_pnl": t.get("unrealized_pnl", 0),
+                            "ai_cost": t.get("ai_cost", 0),
+                            "live_order": t.get("extra", {}).get("live_order"),
+                        }
+                    )
             except Exception:
                 logger.debug("Could not load trade file %s", trade_file, exc_info=True)
 
@@ -1542,11 +1545,17 @@ class TradingAgent:
         """Save agent state to disk after each market transition."""
         try:
             self._state_path.parent.mkdir(parents=True, exist_ok=True)
-            self._state_path.write_text(json.dumps({
-                "bot_version": self._bot_version,
-                "resolutions_since_reflection": self._resolutions_since_reflection,
-                "knowledge": self._knowledge_manager.save_state(),
-            }, indent=2) + "\n")
+            self._state_path.write_text(
+                json.dumps(
+                    {
+                        "bot_version": self._bot_version,
+                        "resolutions_since_reflection": self._resolutions_since_reflection,
+                        "knowledge": self._knowledge_manager.save_state(),
+                    },
+                    indent=2,
+                )
+                + "\n"
+            )
         except Exception:
             logger.warning("Could not save agent state")
 

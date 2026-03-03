@@ -36,9 +36,9 @@ def main() -> None:
 
     try:
         import uvicorn
-    except ImportError:
+    except ImportError as err:
         print("uvicorn not installed. Install with: uv pip install -e '.[server]'")
-        raise SystemExit(1)
+        raise SystemExit(1) from err
 
     from polybot.server.app import app
 

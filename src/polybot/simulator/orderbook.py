@@ -46,7 +46,10 @@ class SimulatedOrderBook:
         self._orders.append(order)
         logger.info(
             "Limit order added: %s %.2f @ %.4f (TTL %ds)",
-            order.side.value, order.size, order.limit_price, order.ttl_seconds,
+            order.side.value,
+            order.size,
+            order.limit_price,
+            order.ttl_seconds,
         )
         return order
 
@@ -67,7 +70,9 @@ class SimulatedOrderBook:
                 fills.append(fill)
                 logger.info(
                     "Limit order filled: %s %.2f @ %.4f",
-                    order.side.value, fill.size, fill.fill_price,
+                    order.side.value,
+                    fill.size,
+                    fill.fill_price,
                 )
             else:
                 remaining.append(order)
@@ -75,9 +80,7 @@ class SimulatedOrderBook:
         self._orders = remaining
         return fills
 
-    def _try_fill(
-        self, order: PendingLimitOrder, orderbook: OrderbookSnapshot
-    ) -> SimulatedFill | None:
+    def _try_fill(self, order: PendingLimitOrder, orderbook: OrderbookSnapshot) -> SimulatedFill | None:
         """Check if a limit order can fill against current orderbook."""
         if order.side == Side.BUY:
             # Buy limit fills if ask <= limit_price

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import logging
 import time
 
@@ -35,9 +34,12 @@ class DecisionEngine:
         self.session_api_cost: float = 0.0
 
     async def decide(
-        self, features: FeatureVector, feedback_context: str = "",
+        self,
+        features: FeatureVector,
+        feedback_context: str = "",
         indicators_text: str = "",
-        ai_cycle_cost: float = 0.0, ai_session_cost: float = 0.0,
+        ai_cycle_cost: float = 0.0,
+        ai_session_cost: float = 0.0,
         candle_open_btc: float | None = None,
     ) -> tuple[TradingDecision, float, float]:
         """Get a trading decision from Claude.
@@ -46,8 +48,11 @@ class DecisionEngine:
             Tuple of (decision, latency_ms, api_cost_usd)
         """
         prompt = format_feature_vector(
-            features, feedback_context=feedback_context, indicators_text=indicators_text,
-            ai_cycle_cost=ai_cycle_cost, ai_session_cost=ai_session_cost,
+            features,
+            feedback_context=feedback_context,
+            indicators_text=indicators_text,
+            ai_cycle_cost=ai_cycle_cost,
+            ai_session_cost=ai_session_cost,
             candle_open_btc=candle_open_btc,
         )
         start = time.monotonic()
@@ -59,11 +64,13 @@ class DecisionEngine:
                 temperature=self._config.temperature,
                 system=SYSTEM_PROMPT,
                 messages=[{"role": "user", "content": prompt}],
-                tools=[{
-                    "name": "trading_decision",
-                    "description": "Submit your trading decision",
-                    "input_schema": TRADING_DECISION_SCHEMA,
-                }],
+                tools=[
+                    {
+                        "name": "trading_decision",
+                        "description": "Submit your trading decision",
+                        "input_schema": TRADING_DECISION_SCHEMA,
+                    }
+                ],
                 tool_choice={"type": "tool", "name": "trading_decision"},
             )
 
@@ -116,7 +123,9 @@ class DecisionEngine:
             return HOLD_FALLBACK, latency_ms, 0.0
 
     async def screen(
-        self, features: FeatureVector, indicators_text: str = "",
+        self,
+        features: FeatureVector,
+        indicators_text: str = "",
         candle_open_btc: float | None = None,
     ) -> tuple[bool, str, float]:
         """Pass-1 screen: quick check via Haiku if there's a trade setup.
@@ -134,11 +143,13 @@ class DecisionEngine:
                 temperature=0.0,
                 system=SCREENING_PROMPT,
                 messages=[{"role": "user", "content": prompt}],
-                tools=[{
-                    "name": "screening_decision",
-                    "description": "Should we call the full AI for a trade decision?",
-                    "input_schema": SCREENING_DECISION_SCHEMA,
-                }],
+                tools=[
+                    {
+                        "name": "screening_decision",
+                        "description": "Should we call the full AI for a trade decision?",
+                        "input_schema": SCREENING_DECISION_SCHEMA,
+                    }
+                ],
                 tool_choice={"type": "tool", "name": "screening_decision"},
             )
 

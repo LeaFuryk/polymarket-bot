@@ -5,9 +5,10 @@ from __future__ import annotations
 import json
 import logging
 import statistics
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from polybot.models import MarketSnapshot
 
@@ -18,9 +19,11 @@ logger = logging.getLogger(__name__)
 # Data types
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class IndicatorResult:
     """Single indicator output — one line of text for the prompt."""
+
     name: str
     value: float
     label: str  # human-readable summary, e.g. "+0.0032 (bullish)"
@@ -29,6 +32,7 @@ class IndicatorResult:
 @dataclass
 class SessionContext:
     """Lightweight session stats passed into session-based indicators."""
+
     wins: int = 0
     losses: int = 0
     avg_win_confidence: float = 0.0
@@ -45,9 +49,11 @@ _REGISTRY: dict[str, Callable[..., IndicatorResult | None]] = {}
 
 def register(name: str):
     """Decorator to register an indicator function by name."""
+
     def decorator(fn: Callable[..., IndicatorResult | None]):
         _REGISTRY[name] = fn
         return fn
+
     return decorator
 
 
@@ -58,6 +64,7 @@ def get_registry() -> dict[str, Callable[..., IndicatorResult | None]]:
 # ---------------------------------------------------------------------------
 # Feature config (read from disk each cycle)
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class FeatureConfigEntry:
@@ -98,17 +105,13 @@ class FeatureConfig:
 
     def to_dict(self) -> dict:
         """Serialize current config back to a JSON-serializable dict."""
-        return {
-            "indicators": [
-                {"name": e.name, "enabled": e.enabled, "params": e.params}
-                for e in self._entries
-            ]
-        }
+        return {"indicators": [{"name": e.name, "enabled": e.enabled, "params": e.params} for e in self._entries]}
 
 
 # ---------------------------------------------------------------------------
 # Compute + format helpers
 # ---------------------------------------------------------------------------
+
 
 def compute_indicators(
     snapshot: MarketSnapshot,
@@ -145,13 +148,14 @@ def format_indicators(results: list[IndicatorResult]) -> str:
 # EMA helper
 # ---------------------------------------------------------------------------
 
+
 def _ema(values: list[float], period: int) -> float:
     """Exponential moving average of the last `period` values."""
     if len(values) < period:
         return statistics.mean(values)
     k = 2 / (period + 1)
     ema = values[-period]  # seed with first value in window
-    for v in values[-period + 1:]:
+    for v in values[-period + 1 :]:
         ema = v * k + ema * (1 - k)
     return ema
 
@@ -160,9 +164,12 @@ def _ema(values: list[float], period: int) -> float:
 # Market trend indicator (EMA-based regime detection)
 # ---------------------------------------------------------------------------
 
+
 @register("market_trend")
 def _market_trend(
-    snap: MarketSnapshot, params: dict, _session: SessionContext | None,
+    snap: MarketSnapshot,
+    params: dict,
+    _session: SessionContext | None,
 ) -> IndicatorResult | None:
     """EMA20/EMA50 regime detection on 5-min BTC candle closes."""
     candles = snap.btc_candles
@@ -210,9 +217,12 @@ def _market_trend(
 # Token midpoint indicators (use snapshot.price_history)
 # ---------------------------------------------------------------------------
 
+
 @register("token_momentum")
 def _token_momentum(
-    snap: MarketSnapshot, params: dict, _session: SessionContext | None,
+    snap: MarketSnapshot,
+    params: dict,
+    _session: SessionContext | None,
 ) -> IndicatorResult | None:
     window = params.get("window", 10)
     history = snap.price_history
@@ -230,7 +240,9 @@ def _token_momentum(
 
 @register("token_volatility")
 def _token_volatility(
-    snap: MarketSnapshot, params: dict, _session: SessionContext | None,
+    snap: MarketSnapshot,
+    params: dict,
+    _session: SessionContext | None,
 ) -> IndicatorResult | None:
     window = params.get("window", 20)
     history = snap.price_history
@@ -248,7 +260,9 @@ def _token_volatility(
 
 @register("token_ma_crossover")
 def _token_ma_crossover(
-    snap: MarketSnapshot, params: dict, _session: SessionContext | None,
+    snap: MarketSnapshot,
+    params: dict,
+    _session: SessionContext | None,
 ) -> IndicatorResult | None:
     short_w = params.get("short_window", 5)
     long_w = params.get("long_window", 20)
@@ -268,7 +282,9 @@ def _token_ma_crossover(
 
 @register("token_mean_reversion")
 def _token_mean_reversion(
-    snap: MarketSnapshot, params: dict, _session: SessionContext | None,
+    snap: MarketSnapshot,
+    params: dict,
+    _session: SessionContext | None,
 ) -> IndicatorResult | None:
     window = params.get("window", 20)
     history = snap.price_history
@@ -297,9 +313,12 @@ def _token_mean_reversion(
 # Orderbook indicators (use current snapshot)
 # ---------------------------------------------------------------------------
 
+
 @register("orderbook_imbalance")
 def _orderbook_imbalance(
-    snap: MarketSnapshot, params: dict, _session: SessionContext | None,
+    snap: MarketSnapshot,
+    params: dict,
+    _session: SessionContext | None,
 ) -> IndicatorResult | None:
     bid_d = snap.orderbook.bid_depth
     ask_d = snap.orderbook.ask_depth
@@ -325,7 +344,9 @@ def _orderbook_imbalance(
 
 @register("spread_trend")
 def _spread_trend(
-    snap: MarketSnapshot, params: dict, _session: SessionContext | None,
+    snap: MarketSnapshot,
+    params: dict,
+    _session: SessionContext | None,
 ) -> IndicatorResult | None:
     sp = snap.orderbook.spread_pct
     if sp is None:
@@ -347,7 +368,9 @@ def _spread_trend(
 
 @register("down_orderbook_imbalance")
 def _down_orderbook_imbalance(
-    snap: MarketSnapshot, params: dict, _session: SessionContext | None,
+    snap: MarketSnapshot,
+    params: dict,
+    _session: SessionContext | None,
 ) -> IndicatorResult | None:
     """Bid/ask depth ratio for the DOWN token orderbook."""
     bid_d = snap.down_orderbook.bid_depth
@@ -374,7 +397,9 @@ def _down_orderbook_imbalance(
 
 @register("cross_book_flow")
 def _cross_book_flow(
-    snap: MarketSnapshot, params: dict, _session: SessionContext | None,
+    snap: MarketSnapshot,
+    params: dict,
+    _session: SessionContext | None,
 ) -> IndicatorResult | None:
     """Compare UP vs DOWN orderbook depth to detect informed flow.
 
@@ -408,7 +433,9 @@ def _cross_book_flow(
 
 @register("best_entry_analysis")
 def _best_entry_analysis(
-    snap: MarketSnapshot, params: dict, _session: SessionContext | None,
+    snap: MarketSnapshot,
+    params: dict,
+    _session: SessionContext | None,
 ) -> IndicatorResult | None:
     """Analyze which token offers the better entry price.
 
@@ -447,7 +474,9 @@ def _best_entry_analysis(
 
 @register("token_price_divergence")
 def _token_price_divergence(
-    snap: MarketSnapshot, params: dict, _session: SessionContext | None,
+    snap: MarketSnapshot,
+    params: dict,
+    _session: SessionContext | None,
 ) -> IndicatorResult | None:
     up_mid = snap.orderbook.midpoint
     down_mid = snap.down_orderbook.midpoint
@@ -472,9 +501,12 @@ def _token_price_divergence(
 # BTC indicators (use snapshot.btc_price_history)
 # ---------------------------------------------------------------------------
 
+
 @register("btc_momentum")
 def _btc_momentum(
-    snap: MarketSnapshot, params: dict, _session: SessionContext | None,
+    snap: MarketSnapshot,
+    params: dict,
+    _session: SessionContext | None,
 ) -> IndicatorResult | None:
     window = params.get("window", 10)
     history = snap.btc_price_history
@@ -492,7 +524,9 @@ def _btc_momentum(
 
 @register("btc_volatility")
 def _btc_volatility(
-    snap: MarketSnapshot, params: dict, _session: SessionContext | None,
+    snap: MarketSnapshot,
+    params: dict,
+    _session: SessionContext | None,
 ) -> IndicatorResult | None:
     window = params.get("window", 20)
     history = snap.btc_price_history
@@ -512,9 +546,12 @@ def _btc_volatility(
 # BTC candle indicators (use snapshot.btc_candles)
 # ---------------------------------------------------------------------------
 
+
 @register("btc_candle_momentum")
 def _btc_candle_momentum(
-    snap: MarketSnapshot, params: dict, _session: SessionContext | None,
+    snap: MarketSnapshot,
+    params: dict,
+    _session: SessionContext | None,
 ) -> IndicatorResult | None:
     """Up/down ratio of last N 5-min BTC candles."""
     window = params.get("window", 6)
@@ -539,7 +576,9 @@ def _btc_candle_momentum(
 
 @register("btc_candle_ma_cross")
 def _btc_candle_ma_cross(
-    snap: MarketSnapshot, params: dict, _session: SessionContext | None,
+    snap: MarketSnapshot,
+    params: dict,
+    _session: SessionContext | None,
 ) -> IndicatorResult | None:
     """MA5 vs MA12 crossover on 5-min BTC candle closes."""
     candles = snap.btc_candles
@@ -561,9 +600,12 @@ def _btc_candle_ma_cross(
 # Session indicators
 # ---------------------------------------------------------------------------
 
+
 @register("session_streak")
 def _session_streak(
-    snap: MarketSnapshot, params: dict, session: SessionContext | None,
+    snap: MarketSnapshot,
+    params: dict,
+    session: SessionContext | None,
 ) -> IndicatorResult | None:
     if session is None:
         return None
@@ -580,7 +622,9 @@ def _session_streak(
 
 @register("confidence_calibration")
 def _confidence_calibration(
-    snap: MarketSnapshot, params: dict, session: SessionContext | None,
+    snap: MarketSnapshot,
+    params: dict,
+    session: SessionContext | None,
 ) -> IndicatorResult | None:
     if session is None:
         return None
@@ -605,9 +649,12 @@ def _confidence_calibration(
 # BTC candle streak & magnitude indicators
 # ---------------------------------------------------------------------------
 
+
 @register("consecutive_streak")
 def _consecutive_streak(
-    snap: MarketSnapshot, params: dict, _session: SessionContext | None,
+    snap: MarketSnapshot,
+    params: dict,
+    _session: SessionContext | None,
 ) -> IndicatorResult | None:
     """Count of consecutive same-direction 5-min BTC candles (from most recent)."""
     candles = snap.btc_candles
@@ -637,7 +684,9 @@ def _consecutive_streak(
 
 @register("streak_magnitude")
 def _streak_magnitude(
-    snap: MarketSnapshot, params: dict, _session: SessionContext | None,
+    snap: MarketSnapshot,
+    params: dict,
+    _session: SessionContext | None,
 ) -> IndicatorResult | None:
     """Total BTC $ move during the current consecutive candle streak."""
     candles = snap.btc_candles
@@ -670,7 +719,9 @@ def _streak_magnitude(
 
 @register("btc_vs_candle_open")
 def _btc_vs_candle_open(
-    snap: MarketSnapshot, params: dict, session: SessionContext | None,
+    snap: MarketSnapshot,
+    params: dict,
+    session: SessionContext | None,
 ) -> IndicatorResult | None:
     """Where is BTC NOW relative to the current 5-min candle open?
 
@@ -713,7 +764,9 @@ def _btc_vs_candle_open(
 
 @register("volatility_30m")
 def _volatility_30m(
-    snap: MarketSnapshot, params: dict, _session: SessionContext | None,
+    snap: MarketSnapshot,
+    params: dict,
+    _session: SessionContext | None,
 ) -> IndicatorResult | None:
     """Standard deviation of 5-min candle ranges over last 30 minutes."""
     candles = snap.btc_candles
@@ -742,7 +795,9 @@ def _volatility_30m(
 
 @register("chainlink_divergence")
 def _chainlink_divergence(
-    snap: MarketSnapshot, params: dict, _session: SessionContext | None,
+    snap: MarketSnapshot,
+    params: dict,
+    _session: SessionContext | None,
 ) -> IndicatorResult | None:
     """Binance vs Chainlink price divergence.
 
@@ -792,7 +847,9 @@ def _chainlink_divergence(
 
 @register("flat_market_edge")
 def _flat_market_edge(
-    snap: MarketSnapshot, params: dict, session: SessionContext | None,
+    snap: MarketSnapshot,
+    params: dict,
+    session: SessionContext | None,
 ) -> IndicatorResult | None:
     """Detect flat/near-flat BTC conditions where UP wins by default.
 
@@ -811,7 +868,6 @@ def _flat_market_edge(
     flat_ratio = flat_count / len(recent)
 
     # Check if UP token is underpriced in flat conditions
-    up_ask = snap.orderbook.best_ask
     up_mid = snap.orderbook.midpoint
 
     signal_parts = [f"{flat_count}/{len(recent)} flat candles"]
@@ -843,7 +899,9 @@ def _flat_market_edge(
 
 @register("volume_trend")
 def _volume_trend(
-    snap: MarketSnapshot, params: dict, _session: SessionContext | None,
+    snap: MarketSnapshot,
+    params: dict,
+    _session: SessionContext | None,
 ) -> IndicatorResult | None:
     """Compare recent volume to earlier volume — increasing/decreasing/flat."""
     candles = snap.btc_candles

@@ -4,12 +4,11 @@ from __future__ import annotations
 
 import time
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 from typing import Any
 
 from pydantic import BaseModel, Field
-
 
 # --- Enums ---
 
@@ -382,9 +381,7 @@ class Observation(BaseModel):
     """A single descriptive observation from reflection — append-only with decay."""
 
     id: str = Field(default_factory=lambda: uuid.uuid4().hex[:12])
-    timestamp: str = Field(
-        default_factory=lambda: datetime.now(timezone.utc).isoformat()
-    )
+    timestamp: str = Field(default_factory=lambda: datetime.now(UTC).isoformat())
     category: ObservationCategory
     text: str
     based_on_resolutions: int  # how many resolutions were in the batch

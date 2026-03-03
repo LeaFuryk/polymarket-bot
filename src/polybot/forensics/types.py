@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
-
 # ---------------------------------------------------------------------------
 # Feature A: Order Execution Metrics
 # ---------------------------------------------------------------------------

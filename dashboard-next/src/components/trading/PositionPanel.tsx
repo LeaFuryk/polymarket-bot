@@ -36,8 +36,10 @@ function SideRow({
   const hasPosition = shares > 0.001;
 
   return (
-    <div className={`rounded-lg bg-[#0d1017] border border-white/5 p-3 ${!hasPosition ? "opacity-40" : ""}`}>
-      <div className="flex items-center justify-between mb-2">
+    <div
+      className={`rounded-lg border border-white/5 bg-[#0d1017] p-3 ${!hasPosition ? "opacity-40" : ""}`}
+    >
+      <div className="mb-2 flex items-center justify-between">
         <span className={`text-sm font-semibold ${color}`}>{label}</span>
         {hasPosition && pnlPct !== undefined && (
           <span className={`font-mono text-sm ${pnlColor(pnlPct)}`}>
@@ -76,10 +78,10 @@ export function PositionPanel({ position }: PositionPanelProps) {
 
   return (
     <div className="space-y-3">
-      <h3 className="text-xs uppercase tracking-wider text-zinc-500 font-semibold">
+      <h3 className="text-xs font-semibold tracking-wider text-zinc-500 uppercase">
         Positions
       </h3>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <SideRow
           label="UP"
           shares={position.up_shares}

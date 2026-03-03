@@ -894,10 +894,39 @@ polymarket-bot/
 
 ## CI
 
-Two GitHub Actions workflows run in parallel on every push to `main`:
+Three GitHub Actions workflows run on push to `main`, each scoped by `paths` filters so they only trigger when relevant code changes:
 
-- **Python Tests** (`python.yml`) — pytest with JUnit report posted as check annotations
-- **Frontend Tests** (`frontend.yml`) — TypeScript type checking (`tsc --noEmit`) + Jest test suite for `dashboard-next/`
+| Workflow | File | Triggers on | Checks |
+|----------|------|-------------|--------|
+| **Bot Python** | `python.yml` | `src/`, `tests/`, `pyproject.toml` | `Bot Python - Lint` (ruff check + format), `Bot Python - Tests` (pytest + JUnit report) |
+| **Next Dashboard - Tests** | `frontend.yml` | `dashboard-next/` | TypeScript type checking (`tsc --noEmit`) + Jest test suite |
+| **Next Dashboard - Lint** | `frontend-lint.yml` | `dashboard-next/` | ESLint (`eslint-config-next/core-web-vitals`) + Prettier (`prettier-plugin-tailwindcss`) |
+
+### Reviewdog (PR reviews)
+
+A fourth workflow (`reviewdog.yml`) runs **only on pull requests** and posts inline review comments on new/changed lines:
+
+| Job | Tool | Scope |
+|-----|------|-------|
+| **Reviewdog - ESLint** | `reviewdog/action-eslint@v1` | `dashboard-next/src/` |
+| **Reviewdog - Prettier** | `EPMatt/reviewdog-action-prettier@v1` | `dashboard-next/src/` (posts one-click fix suggestions) |
+| **Reviewdog - Ruff** | `ruff --output-format=rdjson` → `reviewdog` | `src/`, `tests/` |
+
+All three use `filter_mode: added` (only new code) and `fail_level: error` (blocks merge). Add them as **required status checks** in Settings → Branches → Branch protection rules.
+
+### Pre-commit Hooks
+
+Linters run on staged files before each commit:
+
+- **Python** — Ruff lint (with `--fix`) + Ruff format
+- **Dashboard** — ESLint + Prettier (on `dashboard-next/src/` files)
+
+Install with:
+
+```bash
+uv sync --extra dev
+uv run pre-commit install
+```
 
 ---
 

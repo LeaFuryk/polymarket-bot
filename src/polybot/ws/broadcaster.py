@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import time
+from datetime import UTC
 from typing import TYPE_CHECKING
 
 from polybot.ws.protocol import (
@@ -115,8 +116,7 @@ class DashboardBroadcaster:
                 "prefilter_snapshots": len(agent._shared.prefilter_history),
                 "ai_cooldown_remaining": max(
                     0,
-                    agent._config.monitor.ai_cooldown_seconds
-                    - (time.time() - agent._shared.ai_last_call_time),
+                    agent._config.monitor.ai_cooldown_seconds - (time.time() - agent._shared.ai_last_call_time),
                 ),
                 "last_trigger_reason": agent._shared.ai_trigger_reason,
                 "status": agent._shared.monitor_status,
@@ -145,10 +145,10 @@ class DashboardBroadcaster:
 
     def build_trade_event(self, trade) -> str:
         """Immediate push on trade execution."""
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         data = {
-            "timestamp": datetime.fromtimestamp(trade.timestamp, tz=timezone.utc).isoformat(),
+            "timestamp": datetime.fromtimestamp(trade.timestamp, tz=UTC).isoformat(),
             "action": trade.action.value,
             "token_side": trade.token_side.value,
             "size": trade.decision_size,

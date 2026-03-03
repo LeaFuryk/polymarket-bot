@@ -8,7 +8,10 @@ interface CountdownProps {
   className?: string;
 }
 
-export function Countdown({ seconds: initialSeconds, className = "" }: CountdownProps) {
+export function Countdown({
+  seconds: initialSeconds,
+  className = "",
+}: CountdownProps) {
   const [seconds, setSeconds] = useState(initialSeconds);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -37,7 +40,7 @@ export function Countdown({ seconds: initialSeconds, className = "" }: Countdown
   return (
     <span
       className={`font-mono tabular-nums ${
-        isUrgent ? "text-red-400 animate-pulse" : "text-zinc-200"
+        isUrgent ? "animate-pulse text-red-400" : "text-zinc-200"
       } ${className}`}
     >
       {formatCountdown(seconds)}

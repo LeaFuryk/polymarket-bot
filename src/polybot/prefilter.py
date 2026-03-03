@@ -11,7 +11,6 @@ the cycle is logged as a HOLD without calling the AI.
 from __future__ import annotations
 
 import logging
-import statistics
 from dataclasses import dataclass
 
 from polybot.models import BtcCandle, MarketSnapshot
@@ -114,8 +113,12 @@ class PreFilter:
         # Check 2: Both orderbooks have wide spreads
         up_spread = snapshot.orderbook.spread_pct
         down_spread = snapshot.down_orderbook.spread_pct
-        if (up_spread is not None and up_spread > self.max_spread_pct and
-                down_spread is not None and down_spread > self.max_spread_pct):
+        if (
+            up_spread is not None
+            and up_spread > self.max_spread_pct
+            and down_spread is not None
+            and down_spread > self.max_spread_pct
+        ):
             result.should_skip = True
             result.reason = f"Both spreads wide: UP={up_spread:.2%}, DOWN={down_spread:.2%}"
             self.total_skipped += 1
@@ -147,8 +150,7 @@ class PreFilter:
         if streak < 2 and best_entry > self.no_streak_max_entry:
             result.should_skip = True
             result.reason = (
-                f"No clear setup: streak={streak}, best entry={best_entry:.3f} > "
-                f"{self.no_streak_max_entry:.3f}"
+                f"No clear setup: streak={streak}, best entry={best_entry:.3f} > {self.no_streak_max_entry:.3f}"
             )
             self.total_skipped += 1
             logger.info("Pre-filter SKIP: %s", result.reason)

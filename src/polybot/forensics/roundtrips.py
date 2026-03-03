@@ -108,19 +108,21 @@ def analyze_roundtrips(conn: sqlite3.Connection) -> list[RoundTrip]:
         else:
             exit_efficiency = 0.0 if realized_pnl <= 0 else 1.0
 
-        trips.append(RoundTrip(
-            entry_candle_id=entry_candle_id,
-            exit_candle_id=exit_candle_id,
-            side=token_side,
-            entry_price=entry_price,
-            exit_price=exit_price,
-            size=size,
-            hold_duration_s=hold_duration_s,
-            realized_pnl=realized_pnl,
-            mfe=mfe,
-            mae=mae,
-            entry_to_mfe_s=entry_to_mfe_s,
-            exit_efficiency=exit_efficiency,
-        ))
+        trips.append(
+            RoundTrip(
+                entry_candle_id=entry_candle_id,
+                exit_candle_id=exit_candle_id,
+                side=token_side,
+                entry_price=entry_price,
+                exit_price=exit_price,
+                size=size,
+                hold_duration_s=hold_duration_s,
+                realized_pnl=realized_pnl,
+                mfe=mfe,
+                mae=mae,
+                entry_to_mfe_s=entry_to_mfe_s,
+                exit_efficiency=exit_efficiency,
+            )
+        )
 
     return trips

@@ -32,10 +32,10 @@ export function ExecutionQuality({
     <div className="space-y-4">
       {/* AI Decision Stats */}
       <div>
-        <h4 className="text-xs uppercase tracking-wider text-zinc-500 font-semibold mb-3">
+        <h4 className="mb-3 text-xs font-semibold tracking-wider text-zinc-500 uppercase">
           AI Decision Engine
         </h4>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <MetricCard
             label="AI Cooldown"
             value={
@@ -59,10 +59,7 @@ export function ExecutionQuality({
             label="Last Trigger"
             value={
               lastTrigger ? (
-                <StatusBadge
-                  label={lastTrigger.slice(0, 20)}
-                  variant="cyan"
-                />
+                <StatusBadge label={lastTrigger.slice(0, 20)} variant="cyan" />
               ) : (
                 <span className="text-zinc-600">---</span>
               )
@@ -79,14 +76,18 @@ export function ExecutionQuality({
       {/* Risk State */}
       {risk && (
         <div>
-          <h4 className="text-xs uppercase tracking-wider text-zinc-500 font-semibold mb-3">
+          <h4 className="mb-3 text-xs font-semibold tracking-wider text-zinc-500 uppercase">
             Risk State
           </h4>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <MetricCard
               label="Daily PnL"
               value={
-                <span className={risk.daily_pnl >= 0 ? "text-green-400" : "text-red-400"}>
+                <span
+                  className={
+                    risk.daily_pnl >= 0 ? "text-green-400" : "text-red-400"
+                  }
+                >
                   {formatCurrency(risk.daily_pnl, 4)}
                 </span>
               }
@@ -120,11 +121,11 @@ export function ExecutionQuality({
       {/* Gate Pipeline Detail */}
       {Object.keys(gatePipeline).length > 0 && (
         <div>
-          <h4 className="text-xs uppercase tracking-wider text-zinc-500 font-semibold mb-3">
+          <h4 className="mb-3 text-xs font-semibold tracking-wider text-zinc-500 uppercase">
             Gate Pipeline Detail
           </h4>
-          <div className="rounded-lg bg-[#0d1017] border border-white/5 p-4">
-            <pre className="text-xs text-zinc-400 font-mono whitespace-pre-wrap overflow-x-auto">
+          <div className="rounded-lg border border-white/5 bg-[#0d1017] p-4">
+            <pre className="overflow-x-auto font-mono text-xs whitespace-pre-wrap text-zinc-400">
               {JSON.stringify(gatePipeline, null, 2)}
             </pre>
           </div>

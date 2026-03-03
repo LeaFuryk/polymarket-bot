@@ -110,14 +110,16 @@ def analyze_blocked(conn: sqlite3.Connection) -> tuple[list[BlockedOrder], Block
         if reprice_rescuable:
             rescuable_reprice += 1
 
-        blocked.append(BlockedOrder(
-            candle_id=candle_id,
-            action=action,
-            risk_reason=risk_reason,
-            category=category,
-            ttl_rescuable=ttl_rescuable,
-            reprice_rescuable=reprice_rescuable,
-        ))
+        blocked.append(
+            BlockedOrder(
+                candle_id=candle_id,
+                action=action,
+                risk_reason=risk_reason,
+                category=category,
+                ttl_rescuable=ttl_rescuable,
+                reprice_rescuable=reprice_rescuable,
+            )
+        )
 
     agg = BlockedAggregate(
         total_blocked=len(blocked),

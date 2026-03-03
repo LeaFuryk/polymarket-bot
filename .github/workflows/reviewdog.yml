@@ -1,0 +1,93 @@
+name: Reviewdog
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  eslint:
+    name: Reviewdog - ESLint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: dashboard-next/package-lock.json
+
+      - name: Install deps
+        run: npm ci
+        working-directory: dashboard-next
+
+      - name: ESLint via reviewdog
+        uses: reviewdog/action-eslint@v1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          reporter: github-pr-review
+          filter_mode: added
+          level: error
+          fail_level: error
+          workdir: dashboard-next
+          eslint_flags: "src/"
+
+  prettier:
+    name: Reviewdog - Prettier
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: dashboard-next/package-lock.json
+
+      - name: Install deps
+        run: npm ci
+        working-directory: dashboard-next
+
+      - name: Prettier via reviewdog
+        uses: EPMatt/reviewdog-action-prettier@v1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          reporter: github-pr-review
+          filter_mode: added
+          level: error
+          fail_level: error
+          workdir: dashboard-next
+          prettier_flags: "src/**/*.{ts,tsx,js,css}"
+
+  ruff:
+    name: Reviewdog - Ruff
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up reviewdog
+        uses: reviewdog/action-setup@v1
+        with:
+          reviewdog_version: latest
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Install deps
+        run: uv sync --extra dev
+
+      - name: Ruff via reviewdog
+        env:
+          REVIEWDOG_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          uv run ruff check --output-format=rdjson src/ tests/ |
+            reviewdog -f=rdjson -name="ruff" -reporter=github-pr-review -filter-mode=added -level=error -fail-level=error

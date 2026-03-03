@@ -26,23 +26,23 @@ from __future__ import annotations
 import json
 import logging
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
 # Feature names in fixed order
 FEATURE_NAMES = [
-    "streak_signed",      # positive=up streak, negative=down streak
-    "streak_magnitude",   # $ move during streak
-    "btc_vs_open",        # current BTC - candle open
-    "volatility_30m",     # avg candle range
-    "volume_ratio",       # recent/prior volume
-    "up_midpoint",        # UP token midpoint (market-implied prob)
-    "down_midpoint",      # DOWN token midpoint
-    "book_imbalance",     # UP bid_depth / ask_depth
-    "flat_ratio",         # fraction of flat candles
-    "reversal_rate",      # rolling reversal rate from adaptive entry (0-1)
+    "streak_signed",  # positive=up streak, negative=down streak
+    "streak_magnitude",  # $ move during streak
+    "btc_vs_open",  # current BTC - candle open
+    "volatility_30m",  # avg candle range
+    "volume_ratio",  # recent/prior volume
+    "up_midpoint",  # UP token midpoint (market-implied prob)
+    "down_midpoint",  # DOWN token midpoint
+    "book_imbalance",  # UP bid_depth / ask_depth
+    "flat_ratio",  # fraction of flat candles
+    "reversal_rate",  # rolling reversal rate from adaptive entry (0-1)
 ]
 
 NUM_FEATURES = len(FEATURE_NAMES)
@@ -104,7 +104,8 @@ class MLScorer:
             elif self._training_samples > 0:
                 logger.info(
                     "Loaded ML model: %d training samples, bias=%.4f",
-                    self._training_samples, self._bias,
+                    self._training_samples,
+                    self._bias,
                 )
         except Exception:
             logger.warning("Could not load ML model", exc_info=True)
@@ -112,19 +113,25 @@ class MLScorer:
     def _save(self) -> None:
         """Save model weights to disk."""
         try:
-            self._model_path.write_text(json.dumps({
-                "weights": [round(w, 6) for w in self._weights],
-                "bias": round(self._bias, 6),
-                "training_samples": self._training_samples,
-                "feature_names": FEATURE_NAMES,
-            }, indent=2) + "\n")
+            self._model_path.write_text(
+                json.dumps(
+                    {
+                        "weights": [round(w, 6) for w in self._weights],
+                        "bias": round(self._bias, 6),
+                        "training_samples": self._training_samples,
+                        "feature_names": FEATURE_NAMES,
+                    },
+                    indent=2,
+                )
+                + "\n"
+            )
         except Exception:
             logger.warning("Could not save ML model", exc_info=True)
 
     def _compute_score(self, features: list[float]) -> float:
         """Compute raw logistic regression score (before sigmoid)."""
         score = self._bias
-        for w, x in zip(self._weights, features):
+        for w, x in zip(self._weights, features, strict=True):
             score += w * x
         return score
 
@@ -197,7 +204,10 @@ class MLScorer:
 
         logger.debug(
             "ML model updated: sample=%d, pred=%.3f, actual=%s, error=%.3f",
-            self._training_samples, pred, "UP" if up_won else "DOWN", error,
+            self._training_samples,
+            pred,
+            "UP" if up_won else "DOWN",
+            error,
         )
 
     @staticmethod
@@ -208,18 +218,18 @@ class MLScorer:
         statistics (avoids cold-start issues).
         """
         scales = [
-            5.0,     # streak_signed: typically -6 to +6
-            200.0,   # streak_magnitude: typically -$500 to +$500
-            100.0,   # btc_vs_open: typically -$200 to +$200
-            100.0,   # volatility_30m: typically $10 to $300
-            1.0,     # volume_ratio: typically 0.3 to 3.0 (already scaled)
-            1.0,     # up_midpoint: 0 to 1
-            1.0,     # down_midpoint: 0 to 1
-            2.0,     # book_imbalance: typically 0.3 to 3.0
-            1.0,     # flat_ratio: 0 to 1
-            1.0,     # reversal_rate: 0 to 1 (already scaled)
+            5.0,  # streak_signed: typically -6 to +6
+            200.0,  # streak_magnitude: typically -$500 to +$500
+            100.0,  # btc_vs_open: typically -$200 to +$200
+            100.0,  # volatility_30m: typically $10 to $300
+            1.0,  # volume_ratio: typically 0.3 to 3.0 (already scaled)
+            1.0,  # up_midpoint: 0 to 1
+            1.0,  # down_midpoint: 0 to 1
+            2.0,  # book_imbalance: typically 0.3 to 3.0
+            1.0,  # flat_ratio: 0 to 1
+            1.0,  # reversal_rate: 0 to 1 (already scaled)
         ]
-        return [xi / s if s != 0 else xi for xi, s in zip(x, scales)]
+        return [xi / s if s != 0 else xi for xi, s in zip(x, scales, strict=True)]
 
     def extract_features(
         self,
@@ -260,6 +270,7 @@ class MLScorer:
             # Volatility
             recent = candles[-6:] if len(candles) >= 6 else candles
             import statistics
+
             ranges = [c.high - c.low for c in recent]
             features["volatility_30m"] = statistics.mean(ranges) if ranges else 0.0
 
@@ -277,13 +288,15 @@ class MLScorer:
             flat_count = sum(1 for c in recent if abs(c.close - c.open) < 5.0)
             features["flat_ratio"] = flat_count / len(recent) if recent else 0.0
         else:
-            features.update({
-                "streak_signed": 0.0,
-                "streak_magnitude": 0.0,
-                "volatility_30m": 0.0,
-                "volume_ratio": 1.0,
-                "flat_ratio": 0.0,
-            })
+            features.update(
+                {
+                    "streak_signed": 0.0,
+                    "streak_magnitude": 0.0,
+                    "volatility_30m": 0.0,
+                    "volume_ratio": 1.0,
+                    "flat_ratio": 0.0,
+                }
+            )
 
         # BTC vs candle open
         if btc_price and candle_open:
@@ -315,10 +328,5 @@ class MLScorer:
         indexed = [(abs(w), FEATURE_NAMES[i], w) for i, w in enumerate(self._weights)]
         indexed.sort(reverse=True)
         top = indexed[:5]
-        weight_str = ", ".join(
-            f"{name}={w:+.3f}" for _, name, w in top
-        )
-        return (
-            f"ML Model ({self._training_samples} samples): "
-            f"bias={self._bias:+.3f}, top weights: {weight_str}"
-        )
+        weight_str = ", ".join(f"{name}={w:+.3f}" for _, name, w in top)
+        return f"ML Model ({self._training_samples} samples): bias={self._bias:+.3f}, top weights: {weight_str}"

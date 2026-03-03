@@ -7,12 +7,12 @@ import json
 import shutil
 import sqlite3
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from rich.console import Console
 
-from polybot.analysis.report import _compute_stats, _load_records
+from polybot.analysis.report import _load_records
 
 ROOT = Path.cwd()
 ARCHIVE_DIR = ROOT / "archive"
@@ -49,11 +49,7 @@ DATA_FILES = [
 def _next_iter_label() -> str:
     """Auto-generate the next iter_NNN label."""
     ARCHIVE_DIR.mkdir(parents=True, exist_ok=True)
-    existing = sorted(
-        d.name
-        for d in ARCHIVE_DIR.iterdir()
-        if d.is_dir() and d.name.startswith("iter_")
-    )
+    existing = sorted(d.name for d in ARCHIVE_DIR.iterdir() if d.is_dir() and d.name.startswith("iter_"))
     if not existing:
         return "iter_001"
     last_num = max(int(d.split("_")[1]) for d in existing)
@@ -108,7 +104,7 @@ def _load_resolutions(log_dir: Path) -> list[dict]:
 def _ts_to_iso(ts: float | str) -> str:
     """Convert a timestamp (epoch float or ISO string) to ISO date string."""
     if isinstance(ts, (int, float)):
-        return datetime.fromtimestamp(ts, tz=timezone.utc).isoformat()
+        return datetime.fromtimestamp(ts, tz=UTC).isoformat()
     return str(ts)
 
 
@@ -146,10 +142,7 @@ def _compute_summary(label: str, dest: Path) -> dict:
 
     # Trade counts
     total_cycles = len(records)
-    total_trades = sum(
-        1 for r in records
-        if r.get("action") != "HOLD" and r.get("fill_size", 0) > 0
-    )
+    total_trades = sum(1 for r in records if r.get("action") != "HOLD" and r.get("fill_size", 0) > 0)
 
     # Final portfolio state from last trade record
     final_cash = records[-1].get("cash", 0) if records else 0
@@ -171,13 +164,9 @@ def _compute_summary(label: str, dest: Path) -> dict:
         with open(feature_config_file) as fh:
             fc = json.load(fh)
             if isinstance(fc, list):
-                enabled_indicators = [
-                    f.get("name", "") for f in fc if f.get("enabled")
-                ]
+                enabled_indicators = [f.get("name", "") for f in fc if f.get("enabled")]
             elif isinstance(fc, dict) and "indicators" in fc:
-                enabled_indicators = [
-                    f.get("name", "") for f in fc["indicators"] if f.get("enabled")
-                ]
+                enabled_indicators = [f.get("name", "") for f in fc["indicators"] if f.get("enabled")]
 
     # Candle count from SQLite if available
     total_candles = len(resolutions)
@@ -207,6 +196,7 @@ def _compute_summary(label: str, dest: Path) -> dict:
             pass
     if bot_version == "unknown":
         from importlib.metadata import version as _pkg_version
+
         try:
             bot_version = "v" + _pkg_version("polybot")
         except Exception:
@@ -223,7 +213,7 @@ def _compute_summary(label: str, dest: Path) -> dict:
         "label": label,
         "version": bot_version,
         "trading_mode": trading_mode,
-        "archived_at": datetime.now(timezone.utc).isoformat(),
+        "archived_at": datetime.now(UTC).isoformat(),
         "date_range": {"start": date_start, "end": date_end},
         "total_candles": total_candles,
         "total_trades": total_trades,
@@ -345,9 +335,7 @@ def main() -> None:
         replay_stats = replay_all_candles(archived_db)
         if replay_stats.get("candles_replayed", 0) > 0:
             # Strip per_candle detail for summary.json (keep it compact)
-            summary["replay"] = {
-                k: v for k, v in replay_stats.items() if k != "per_candle"
-            }
+            summary["replay"] = {k: v for k, v in replay_stats.items() if k != "per_candle"}
 
     summary_path = dest / "summary.json"
     with open(summary_path, "w") as fh:

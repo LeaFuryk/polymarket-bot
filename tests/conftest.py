@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import sqlite3
-import time
 
 import pytest
 
@@ -176,27 +175,116 @@ def sample_decisions(tmp_db, sample_candle):
 
     decisions = [
         # Filled BUY
-        (sample_candle, BASE_TS + 10, 1, "entry", "BUY", "UP", 0.75, "bullish", "up trend",
-         20.0, 0.54, 20.0, 5.0, 0.002, 0, None, 100.0, 100.0, 0.0, 0.0,
-         0.01, 500.0, '{"momentum": {"value": 0.7, "label": "bullish"}}',
-         json.dumps(live_order_filled)),
+        (
+            sample_candle,
+            BASE_TS + 10,
+            1,
+            "entry",
+            "BUY",
+            "UP",
+            0.75,
+            "bullish",
+            "up trend",
+            20.0,
+            0.54,
+            20.0,
+            5.0,
+            0.002,
+            0,
+            None,
+            100.0,
+            100.0,
+            0.0,
+            0.0,
+            0.01,
+            500.0,
+            '{"momentum": {"value": 0.7, "label": "bullish"}}',
+            json.dumps(live_order_filled),
+        ),
         # Timed-out BUY
-        (sample_candle, BASE_TS + 60, 2, "entry", "BUY", "UP", 0.65, "maybe up", "uncertain",
-         20.0, None, None, None, None, 0, None, 80.0, 80.0, 20.0, 0.0,
-         0.01, 450.0, '{"momentum": {"value": 0.5, "label": "neutral"}}',
-         json.dumps(live_order_timeout)),
+        (
+            sample_candle,
+            BASE_TS + 60,
+            2,
+            "entry",
+            "BUY",
+            "UP",
+            0.65,
+            "maybe up",
+            "uncertain",
+            20.0,
+            None,
+            None,
+            None,
+            None,
+            0,
+            None,
+            80.0,
+            80.0,
+            20.0,
+            0.0,
+            0.01,
+            450.0,
+            '{"momentum": {"value": 0.5, "label": "neutral"}}',
+            json.dumps(live_order_timeout),
+        ),
         # Filled SELL
-        (sample_candle, BASE_TS + 200, 3, "exit", "SELL", "UP", 0.80, "taking profit", "profit",
-         20.0, 0.60, 20.0, 3.0, 0.003, 0, None, 88.0, 108.0, 20.0, 0.0,
-         0.01, 400.0, '{"momentum": {"value": -0.3, "label": "bearish"}}',
-         json.dumps(live_order_sell)),
+        (
+            sample_candle,
+            BASE_TS + 200,
+            3,
+            "exit",
+            "SELL",
+            "UP",
+            0.80,
+            "taking profit",
+            "profit",
+            20.0,
+            0.60,
+            20.0,
+            3.0,
+            0.003,
+            0,
+            None,
+            88.0,
+            108.0,
+            20.0,
+            0.0,
+            0.01,
+            400.0,
+            '{"momentum": {"value": -0.3, "label": "bearish"}}',
+            json.dumps(live_order_sell),
+        ),
     ]
 
     # Also a blocked decision
     decisions.append(
-        (sample_candle, BASE_TS + 120, 4, "entry", "BUY", "DOWN", 0.60, "blocked", "risk",
-         20.0, None, None, None, None, 1, "kill switch active", 80.0, 80.0, 20.0, 0.0,
-         0.0, 0.0, '{}', ''),
+        (
+            sample_candle,
+            BASE_TS + 120,
+            4,
+            "entry",
+            "BUY",
+            "DOWN",
+            0.60,
+            "blocked",
+            "risk",
+            20.0,
+            None,
+            None,
+            None,
+            None,
+            1,
+            "kill switch active",
+            80.0,
+            80.0,
+            20.0,
+            0.0,
+            0.0,
+            0.0,
+            "{}",
+            "",
+        ),
     )
 
     for d in decisions:
@@ -234,14 +322,34 @@ def sample_snapshots(tmp_db, sample_candle):
         up_bid = up_ask - 0.02
         up_mid = (up_ask + up_bid) / 2
 
-        snapshots.append((
-            sample_candle, ts, 300 - i,
-            up_bid, up_ask, up_mid, 0.04, 100.0, 100.0,
-            1 - up_bid, 1 - up_ask, 1 - up_mid, 0.04, 100.0, 100.0,
-            1.5, 1.5,
-            65000.0 + i * 0.5, i * 0.5 / 65000 * 100,
-            0, None, 1, None, None,
-        ))
+        snapshots.append(
+            (
+                sample_candle,
+                ts,
+                300 - i,
+                up_bid,
+                up_ask,
+                up_mid,
+                0.04,
+                100.0,
+                100.0,
+                1 - up_bid,
+                1 - up_ask,
+                1 - up_mid,
+                0.04,
+                100.0,
+                100.0,
+                1.5,
+                1.5,
+                65000.0 + i * 0.5,
+                i * 0.5 / 65000 * 100,
+                0,
+                None,
+                1,
+                None,
+                None,
+            )
+        )
 
     for s in snapshots:
         tmp_db.execute(
