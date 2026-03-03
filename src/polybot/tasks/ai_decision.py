@@ -40,6 +40,7 @@ from polybot.prefilter import PreFilter
 from polybot.resolution import ResolutionTracker
 from polybot.risk.manager import RiskManager
 from polybot.shared_state import EntryContext, PreFilterSnapshot, SharedState
+from polybot.shared_state.stop_loss_record import StopLossRecord
 from polybot.simulator.engine import ExecutionSimulator
 from polybot.simulator.orderbook import SimulatedOrderBook
 from polybot.simulator.portfolio import Portfolio
@@ -704,11 +705,11 @@ class AIDecision:
 
             # Safeguard #3: Record stop-loss exit for cooldown warning
             if trigger_type == "stop_loss":
-                self._shared.last_stop_loss = {
-                    "token_side": token_side_str,
-                    "pnl_pct": pnl_pct,
-                    "timestamp": time.time(),
-                }
+                self._shared.last_stop_loss = StopLossRecord(
+                    token_side=token_side_str,
+                    pnl_pct=pnl_pct,
+                    timestamp=time.time(),
+                )
 
             # --- Contrarian flip (post-SL only) ---
             # After SL, if position closed and BTC confirms reversal,
@@ -1024,7 +1025,7 @@ class AIDecision:
             sl_warning = (
                 f"\n\n## POST-STOP-LOSS WARNING\n"
                 f"A stop-loss exit just occurred on this candle "
-                f"({sl_info['token_side'].upper()} at {sl_info['pnl_pct']:+.1%}).\n"
+                f"({sl_info.token_side.upper()} at {sl_info.pnl_pct:+.1%}).\n"
                 f"Re-entering immediately is high-risk — the price moved against you and may continue.\n"
                 f"If you choose to re-enter, use smaller size and higher conviction threshold."
             )
