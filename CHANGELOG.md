@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 ## [v0.15.0] — 2026-03-02
 
+### Added — Reviewdog PR reviews
+
+Added a `reviewdog.yml` workflow that runs on every pull request and posts inline review comments on new/changed lines only (`filter_mode: added`):
+
+- **Reviewdog - ESLint** — `reviewdog/action-eslint@v1` with `eslint-config-next/core-web-vitals` on `dashboard-next/src/`
+- **Reviewdog - Prettier** — `EPMatt/reviewdog-action-prettier@v1` with Tailwind plugin, posts one-click code suggestions
+- **Reviewdog - Ruff** — DIY via `ruff check --output-format=rdjson` piped to `reviewdog`, covers `src/` + `tests/`
+
+All three jobs use `fail_level: error` and `reporter: github-pr-review` so they block merges and comment directly on the PR diff. Configure as required status checks in repo Settings → Branches → Branch protection rules.
+
 ### Added — ESLint + Prettier for dashboard-next
 
 Integrated ESLint (via `eslint-config-next/core-web-vitals`) and Prettier (with `prettier-plugin-tailwindcss`) for the Next.js dashboard:
