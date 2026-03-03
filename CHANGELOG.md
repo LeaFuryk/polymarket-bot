@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 ## [v0.15.0] — 2026-03-02
 
+### Added — Release workflow
+
+Added a `release.yml` on-demand workflow (`workflow_dispatch`) that automates the full release cycle:
+
+- **Validates** that `pyproject.toml` and `CHANGELOG.md` versions match, and the tag doesn't already exist
+- **Extracts** release notes from the current CHANGELOG section
+- **Lists** merged PRs since the previous tag (via `gh pr list`)
+- **Creates** a GitHub tag + release with combined changelog notes and PR list
+- **Bumps** the version for the next development cycle (minor or patch, user's choice) and opens a PR with the updated `pyproject.toml` and `CHANGELOG.md`
+
+Trigger from Actions → "Release - Tag & Bump" → Run workflow → choose `minor` (default) or `patch`.
+
 ### Added — Reviewdog PR reviews
 
 Added a `reviewdog.yml` workflow that runs on every pull request and posts inline review comments on new/changed lines only (`filter_mode: added`):
