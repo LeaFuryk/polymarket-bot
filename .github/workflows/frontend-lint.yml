@@ -5,6 +5,10 @@ on:
     branches: [main]
     paths:
       - "dashboard-next/**"
+  pull_request:
+    branches: [main]
+    paths:
+      - "dashboard-next/**"
 
 jobs:
   lint:
