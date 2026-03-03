@@ -2,6 +2,9 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v0.17.0] — Unreleased
+
+
 ## [v0.16.0] — 2026-03-03
 
 ### Added — GitHub App integration for automated PRs
