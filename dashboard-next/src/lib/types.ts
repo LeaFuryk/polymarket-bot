@@ -210,10 +210,19 @@ export interface IterationExitAnalysis {
   total_missed: number;
 }
 
+export interface IterationLiveTrading {
+  mode: string;
+  dry_run: boolean;
+  wallet_balance: number;
+  shadow_paper_pnl: number;
+  execution_cost: number;
+}
+
 export interface IterationSummary {
   // Core fields from summary.json
   label: string;
   version: string;
+  trading_mode?: "paper" | "live" | "dry_run";
   archived_at?: string;
   date_range?: { start: string; end: string };
   total_candles: number;
@@ -240,6 +249,7 @@ export interface IterationSummary {
   ml_model?: { training_samples: number; model_trained: boolean };
   observations?: Array<{ category: string; text: string; timestamp: string }>;
   session_history?: string;
+  live_trading?: IterationLiveTrading;
 }
 
 export interface EnsembleStats {
