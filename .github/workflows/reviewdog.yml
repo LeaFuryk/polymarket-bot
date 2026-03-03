@@ -91,3 +91,32 @@ jobs:
         run: |
           uv run ruff check --output-format=rdjson src/ tests/ |
             reviewdog -f=rdjson -name="ruff" -reporter=github-pr-review -filter-mode=added -level=error -fail-level=error
+
+  mypy:
+    name: Reviewdog - mypy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up reviewdog
+        uses: reviewdog/action-setup@v1
+        with:
+          reviewdog_version: latest
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Install deps
+        run: uv sync --extra dev
+
+      - name: mypy via reviewdog
+        env:
+          REVIEWDOG_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          uv run mypy src/ --no-error-summary 2>&1 |
+            reviewdog -efm="%f:%l: %t%*[a-z]: %m" \
+              -name="mypy" \
+              -reporter=github-pr-review \
+              -filter-mode=added \
+              -fail-level=error
