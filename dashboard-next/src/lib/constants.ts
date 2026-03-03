@@ -16,8 +16,7 @@ export const THEME = {
   },
 } as const;
 
-export const WS_URL =
-  process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8765";
+export const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8765";
 
 export const FORENSICS_API_URL =
   process.env.NEXT_PUBLIC_FORENSICS_API_URL || "http://localhost:8888/api";

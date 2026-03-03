@@ -65,8 +65,6 @@ export function AnimatedNumber({
         : "";
 
   return (
-    <span className={`${className} ${flashClass}`}>
-      {format(display)}
-    </span>
+    <span className={`${className} ${flashClass}`}>{format(display)}</span>
   );
 }

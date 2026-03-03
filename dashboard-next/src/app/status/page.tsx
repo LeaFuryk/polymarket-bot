@@ -14,15 +14,15 @@ export default function StatusPage() {
   const [tab, setTab] = useState<Tab>("infra");
 
   return (
-    <div className="max-w-7xl mx-auto space-y-6">
+    <div className="mx-auto max-w-7xl space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-lg font-semibold text-zinc-200">Live Status</h1>
-        <div className="flex rounded-lg bg-[#0d1017] border border-white/5 p-0.5">
+        <div className="flex rounded-lg border border-white/5 bg-[#0d1017] p-0.5">
           {(["infra", "execution"] as Tab[]).map((t) => (
             <button
               key={t}
               onClick={() => setTab(t)}
-              className={`px-4 py-1.5 text-xs font-medium rounded-md transition-colors ${
+              className={`rounded-md px-4 py-1.5 text-xs font-medium transition-colors ${
                 tab === t
                   ? "bg-white/5 text-zinc-100"
                   : "text-zinc-500 hover:text-zinc-300"

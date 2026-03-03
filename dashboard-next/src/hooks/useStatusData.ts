@@ -29,10 +29,14 @@ export function useStatusData(ws: WSData) {
     return {
       risk: s?.risk ?? snap?.risk ?? null,
       ensemble: s?.ensemble ?? snap?.ensemble ?? null,
-      ai_cooldown: s?.monitor?.ai_cooldown_remaining ??
-        snap?.monitor?.ai_cooldown_remaining ?? 0,
-      last_trigger: s?.monitor?.last_trigger_reason ??
-        snap?.monitor?.last_trigger_reason ?? "",
+      ai_cooldown:
+        s?.monitor?.ai_cooldown_remaining ??
+        snap?.monitor?.ai_cooldown_remaining ??
+        0,
+      last_trigger:
+        s?.monitor?.last_trigger_reason ??
+        snap?.monitor?.last_trigger_reason ??
+        "",
       gate_pipeline: s?.monitor?.status ?? snap?.monitor?.status ?? {},
     };
   }, [status, snapshot]);

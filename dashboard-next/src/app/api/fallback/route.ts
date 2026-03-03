@@ -11,7 +11,7 @@ export async function GET() {
   } catch {
     return NextResponse.json(
       { error: "dashboard_data.json not available" },
-      { status: 404 }
+      { status: 404 },
     );
   }
 }
