@@ -16,6 +16,8 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **`config`** — Converted from single `config.py` module to a package (`config/`) with each config class in its own file; extracted all hardcoded defaults into `constants.py`; added `ConfigLoader` class; added field validators for `min_confidence` and risk percentage fields
 
 ### Added
+- **`market_data/protocol.py`** — `MarketDataRepository` protocol defining the external data access contract for all market data sources
+- **`market_data/README.md`** — Module README documenting architecture, data flow, data sources, and key consumers
 - **CI** — Added mypy type checking to reviewdog workflow; only new type errors on changed lines trigger PR comments
 - **`tests/test_shared_state.py`** — 17 unit tests covering constants, all dataclasses, and SharedState initialization
 - **`src/polybot/shared_state/README.md`** — Module README documenting package architecture, state sections, and ownership
