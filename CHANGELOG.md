@@ -27,7 +27,7 @@ Integrated ESLint (via `eslint-config-next/core-web-vitals`) and Prettier (with 
 
 ### Changed — CI workflow naming + path filtering
 
-Renamed all GitHub Actions workflow checks for consistency, split the Python workflow into parallel jobs, and added `paths` filters so workflows only run when relevant code changes:
+Renamed all GitHub Actions workflow checks for consistency, split the Python workflow into parallel jobs, and added `paths` filters so workflows only run when relevant code changes. All workflows now trigger on both `push` and `pull_request` to `main`, so every check can be configured as a required status check:
 
 - **`frontend-lint.yml`** (new) — "Next Dashboard - Lint": ESLint + Prettier check (runs on `dashboard-next/**` changes only)
 - **`frontend.yml`** — Renamed to "Next Dashboard - Tests" (runs on `dashboard-next/**` changes only)
