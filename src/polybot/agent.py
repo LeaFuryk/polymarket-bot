@@ -208,6 +208,17 @@ class TradingAgent:
         self._outage_recovered: float | None = None  # epoch when recovered (shown briefly)
         self._last_outage_duration: float = 0.0  # seconds of last outage
 
+        # WebSocket dashboard server
+        from polybot.ws.broadcaster import DashboardBroadcaster
+        from polybot.ws.server import DashboardWSServer
+
+        self._ws_broadcaster = DashboardBroadcaster()
+        self._ws_server = DashboardWSServer(
+            broadcaster=self._ws_broadcaster,
+            port=config.logging.ws_port,
+        )
+        self._ws_server._initial_snapshot_builder = lambda: self._ws_broadcaster.build_snapshot(self)
+
         # Dashboard state
         self._last_action = "—"
         self._last_reasoning = ""
@@ -337,11 +348,23 @@ class TradingAgent:
         if self._datastore is not None:
             self._ai_decision._datastore = self._datastore
 
+        # Wire up WS trade event push
+        async def _on_trade(record):
+            if self._ws_broadcaster.has_clients:
+                await self._ws_broadcaster.broadcast(
+                    self._ws_broadcaster.build_trade_event(record)
+                )
+        self._ai_decision.on_trade_callback = _on_trade
+
         self._position_monitor = PositionMonitor(
             config=self._config,
             shared=self._shared,
             portfolio=self._portfolio,
         )
+
+        # Start WebSocket server
+        if self._config.logging.ws_enabled:
+            await self._ws_server.start()
 
         # Launch all tasks concurrently
         tasks = [
@@ -351,6 +374,10 @@ class TradingAgent:
             asyncio.create_task(self._rotation_loop(), name="rotation_loop"),
             asyncio.create_task(self._dashboard_loop(), name="dashboard_loop"),
         ]
+        if self._config.logging.ws_enabled:
+            tasks.append(
+                asyncio.create_task(self._ws_broadcast_loop(), name="ws_broadcast")
+            )
         if self._live_mode and self._live_engine:
             tasks.append(
                 asyncio.create_task(self._balance_sync_loop(), name="balance_sync")
@@ -590,7 +617,7 @@ class TradingAgent:
         logger.info("RotationLoop stopped")
 
     async def _dashboard_loop(self) -> None:
-        """Writes dashboard JSON from shared state (every 2s)."""
+        """Writes dashboard JSON + broadcasts WS snapshot (every 2s)."""
         logger.info("DashboardLoop started")
         while not self._shared.shutdown:
             try:
@@ -598,10 +625,36 @@ class TradingAgent:
                 snapshot = self._shared.latest_snapshot
                 if snapshot is not None:
                     self._write_dashboard_json(0, snapshot)
+                    # Broadcast snapshot + status to WS clients
+                    if self._ws_broadcaster.has_clients:
+                        await self._ws_broadcaster.broadcast(
+                            self._ws_broadcaster.build_snapshot(self)
+                        )
+                        await self._ws_broadcaster.broadcast(
+                            self._ws_broadcaster.build_status_update(self)
+                        )
+                        self._shared.ws_client_count = self._ws_broadcaster.client_count
             except Exception:
                 logger.debug("DashboardLoop error", exc_info=True)
             await asyncio.sleep(2.0)
         logger.info("DashboardLoop stopped")
+
+    async def _ws_broadcast_loop(self) -> None:
+        """Push lightweight market + position updates via WS (every 1s)."""
+        logger.info("WSBroadcastLoop started")
+        while not self._shared.shutdown:
+            try:
+                if self._ws_broadcaster.has_clients:
+                    await self._ws_broadcaster.broadcast(
+                        self._ws_broadcaster.build_market_update(self)
+                    )
+                    await self._ws_broadcaster.broadcast(
+                        self._ws_broadcaster.build_position_update(self)
+                    )
+            except Exception:
+                logger.debug("WSBroadcastLoop error", exc_info=True)
+            await asyncio.sleep(1.0)
+        logger.info("WSBroadcastLoop stopped")
 
     async def _balance_sync_loop(self) -> None:
         """Periodically syncs wallet balance and checks kill switch (live mode only)."""
@@ -841,6 +894,13 @@ class TradingAgent:
 
                 self._recent_resolutions.append(resolution)
                 self._session_resolutions.append(resolution)  # uncapped — for dashboard
+
+                # Push resolution event to WS clients
+                if self._ws_broadcaster.has_clients:
+                    await self._ws_broadcaster.broadcast(
+                        self._ws_broadcaster.build_resolution_event(resolution)
+                    )
+
                 if len(self._recent_resolutions) > 20:
                     self._recent_resolutions = self._recent_resolutions[-20:]
 
@@ -961,320 +1021,326 @@ class TradingAgent:
             "market_trend_label": label,
         }
 
-    def _write_dashboard_json(self, cycle: int, snapshot) -> None:
-        """Write dashboard_data.json for the web dashboard."""
+    def _assemble_dashboard_data(self) -> dict:
+        """Assemble full dashboard state as a dict (used by both JSON writer and WS)."""
         from datetime import datetime, timezone
 
+        snapshot = self._shared.latest_snapshot
+        up_mid = snapshot.orderbook.midpoint if snapshot else None
+        down_mid = snapshot.down_orderbook.midpoint if snapshot else None
+        portfolio_value = self._portfolio.total_value_at_market(
+            up_mid or 0.5, down_mid
+        )
+
+        total_games = self._session_wins + self._session_losses
+        win_rate = (self._session_wins / total_games * 100) if total_games > 0 else 0.0
+
+        # Build current market info
+        current_market = {}
+        if self._current_market:
+            m = self._current_market
+            current_market = {
+                "slug": m.slug,
+                "title": m.title,
+                "polymarket_url": f"https://polymarket.com/event/{m.slug}",
+                "time_remaining": m.time_remaining(),
+                "up_mid": up_mid,
+                "down_mid": down_mid,
+            }
+
+        # BTC info
+        btc_info = {}
+        if snapshot and snapshot.btc_price:
+            btc_info = {
+                "price_usd": snapshot.btc_price.price_usd,
+                "change_24h_pct": snapshot.btc_price.change_24h_pct,
+                "last_candle_direction": (
+                    snapshot.btc_candles[-1].direction if snapshot.btc_candles else "unknown"
+                ),
+                "chainlink_price": snapshot.btc_price.chainlink_price,
+                "price_divergence": snapshot.btc_price.price_divergence,
+                "price_source": snapshot.btc_price.price_source,
+                "candle_sources": {
+                    "chainlink": sum(1 for c in snapshot.btc_candles if c.source == "chainlink_ws"),
+                    "binance": sum(1 for c in snapshot.btc_candles if c.source == "binance"),
+                    "total": len(snapshot.btc_candles),
+                },
+            }
+
+        # Positions
+        positions = {
+            "up_shares": self._portfolio.up_position.shares,
+            "up_avg_entry": self._portfolio.up_position.avg_entry_price,
+            "down_shares": self._portfolio.down_position.shares,
+            "down_avg_entry": self._portfolio.down_position.avg_entry_price,
+        }
+
+        # Position P&L from position monitor
+        position_pnl = dict(self._shared.position_pnl_pct)
+
+        # Dynamic SL/TP from position monitor
+        dynamic_sl = dict(self._shared.dynamic_sl)
+        dynamic_tp = dict(self._shared.dynamic_tp)
+
+        # Trades list
+        trades = []
+        for t in self._session_trades:
+            trade_entry = {
+                "timestamp": datetime.fromtimestamp(t.timestamp, tz=timezone.utc).isoformat(),
+                "cycle": t.cycle_number,
+                "action": t.action.value,
+                "token_side": t.token_side.value,
+                "size": t.decision_size,
+                "fill_price": t.fill_price,
+                "confidence": t.confidence,
+                "reasoning": t.reasoning,
+                "market_view": t.market_view,
+                "candle_slug": t.candle_slug,
+                "polymarket_url": (
+                    f"https://polymarket.com/event/{t.candle_slug}" if t.candle_slug else ""
+                ),
+                "time_remaining_at_trade": t.extra.get("time_remaining", 0),
+                "risk_blocked": t.risk_blocked,
+                "risk_block_reason": t.risk_block_reason,
+                "cash": t.cash,
+                "portfolio_value": t.portfolio_value,
+                "fee": t.fee_amount,
+                "realized_pnl": t.realized_pnl,
+                "unrealized_pnl": t.unrealized_pnl,
+                "ai_cost": t.ai_cost,
+                "screen_passed": t.extra.get("screen_passed"),
+                "screen_input": t.extra.get("screen_input"),
+                "live_order": t.extra.get("live_order"),
+            }
+            trades.append(trade_entry)
+
+        # Resolutions list (use uncapped session list, not the reflection window)
+        resolutions = []
+        for r in self._session_resolutions:
+            resolutions.append({
+                "timestamp": datetime.fromtimestamp(r.timestamp, tz=timezone.utc).isoformat(),
+                "slug": r.slug,
+                "winner": r.winner,
+                "btc_open": r.btc_open,
+                "btc_close": r.btc_close,
+                "btc_move": r.btc_close - r.btc_open,
+                "pnl": r.total_pnl,
+            })
+
+        # Merge historical + current session data (dedup resolutions by slug)
+        all_trades = self._historical_trades + trades
+        seen_slugs: set[str] = set()
+        all_resolutions: list[dict] = []
+        for r in self._historical_resolutions + resolutions:
+            slug = r.get("slug", "")
+            if slug and slug not in seen_slugs:
+                seen_slugs.add(slug)
+                all_resolutions.append(r)
+            elif not slug:
+                all_resolutions.append(r)
+
+        all_time_pnl = sum(r.get("pnl", 0) for r in all_resolutions)
+        all_time_wins = sum(1 for r in all_resolutions if r.get("pnl", 0) > 0.001)
+        all_time_losses = sum(1 for r in all_resolutions if r.get("pnl", 0) < -0.001)
+        all_time_total = all_time_wins + all_time_losses
+        all_time_win_rate = (all_time_wins / all_time_total * 100) if all_time_total > 0 else 0.0
+
+        # Build candle snapshot timelines from datastore
+        candle_snapshots: dict = {}
+        if self._datastore and self._datastore._conn:
+            try:
+                cursor = self._datastore._conn.execute("""
+                    SELECT c.slug, c.winner, c.btc_open,
+                           s.time_remaining, s.up_mid, s.down_mid,
+                           s.btc_move_from_open, s.prefilter_passed, s.prefilter_reasons,
+                           s.indicators_json, s.up_spread_pct, s.down_spread_pct,
+                           s.up_bid_depth, s.down_bid_depth, s.btc_price,
+                           s.up_best_ask, s.down_best_ask,
+                           s.rr_up, s.rr_down,
+                           s.streak, s.streak_direction
+                    FROM snapshots s
+                    JOIN candles c ON s.candle_id = c.candle_id
+                    ORDER BY c.candle_id, s.timestamp
+                """)
+                current_slug = None
+                sample_counter = 0
+                for row in cursor:
+                    slug = row[0]
+                    if slug != current_slug:
+                        current_slug = slug
+                        sample_counter = 0
+                        candle_snapshots[slug] = {
+                            "winner": row[1],
+                            "btc_open": row[2],
+                            "points": [],
+                        }
+                    sample_counter += 1
+                    if sample_counter % 10 == 0:  # downsample ~every 10s
+                        candle_snapshots[slug]["points"].append({
+                            "tr": round(row[3], 0),
+                            "up": round(row[4], 4) if row[4] else None,
+                            "dn": round(row[5], 4) if row[5] else None,
+                            "btc_mv": round(row[6], 1) if row[6] else None,
+                            "pf": row[7],
+                            "pfr": row[8],
+                            "ind": row[9],
+                            "u_sp": round(row[10], 2) if row[10] else None,
+                            "d_sp": round(row[11], 2) if row[11] else None,
+                            "u_dep": round(row[12], 1) if row[12] else None,
+                            "d_dep": round(row[13], 1) if row[13] else None,
+                            "btc": round(row[14], 2) if row[14] else None,
+                            "u_ask": round(row[15], 4) if row[15] else None,
+                            "d_ask": round(row[16], 4) if row[16] else None,
+                            "rr_u": round(row[17], 3) if row[17] else None,
+                            "rr_d": round(row[18], 3) if row[18] else None,
+                            "stk": row[19],
+                            "stk_d": row[20],
+                        })
+            except Exception:
+                logger.debug("Failed to build candle snapshots", exc_info=True)
+
+        data = {
+            "bot_version": self._bot_version,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+            "session": {
+                "wins": self._session_wins,
+                "losses": self._session_losses,
+                "win_rate": win_rate,
+                "total_pnl": self._session_resolution_pnl,
+                "total_fees": self._portfolio.total_fees,
+                "total_ai_cost": self._total_api_cost,
+                "cash": self._portfolio.cash,
+                "portfolio_value": portfolio_value,
+                "initial_cash": self._config.agent.initial_cash,
+                "market_trading_pnl": self._portfolio.market_trading_pnl,
+                "cycles_run": self._ai_decision._cycle_count if self._ai_decision else 0,
+                "prefilter_skip_rate": self._prefilter.skip_rate,
+                "prefilter_skipped": self._prefilter.total_skipped,
+                "prefilter_checked": self._prefilter.total_checks,
+                "calibration_records": self._calibrator.total_records,
+            },
+            "all_time": {
+                "wins": all_time_wins,
+                "losses": all_time_losses,
+                "win_rate": all_time_win_rate,
+                "total_pnl": all_time_pnl,
+                "total_resolutions": len(all_resolutions),
+                "total_trades": len(all_trades),
+            },
+            "current_market": current_market,
+            "btc": btc_info,
+            "positions": positions,
+            "position_pnl": position_pnl,
+            "dynamic_sl": dynamic_sl,
+            "dynamic_tp": dynamic_tp,
+            "trades": all_trades,
+            "resolutions": all_resolutions,
+            "risk": {
+                "daily_pnl": self._risk.state.daily_pnl,
+                "daily_trades": self._risk.state.daily_trades,
+                "daily_fees": self._risk.state.daily_fees,
+                "max_drawdown": self._risk.state.max_drawdown,
+                "is_halted": self._risk.state.is_halted,
+            },
+            "ml_model": {
+                "training_samples": self._ml_scorer._training_samples,
+                "model_trained": self._ml_scorer._training_samples >= self._ml_scorer._min_samples,
+            },
+            "calibration": {
+                "total_records": self._calibrator.total_records,
+                "shadow_correct": self._calibrator._shadow_correct,
+                "shadow_total": self._calibrator._shadow_total,
+                "shadow_accuracy": round(
+                    self._calibrator._shadow_correct / self._calibrator._shadow_total, 3
+                ) if self._calibrator._shadow_total > 0 else None,
+                "bins": [
+                    {
+                        "range": f"{b.bin_lower:.0%}-{b.bin_upper:.0%}",
+                        "wins": b.wins,
+                        "losses": b.losses,
+                        "win_rate": round(b.win_rate, 3),
+                        "reliable": b.is_reliable,
+                    }
+                    for b in self._calibrator._bins.values()
+                    if b.total > 0
+                ],
+            },
+            "exit_analysis": {
+                "total_exits": self._exit_tracker._total_exits,
+                "good_exits": self._exit_tracker._exits_better_than_hold,
+                "good_exit_rate": round(self._exit_tracker.good_exit_rate, 3),
+                "total_saved": round(self._exit_tracker._total_saved, 4),
+                "total_missed": round(self._exit_tracker._total_missed, 4),
+            },
+            "monitor": {
+                "prefilter_snapshots": len(self._shared.prefilter_history),
+                "ai_cooldown_remaining": max(0, self._config.monitor.ai_cooldown_seconds - (time.time() - self._shared.ai_last_call_time)),
+                "last_trigger_reason": self._shared.ai_trigger_reason,
+                "status": self._shared.monitor_status,
+            },
+            "adaptive_entry": {
+                "enabled": self._config.monitor.adaptive_entry_enabled,
+                "btc_threshold": self._adaptive_entry.btc_threshold,
+                "max_entry_price": round(self._adaptive_entry.max_entry_price, 4),
+                "reversal_rate": round(self._adaptive_entry.rolling_reversal_rate, 4),
+                "regime": self._adaptive_entry.regime,
+                "signal_type": self._adaptive_entry.signal_type,
+                "has_enough_history": self._adaptive_entry.has_enough_history,
+                "window_size": self._adaptive_entry._window,
+                "history_count": len(self._adaptive_entry._history),
+                **self._compute_market_trend(snapshot),
+                **self._adaptive_entry.fakeout_stats,
+            },
+            "ensemble": {
+                "screen_calls": self._ai_decision._screen_calls,
+                "screen_passes": self._ai_decision._screen_passes,
+                "screen_pass_rate": round(
+                    self._ai_decision._screen_passes / max(1, self._ai_decision._screen_calls), 3
+                ),
+                "sonnet_trades": self._ai_decision._sonnet_trades,
+                "ml_sonnet_agree": self._ai_decision._ml_sonnet_agree,
+                "ml_sonnet_total": self._ai_decision._ml_sonnet_total,
+                "ml_sonnet_agree_rate": round(
+                    self._ai_decision._ml_sonnet_agree / max(1, self._ai_decision._ml_sonnet_total), 3
+                ),
+            },
+            "outage": {
+                "is_down": self._outage_start is not None,
+                "since": self._outage_start,
+                "duration": (time.time() - self._outage_start) if self._outage_start else 0,
+                "failures": self._discovery_failures,
+                "recovered": self._outage_recovered is not None,
+                "last_outage_duration": self._last_outage_duration,
+            },
+            "iterations": self._iteration_summaries,
+            "candle_snapshots": candle_snapshots,
+        }
+
+        # Live trading section (only in live mode)
+        if self._live_mode and self._live_engine:
+            shadow_pnl = 0.0
+            if self._shadow_portfolio:
+                shadow_pnl = self._shadow_portfolio.cash - self._config.agent.initial_cash
+            data["live_trading"] = {
+                "mode": self._config.trading.mode,
+                "dry_run": self._config.trading.dry_run,
+                "wallet_balance": self._live_engine.wallet_balance,
+                "kill_switch_active": self._live_engine.kill_switch_active,
+                "max_order_size_usd": self._config.trading.max_order_size_usd,
+                "max_session_loss_usd": self._config.trading.max_session_loss_usd,
+                "shadow_paper_pnl": shadow_pnl,
+                "execution_cost": self._session_resolution_pnl - shadow_pnl,
+            }
+
+        return data
+
+    def _write_dashboard_json(self, cycle: int, snapshot) -> None:
+        """Write dashboard_data.json for the web dashboard."""
         try:
             dashboard_path = Path(self._config.logging.log_dir) / "dashboard_data.json"
             dashboard_path.parent.mkdir(parents=True, exist_ok=True)
 
-            up_mid = snapshot.orderbook.midpoint if snapshot else None
-            down_mid = snapshot.down_orderbook.midpoint if snapshot else None
-            portfolio_value = self._portfolio.total_value_at_market(
-                up_mid or 0.5, down_mid
-            )
-
-            total_games = self._session_wins + self._session_losses
-            win_rate = (self._session_wins / total_games * 100) if total_games > 0 else 0.0
-
-            # Build current market info
-            current_market = {}
-            if self._current_market:
-                m = self._current_market
-                current_market = {
-                    "slug": m.slug,
-                    "title": m.title,
-                    "polymarket_url": f"https://polymarket.com/event/{m.slug}",
-                    "time_remaining": m.time_remaining(),
-                    "up_mid": up_mid,
-                    "down_mid": down_mid,
-                }
-
-            # BTC info
-            btc_info = {}
-            if snapshot and snapshot.btc_price:
-                btc_info = {
-                    "price_usd": snapshot.btc_price.price_usd,
-                    "change_24h_pct": snapshot.btc_price.change_24h_pct,
-                    "last_candle_direction": (
-                        snapshot.btc_candles[-1].direction if snapshot.btc_candles else "unknown"
-                    ),
-                    "chainlink_price": snapshot.btc_price.chainlink_price,
-                    "price_divergence": snapshot.btc_price.price_divergence,
-                    "price_source": snapshot.btc_price.price_source,
-                    "candle_sources": {
-                        "chainlink": sum(1 for c in snapshot.btc_candles if c.source == "chainlink_ws"),
-                        "binance": sum(1 for c in snapshot.btc_candles if c.source == "binance"),
-                        "total": len(snapshot.btc_candles),
-                    },
-                }
-
-            # Positions
-            positions = {
-                "up_shares": self._portfolio.up_position.shares,
-                "up_avg_entry": self._portfolio.up_position.avg_entry_price,
-                "down_shares": self._portfolio.down_position.shares,
-                "down_avg_entry": self._portfolio.down_position.avg_entry_price,
-            }
-
-            # Position P&L from position monitor
-            position_pnl = dict(self._shared.position_pnl_pct)
-
-            # Dynamic SL/TP from position monitor
-            dynamic_sl = dict(self._shared.dynamic_sl)
-            dynamic_tp = dict(self._shared.dynamic_tp)
-
-            # Trades list
-            trades = []
-            for t in self._session_trades:
-                trade_entry = {
-                    "timestamp": datetime.fromtimestamp(t.timestamp, tz=timezone.utc).isoformat(),
-                    "cycle": t.cycle_number,
-                    "action": t.action.value,
-                    "token_side": t.token_side.value,
-                    "size": t.decision_size,
-                    "fill_price": t.fill_price,
-                    "confidence": t.confidence,
-                    "reasoning": t.reasoning,
-                    "market_view": t.market_view,
-                    "candle_slug": t.candle_slug,
-                    "polymarket_url": (
-                        f"https://polymarket.com/event/{t.candle_slug}" if t.candle_slug else ""
-                    ),
-                    "time_remaining_at_trade": t.extra.get("time_remaining", 0),
-                    "risk_blocked": t.risk_blocked,
-                    "risk_block_reason": t.risk_block_reason,
-                    "cash": t.cash,
-                    "portfolio_value": t.portfolio_value,
-                    "fee": t.fee_amount,
-                    "realized_pnl": t.realized_pnl,
-                    "unrealized_pnl": t.unrealized_pnl,
-                    "ai_cost": t.ai_cost,
-                    "screen_passed": t.extra.get("screen_passed"),
-                    "screen_input": t.extra.get("screen_input"),
-                    "live_order": t.extra.get("live_order"),
-                }
-                trades.append(trade_entry)
-
-            # Resolutions list (use uncapped session list, not the reflection window)
-            resolutions = []
-            for r in self._session_resolutions:
-                resolutions.append({
-                    "timestamp": datetime.fromtimestamp(r.timestamp, tz=timezone.utc).isoformat(),
-                    "slug": r.slug,
-                    "winner": r.winner,
-                    "btc_open": r.btc_open,
-                    "btc_close": r.btc_close,
-                    "btc_move": r.btc_close - r.btc_open,
-                    "pnl": r.total_pnl,
-                })
-
-            # Merge historical + current session data (dedup resolutions by slug)
-            all_trades = self._historical_trades + trades
-            seen_slugs: set[str] = set()
-            all_resolutions: list[dict] = []
-            for r in self._historical_resolutions + resolutions:
-                slug = r.get("slug", "")
-                if slug and slug not in seen_slugs:
-                    seen_slugs.add(slug)
-                    all_resolutions.append(r)
-                elif not slug:
-                    all_resolutions.append(r)
-
-            all_time_pnl = sum(r.get("pnl", 0) for r in all_resolutions)
-            all_time_wins = sum(1 for r in all_resolutions if r.get("pnl", 0) > 0.001)
-            all_time_losses = sum(1 for r in all_resolutions if r.get("pnl", 0) < -0.001)
-            all_time_total = all_time_wins + all_time_losses
-            all_time_win_rate = (all_time_wins / all_time_total * 100) if all_time_total > 0 else 0.0
-
-            # Build candle snapshot timelines from datastore
-            candle_snapshots: dict = {}
-            if self._datastore and self._datastore._conn:
-                try:
-                    cursor = self._datastore._conn.execute("""
-                        SELECT c.slug, c.winner, c.btc_open,
-                               s.time_remaining, s.up_mid, s.down_mid,
-                               s.btc_move_from_open, s.prefilter_passed, s.prefilter_reasons,
-                               s.indicators_json, s.up_spread_pct, s.down_spread_pct,
-                               s.up_bid_depth, s.down_bid_depth, s.btc_price,
-                               s.up_best_ask, s.down_best_ask,
-                               s.rr_up, s.rr_down,
-                               s.streak, s.streak_direction
-                        FROM snapshots s
-                        JOIN candles c ON s.candle_id = c.candle_id
-                        ORDER BY c.candle_id, s.timestamp
-                    """)
-                    current_slug = None
-                    sample_counter = 0
-                    for row in cursor:
-                        slug = row[0]
-                        if slug != current_slug:
-                            current_slug = slug
-                            sample_counter = 0
-                            candle_snapshots[slug] = {
-                                "winner": row[1],
-                                "btc_open": row[2],
-                                "points": [],
-                            }
-                        sample_counter += 1
-                        if sample_counter % 10 == 0:  # downsample ~every 10s
-                            candle_snapshots[slug]["points"].append({
-                                "tr": round(row[3], 0),
-                                "up": round(row[4], 4) if row[4] else None,
-                                "dn": round(row[5], 4) if row[5] else None,
-                                "btc_mv": round(row[6], 1) if row[6] else None,
-                                "pf": row[7],
-                                "pfr": row[8],
-                                "ind": row[9],
-                                "u_sp": round(row[10], 2) if row[10] else None,
-                                "d_sp": round(row[11], 2) if row[11] else None,
-                                "u_dep": round(row[12], 1) if row[12] else None,
-                                "d_dep": round(row[13], 1) if row[13] else None,
-                                "btc": round(row[14], 2) if row[14] else None,
-                                "u_ask": round(row[15], 4) if row[15] else None,
-                                "d_ask": round(row[16], 4) if row[16] else None,
-                                "rr_u": round(row[17], 3) if row[17] else None,
-                                "rr_d": round(row[18], 3) if row[18] else None,
-                                "stk": row[19],
-                                "stk_d": row[20],
-                            })
-                except Exception:
-                    logger.debug("Failed to build candle snapshots", exc_info=True)
-
-            data = {
-                "bot_version": self._bot_version,
-                "updated_at": datetime.now(timezone.utc).isoformat(),
-                "session": {
-                    "wins": self._session_wins,
-                    "losses": self._session_losses,
-                    "win_rate": win_rate,
-                    "total_pnl": self._session_resolution_pnl,
-                    "total_fees": self._portfolio.total_fees,
-                    "total_ai_cost": self._total_api_cost,
-                    "cash": self._portfolio.cash,
-                    "portfolio_value": portfolio_value,
-                    "initial_cash": self._config.agent.initial_cash,
-                    "market_trading_pnl": self._portfolio.market_trading_pnl,
-                    "cycles_run": self._ai_decision._cycle_count if self._ai_decision else 0,
-                    "prefilter_skip_rate": self._prefilter.skip_rate,
-                    "prefilter_skipped": self._prefilter.total_skipped,
-                    "prefilter_checked": self._prefilter.total_checks,
-                    "calibration_records": self._calibrator.total_records,
-                },
-                "all_time": {
-                    "wins": all_time_wins,
-                    "losses": all_time_losses,
-                    "win_rate": all_time_win_rate,
-                    "total_pnl": all_time_pnl,
-                    "total_resolutions": len(all_resolutions),
-                    "total_trades": len(all_trades),
-                },
-                "current_market": current_market,
-                "btc": btc_info,
-                "positions": positions,
-                "position_pnl": position_pnl,
-                "dynamic_sl": dynamic_sl,
-                "dynamic_tp": dynamic_tp,
-                "trades": all_trades,
-                "resolutions": all_resolutions,
-                "risk": {
-                    "daily_pnl": self._risk.state.daily_pnl,
-                    "daily_trades": self._risk.state.daily_trades,
-                    "daily_fees": self._risk.state.daily_fees,
-                    "max_drawdown": self._risk.state.max_drawdown,
-                    "is_halted": self._risk.state.is_halted,
-                },
-                "ml_model": {
-                    "training_samples": self._ml_scorer._training_samples,
-                    "model_trained": self._ml_scorer._training_samples >= self._ml_scorer._min_samples,
-                },
-                "calibration": {
-                    "total_records": self._calibrator.total_records,
-                    "shadow_correct": self._calibrator._shadow_correct,
-                    "shadow_total": self._calibrator._shadow_total,
-                    "shadow_accuracy": round(
-                        self._calibrator._shadow_correct / self._calibrator._shadow_total, 3
-                    ) if self._calibrator._shadow_total > 0 else None,
-                    "bins": [
-                        {
-                            "range": f"{b.bin_lower:.0%}-{b.bin_upper:.0%}",
-                            "wins": b.wins,
-                            "losses": b.losses,
-                            "win_rate": round(b.win_rate, 3),
-                            "reliable": b.is_reliable,
-                        }
-                        for b in self._calibrator._bins.values()
-                        if b.total > 0
-                    ],
-                },
-                "exit_analysis": {
-                    "total_exits": self._exit_tracker._total_exits,
-                    "good_exits": self._exit_tracker._exits_better_than_hold,
-                    "good_exit_rate": round(self._exit_tracker.good_exit_rate, 3),
-                    "total_saved": round(self._exit_tracker._total_saved, 4),
-                    "total_missed": round(self._exit_tracker._total_missed, 4),
-                },
-                "monitor": {
-                    "prefilter_snapshots": len(self._shared.prefilter_history),
-                    "ai_cooldown_remaining": max(0, self._config.monitor.ai_cooldown_seconds - (time.time() - self._shared.ai_last_call_time)),
-                    "last_trigger_reason": self._shared.ai_trigger_reason,
-                    "status": self._shared.monitor_status,
-                },
-                "adaptive_entry": {
-                    "enabled": self._config.monitor.adaptive_entry_enabled,
-                    "btc_threshold": self._adaptive_entry.btc_threshold,
-                    "max_entry_price": round(self._adaptive_entry.max_entry_price, 4),
-                    "reversal_rate": round(self._adaptive_entry.rolling_reversal_rate, 4),
-                    "regime": self._adaptive_entry.regime,
-                    "signal_type": self._adaptive_entry.signal_type,
-                    "has_enough_history": self._adaptive_entry.has_enough_history,
-                    "window_size": self._adaptive_entry._window,
-                    "history_count": len(self._adaptive_entry._history),
-                    **self._compute_market_trend(snapshot),
-                    **self._adaptive_entry.fakeout_stats,
-                },
-                "ensemble": {
-                    "screen_calls": self._ai_decision._screen_calls,
-                    "screen_passes": self._ai_decision._screen_passes,
-                    "screen_pass_rate": round(
-                        self._ai_decision._screen_passes / max(1, self._ai_decision._screen_calls), 3
-                    ),
-                    "sonnet_trades": self._ai_decision._sonnet_trades,
-                    "ml_sonnet_agree": self._ai_decision._ml_sonnet_agree,
-                    "ml_sonnet_total": self._ai_decision._ml_sonnet_total,
-                    "ml_sonnet_agree_rate": round(
-                        self._ai_decision._ml_sonnet_agree / max(1, self._ai_decision._ml_sonnet_total), 3
-                    ),
-                },
-                "outage": {
-                    "is_down": self._outage_start is not None,
-                    "since": self._outage_start,
-                    "duration": (time.time() - self._outage_start) if self._outage_start else 0,
-                    "failures": self._discovery_failures,
-                    "recovered": self._outage_recovered is not None,
-                    "last_outage_duration": self._last_outage_duration,
-                },
-                "iterations": self._iteration_summaries,
-                "candle_snapshots": candle_snapshots,
-            }
-
-            # Live trading section (only in live mode)
-            if self._live_mode and self._live_engine:
-                shadow_pnl = 0.0
-                if self._shadow_portfolio:
-                    shadow_pnl = self._shadow_portfolio.cash - self._config.agent.initial_cash
-                data["live_trading"] = {
-                    "mode": self._config.trading.mode,
-                    "dry_run": self._config.trading.dry_run,
-                    "wallet_balance": self._live_engine.wallet_balance,
-                    "kill_switch_active": self._live_engine.kill_switch_active,
-                    "max_order_size_usd": self._config.trading.max_order_size_usd,
-                    "max_session_loss_usd": self._config.trading.max_session_loss_usd,
-                    "shadow_paper_pnl": shadow_pnl,
-                    "execution_cost": self._session_resolution_pnl - shadow_pnl,
-                }
-
+            data = self._assemble_dashboard_data()
             dashboard_path.write_text(json.dumps(data, indent=2) + "\n")
 
             # Write iterations sidecar for dashboard (separate file so it works
@@ -1466,6 +1532,7 @@ class TradingAgent:
 
     async def _shutdown_components(self) -> None:
         logger.info("Shutting down components...")
+        await self._ws_server.stop()
         await self._chainlink_ws.stop()
         if self._datastore is not None:
             await self._datastore.close()

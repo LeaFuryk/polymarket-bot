@@ -91,6 +91,8 @@ class LoggingConfig(BaseModel):
     market_history_db_path: str = "data/market_history.db"
     dashboard_enabled: bool = True
     dashboard_refresh_rate: int = 2
+    ws_enabled: bool = True
+    ws_port: int = 8765
 
 
 class TradingConfig(BaseModel):
