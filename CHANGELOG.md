@@ -8,6 +8,7 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Changed
+- **`resolution`** — Refactored to package separating pure checker logic from async Polymarket verification; extracted price thresholds to constants; 27 tests at 99% coverage
 - **`prefilter`** — Refactored from single file to package with composable `MarketFilter` protocol, one class per filter criterion, extracted constants, and `README.md`; 37 tests at 100% coverage
 - **`shared_state`** — Converted from single `shared_state.py` module to a package (`shared_state/`) with each class in its own file; extracted defaults into `constants.py`; added typed `StopLossRecord` dataclass replacing untyped dict; tightened `dict[str, Any]` types; added `MarketSnapshot` type annotation
 - **`config`** — Converted from single `config.py` module to a package (`config/`) with each config class in its own file; extracted all hardcoded defaults into `constants.py`; added `ConfigLoader` class; added field validators for `min_confidence` and risk percentage fields
