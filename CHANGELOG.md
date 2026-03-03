@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+### Added
+- **`CLAUDE.md`** — Project-level configuration for Claude Code with Notion IDs, active skills, and repo conventions
+- **`.github/PULL_REQUEST_TEMPLATE.md`** — PR template with delivery checklist enforcing SOLID principles, >80% test coverage, CI checks, documentation, and CHANGELOG updates
+- **Keep a Changelog** format header and `[Unreleased]` section in CHANGELOG.md
+
 ## [v0.16.0] — 2026-03-03
 
 ### Added — GitHub App integration for automated PRs
