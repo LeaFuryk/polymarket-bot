@@ -4,6 +4,47 @@ All notable changes to this project will be documented in this file.
 
 ## [v0.15.0] — 2026-03-02
 
+### Added — Reviewdog PR reviews
+
+Added a `reviewdog.yml` workflow that runs on every pull request and posts inline review comments on new/changed lines only (`filter_mode: added`):
+
+- **Reviewdog - ESLint** — `reviewdog/action-eslint@v1` with `eslint-config-next/core-web-vitals` on `dashboard-next/src/`
+- **Reviewdog - Prettier** — `EPMatt/reviewdog-action-prettier@v1` with Tailwind plugin, posts one-click code suggestions
+- **Reviewdog - Ruff** — DIY via `ruff check --output-format=rdjson` piped to `reviewdog`, covers `src/` + `tests/`
+
+All three jobs use `fail_level: error` and `reporter: github-pr-review` so they block merges and comment directly on the PR diff. Configure as required status checks in repo Settings → Branches → Branch protection rules.
+
+### Added — ESLint + Prettier for dashboard-next
+
+Integrated ESLint (via `eslint-config-next/core-web-vitals`) and Prettier (with `prettier-plugin-tailwindcss`) for the Next.js dashboard:
+
+- **`eslint.config.mjs`** — Flat ESLint config extending `next/core-web-vitals` (native ESLint 9 flat config from eslint-config-next v16)
+- **`prettier.config.mjs`** — Prettier config with Tailwind CSS class sorting plugin
+- **`package.json`** — Added `lint` and `format:check` scripts, plus `eslint`, `eslint-config-next`, `prettier`, `prettier-plugin-tailwindcss` devDeps
+- **`.pre-commit-config.yaml`** — Added ESLint + Prettier hooks (run on staged `dashboard-next/src/` files only)
+- Fixed all existing violations: anonymous default export, custom font `<link>` (migrated to `next/font/google`), React hooks circular dependency in `useWebSocket`
+- Auto-formatted all 37 source files to Prettier style
+
+### Changed — CI workflow naming + path filtering
+
+Renamed all GitHub Actions workflow checks for consistency, split the Python workflow into parallel jobs, and added `paths` filters so workflows only run when relevant code changes:
+
+- **`frontend-lint.yml`** (new) — "Next Dashboard - Lint": ESLint + Prettier check (runs on `dashboard-next/**` changes only)
+- **`frontend.yml`** — Renamed to "Next Dashboard - Tests" (runs on `dashboard-next/**` changes only)
+- **`python.yml`** — Renamed to "Bot Python" with two parallel jobs: "Bot Python - Lint" (ruff) and "Bot Python - Tests" (pytest) (runs on `src/**`, `tests/**`, `pyproject.toml` changes only)
+
+Four CI check names: `Next Dashboard - Lint`, `Next Dashboard - Tests`, `Bot Python - Lint`, `Bot Python - Tests`
+
+### Added — Ruff linter + pre-commit hooks
+
+Integrated [ruff](https://docs.astral.sh/ruff/) for linting and formatting across the Python codebase:
+
+- **`pyproject.toml`** — Added `[tool.ruff]` config (Python 3.11, 120-char line length, rules: E/F/I/UP/B/SIM) and `ruff`/`pre-commit` as dev dependencies
+- **`.pre-commit-config.yaml`** — Ruff lint (with `--fix`) and ruff format hooks run on every commit
+- **CI** — `ruff check` and `ruff format --check` steps added to `python.yml` before pytest
+- Fixed all existing violations: unused imports, unused variables, import sorting, `raise` chaining, `zip()` strictness, ambiguous variable names
+- Auto-formatted all 69 Python files to ruff's style
+
 ### Added — GitHub Actions CI (two parallel workflows)
 
 Two independent workflows run simultaneously on every push to `main`:

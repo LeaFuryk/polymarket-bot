@@ -33,7 +33,9 @@ export default function ForensicsPage() {
         setError(null);
       } catch (e) {
         setError(
-          e instanceof Error ? e.message : "Failed to connect to forensics server"
+          e instanceof Error
+            ? e.message
+            : "Failed to connect to forensics server",
         );
       } finally {
         setLoading(false);
@@ -44,8 +46,8 @@ export default function ForensicsPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-zinc-500 text-sm animate-pulse">
+      <div className="flex h-full items-center justify-center">
+        <div className="animate-pulse text-sm text-zinc-500">
           Connecting to forensics server...
         </div>
       </div>
@@ -54,44 +56,45 @@ export default function ForensicsPage() {
 
   if (error) {
     return (
-      <div className="max-w-4xl mx-auto space-y-4">
+      <div className="mx-auto max-w-4xl space-y-4">
         <h1 className="text-lg font-semibold text-zinc-200">Forensics</h1>
-        <div className="rounded-lg bg-red-500/10 border border-red-500/20 p-4">
+        <div className="rounded-lg border border-red-500/20 bg-red-500/10 p-4">
           <div className="text-sm text-red-400">
             Could not connect to forensics server at{" "}
             <code className="font-mono">{FORENSICS_API_URL}</code>
           </div>
-          <div className="text-xs text-red-400/60 mt-1">
-            Start it with: <code className="font-mono">uv run polybot-server</code>
+          <div className="mt-1 text-xs text-red-400/60">
+            Start it with:{" "}
+            <code className="font-mono">uv run polybot-server</code>
           </div>
-          <div className="text-xs text-zinc-500 mt-2">{error}</div>
+          <div className="mt-2 text-xs text-zinc-500">{error}</div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="max-w-7xl mx-auto space-y-6">
+    <div className="mx-auto max-w-7xl space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-lg font-semibold text-zinc-200">Forensics</h1>
         <span className="text-xs text-zinc-500">{candles.length} candles</span>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         {/* Candle list */}
-        <div className="lg:col-span-1 space-y-1 max-h-[70vh] overflow-y-auto pr-1">
+        <div className="max-h-[70vh] space-y-1 overflow-y-auto pr-1 lg:col-span-1">
           {candles.map((c) => (
             <button
               key={c.slug}
               onClick={() => setSelected(c)}
-              className={`w-full text-left rounded-lg p-3 text-xs transition-colors ${
+              className={`w-full rounded-lg p-3 text-left text-xs transition-colors ${
                 selected?.slug === c.slug
-                  ? "bg-white/5 border border-cyan-500/30"
-                  : "bg-[#131720] border border-white/5 hover:bg-white/[0.02]"
+                  ? "border border-cyan-500/30 bg-white/5"
+                  : "border border-white/5 bg-[#131720] hover:bg-white/[0.02]"
               }`}
             >
               <div className="flex items-center justify-between">
-                <span className="text-zinc-300 font-mono truncate max-w-[200px]">
+                <span className="max-w-[200px] truncate font-mono text-zinc-300">
                   {c.slug}
                 </span>
                 <StatusBadge
@@ -100,7 +103,7 @@ export default function ForensicsPage() {
                 />
               </div>
               {c.forensics && (
-                <div className="flex items-center gap-2 mt-1">
+                <div className="mt-1 flex items-center gap-2">
                   <span className="text-zinc-500">Score:</span>
                   <span className="font-mono text-zinc-300">
                     {c.forensics.score.toFixed(2)}
@@ -124,7 +127,7 @@ export default function ForensicsPage() {
         {/* Detail panel */}
         <div className="lg:col-span-2">
           {selected ? (
-            <div className="rounded-lg bg-[#131720] border border-white/5 p-6 space-y-4">
+            <div className="space-y-4 rounded-lg border border-white/5 bg-[#131720] p-6">
               <div className="flex items-center justify-between">
                 <h2 className="font-mono text-sm text-cyan-400">
                   {selected.slug}
@@ -164,7 +167,7 @@ export default function ForensicsPage() {
 
               {selected.forensics && (
                 <div>
-                  <h3 className="text-xs uppercase tracking-wider text-zinc-500 font-semibold mb-3">
+                  <h3 className="mb-3 text-xs font-semibold tracking-wider text-zinc-500 uppercase">
                     Feature Analysis
                   </h3>
                   <div className="space-y-2">
@@ -176,28 +179,28 @@ export default function ForensicsPage() {
                         >
                           <span className="text-zinc-400">{feat}</span>
                           <div className="flex items-center gap-2">
-                            <div className="w-24 h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                            <div className="h-1.5 w-24 overflow-hidden rounded-full bg-zinc-800">
                               <div
-                                className="h-full bg-cyan-500 rounded-full"
+                                className="h-full rounded-full bg-cyan-500"
                                 style={{
                                   width: `${Math.min(100, Math.abs(val) * 100)}%`,
                                 }}
                               />
                             </div>
-                            <span className="font-mono text-zinc-300 w-12 text-right">
+                            <span className="w-12 text-right font-mono text-zinc-300">
                               {val.toFixed(3)}
                             </span>
                           </div>
                         </div>
-                      )
+                      ),
                     )}
                   </div>
                 </div>
               )}
             </div>
           ) : (
-            <div className="rounded-lg bg-[#131720] border border-white/5 p-12 flex items-center justify-center">
-              <span className="text-zinc-600 text-sm">
+            <div className="flex items-center justify-center rounded-lg border border-white/5 bg-[#131720] p-12">
+              <span className="text-sm text-zinc-600">
                 Select a candle to view forensics detail
               </span>
             </div>

@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import json
 import logging
-import statistics
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -78,8 +77,7 @@ class ExitTracker:
                         self._total_missed += missed
             if self._total_exits > 0:
                 logger.info(
-                    "Loaded %d exit records: %d better than hold (%.0f%%), "
-                    "saved $%.2f, missed $%.2f",
+                    "Loaded %d exit records: %d better than hold (%.0f%%), saved $%.2f, missed $%.2f",
                     self._total_exits,
                     self._exits_better_than_hold,
                     self._exits_better_than_hold / self._total_exits * 100,
@@ -93,18 +91,23 @@ class ExitTracker:
         """Append an exit record to JSONL."""
         try:
             with open(self._data_path, "a") as f:
-                f.write(json.dumps({
-                    "slug": record.slug,
-                    "token_side": record.token_side,
-                    "entry_price": round(record.entry_price, 4),
-                    "exit_price": round(record.exit_price, 4),
-                    "exit_size": round(record.exit_size, 2),
-                    "time_remaining": round(record.time_remaining, 1),
-                    "winner": record.winner,
-                    "held_value": round(record.held_value, 4),
-                    "actual_pnl": round(record.actual_pnl, 4),
-                    "missed_pnl": round(record.missed_pnl, 4),
-                }) + "\n")
+                f.write(
+                    json.dumps(
+                        {
+                            "slug": record.slug,
+                            "token_side": record.token_side,
+                            "entry_price": round(record.entry_price, 4),
+                            "exit_price": round(record.exit_price, 4),
+                            "exit_size": round(record.exit_size, 2),
+                            "time_remaining": round(record.time_remaining, 1),
+                            "winner": record.winner,
+                            "held_value": round(record.held_value, 4),
+                            "actual_pnl": round(record.actual_pnl, 4),
+                            "missed_pnl": round(record.missed_pnl, 4),
+                        }
+                    )
+                    + "\n"
+                )
         except Exception:
             logger.warning("Could not save exit record", exc_info=True)
 
@@ -134,7 +137,7 @@ class ExitTracker:
         for record in exits:
             record.winner = winner
             # What would the position be worth at resolution?
-            won = (record.token_side == winner)
+            won = record.token_side == winner
             record.held_value = 1.0 if won else 0.0
 
             # Actual PnL from the exit
@@ -156,9 +159,9 @@ class ExitTracker:
             self._save_record(record)
 
             logger.info(
-                "Exit analysis: %s %s — exit@%.3f, %s won, "
-                "held_value=%.2f, actual_pnl=$%.2f, missed_pnl=$%.2f (%s)",
-                slug, record.token_side,
+                "Exit analysis: %s %s — exit@%.3f, %s won, held_value=%.2f, actual_pnl=$%.2f, missed_pnl=$%.2f (%s)",
+                slug,
+                record.token_side,
                 record.exit_price,
                 winner,
                 record.held_value,

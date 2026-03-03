@@ -18,10 +18,12 @@ export function ConnectionStatus({ state }: ConnectionStatusProps) {
 
   return (
     <div className="flex items-center gap-2">
-      <span className={`inline-block h-2 w-2 rounded-full ${color} ${
-        state === "connected" ? "animate-pulse" : ""
-      }`} />
-      <span className="text-xs text-zinc-400 font-mono">{label}</span>
+      <span
+        className={`inline-block h-2 w-2 rounded-full ${color} ${
+          state === "connected" ? "animate-pulse" : ""
+        }`}
+      />
+      <span className="font-mono text-xs text-zinc-400">{label}</span>
     </div>
   );
 }

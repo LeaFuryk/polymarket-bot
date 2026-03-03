@@ -16,9 +16,9 @@ export function BtcPanel({ btc, realtimePrice }: BtcPanelProps) {
   const price = realtimePrice ?? btc.price_usd;
 
   return (
-    <div className="rounded-lg bg-[#131720] border border-white/5 p-4 space-y-3">
+    <div className="space-y-3 rounded-lg border border-white/5 bg-[#131720] p-4">
       <div className="flex items-center justify-between">
-        <h3 className="text-xs uppercase tracking-wider text-zinc-500 font-semibold">
+        <h3 className="text-xs font-semibold tracking-wider text-zinc-500 uppercase">
           Bitcoin
         </h3>
         <StatusBadge

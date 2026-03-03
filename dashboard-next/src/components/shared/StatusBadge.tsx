@@ -14,10 +14,14 @@ const variantClasses: Record<string, string> = {
   zinc: "bg-zinc-500/15 text-zinc-400 border-zinc-500/20",
 };
 
-export function StatusBadge({ label, variant = "zinc", className = "" }: StatusBadgeProps) {
+export function StatusBadge({
+  label,
+  variant = "zinc",
+  className = "",
+}: StatusBadgeProps) {
   return (
     <span
-      className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-mono uppercase tracking-wide border ${variantClasses[variant]} ${className}`}
+      className={`inline-flex items-center rounded border px-2 py-0.5 font-mono text-[11px] tracking-wide uppercase ${variantClasses[variant]} ${className}`}
     >
       {label}
     </span>

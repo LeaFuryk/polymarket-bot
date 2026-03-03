@@ -10,16 +10,16 @@ interface HeaderProps {
 
 export function Header({ wsState, botVersion }: HeaderProps) {
   return (
-    <header className="h-11 bg-[#0d1017] border-b border-white/5 flex items-center justify-between px-4 shrink-0">
+    <header className="flex h-11 shrink-0 items-center justify-between border-b border-white/5 bg-[#0d1017] px-4">
       <div className="flex items-center gap-4">
         <ConnectionStatus state={wsState} />
         {wsState === "disconnected" && (
-          <span className="text-[11px] text-amber-500 font-mono">
+          <span className="font-mono text-[11px] text-amber-500">
             Offline — using cached data
           </span>
         )}
       </div>
-      <div className="flex items-center gap-4 text-xs text-zinc-500 font-mono">
+      <div className="flex items-center gap-4 font-mono text-xs text-zinc-500">
         {botVersion && <span>v{botVersion}</span>}
       </div>
     </header>

@@ -34,9 +34,7 @@ def load_orders(conn: sqlite3.Connection) -> list[dict]:
     if not has_column(conn, "decisions", "live_order_json"):
         return []
 
-    rows = conn.execute(
-        "SELECT * FROM decisions ORDER BY timestamp"
-    ).fetchall()
+    rows = conn.execute("SELECT * FROM decisions ORDER BY timestamp").fetchall()
 
     results = []
     for r in rows:
@@ -62,9 +60,7 @@ def load_snapshots_for_candle(conn: sqlite3.Connection, candle_id: int) -> list[
     return [dict(r) for r in rows]
 
 
-def load_snapshots_in_window(
-    conn: sqlite3.Connection, candle_id: int, start_ts: float, end_ts: float
-) -> list[dict]:
+def load_snapshots_in_window(conn: sqlite3.Connection, candle_id: int, start_ts: float, end_ts: float) -> list[dict]:
     """Load snapshots within a time window for a specific candle."""
     rows = conn.execute(
         "SELECT * FROM snapshots WHERE candle_id = ? AND timestamp >= ? AND timestamp <= ? ORDER BY timestamp",

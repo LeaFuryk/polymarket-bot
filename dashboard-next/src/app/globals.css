@@ -9,13 +9,17 @@
 @theme inline {
   --color-background: var(--bg-base);
   --color-foreground: #e4e4e7;
-  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  --font-mono: var(--font-jetbrains-mono), ui-monospace, monospace;
 }
 
 body {
   background: var(--bg-base);
   color: #e4e4e7;
-  font-family: "Space Grotesk", system-ui, -apple-system, sans-serif;
+  font-family:
+    var(--font-space-grotesk),
+    system-ui,
+    -apple-system,
+    sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 

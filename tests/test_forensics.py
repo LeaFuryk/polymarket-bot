@@ -2,15 +2,12 @@
 
 from __future__ import annotations
 
-import json
-
 from polybot.forensics.blocked import analyze_blocked
 from polybot.forensics.context import analyze_context
 from polybot.forensics.costs import analyze_costs
 from polybot.forensics.execution import analyze_orders
 from polybot.forensics.roundtrips import analyze_roundtrips
 from polybot.forensics.ttl import analyze_ttl
-
 
 # ---------------------------------------------------------------------------
 # Feature A: Execution

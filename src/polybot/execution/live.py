@@ -18,7 +18,7 @@ from typing import Any
 from py_clob_client.client import ClobClient
 from py_clob_client.clob_types import ApiCreds, OrderArgs, OrderType
 
-from polybot.config import TradingConfig, ApiConfig
+from polybot.config import ApiConfig, TradingConfig
 from polybot.models import (
     Action,
     LiveOrderResult,
@@ -66,7 +66,7 @@ class LiveExecutionEngine:
             key=trading_config.private_key,
             creds=creds,
             signature_type=2,  # POLY_GNOSIS_SAFE (Polymarket browser wallet proxy)
-            funder=funder,     # proxy wallet address from polymarket.com/settings
+            funder=funder,  # proxy wallet address from polymarket.com/settings
         )
 
         # Token IDs for current market (set before each execute call)
@@ -105,14 +105,13 @@ class LiveExecutionEngine:
         """Fetch real USDC balance from the CLOB."""
         loop = asyncio.get_event_loop()
         try:
-            from py_clob_client.clob_types import BalanceAllowanceParams, AssetType
+            from py_clob_client.clob_types import AssetType, BalanceAllowanceParams
+
             params = BalanceAllowanceParams(
                 asset_type=AssetType.COLLATERAL,
                 signature_type=2,
             )
-            result = await loop.run_in_executor(
-                None, partial(self._client.get_balance_allowance, params)
-            )
+            result = await loop.run_in_executor(None, partial(self._client.get_balance_allowance, params))
             # Balance is in raw USDC units (6 decimals)
             raw = float(result.get("balance", 0)) if isinstance(result, dict) else 0.0
             balance = raw / 1e6
@@ -130,7 +129,8 @@ class LiveExecutionEngine:
             if not self._kill_switch_active:
                 logger.critical(
                     "KILL SWITCH ACTIVATED: session PnL $%.2f exceeds -$%.2f limit",
-                    session_pnl, self._config.max_session_loss_usd,
+                    session_pnl,
+                    self._config.max_session_loss_usd,
                 )
                 self._kill_switch_active = True
             return True
@@ -140,9 +140,7 @@ class LiveExecutionEngine:
         """Cancel all open orders on the CLOB."""
         loop = asyncio.get_event_loop()
         try:
-            result = await loop.run_in_executor(
-                None, self._client.cancel_all
-            )
+            result = await loop.run_in_executor(None, self._client.cancel_all)
             cancelled = len(result) if isinstance(result, list) else 0
             if cancelled:
                 logger.info("Cancelled %d live CLOB orders", cancelled)
@@ -197,6 +195,7 @@ class LiveExecutionEngine:
 
         # Determine token ID
         from polybot.models import TokenSide
+
         if decision.token_side == TokenSide.DOWN:
             token_id = self._down_token_id
         else:
@@ -217,8 +216,7 @@ class LiveExecutionEngine:
 
         if limit_price is None:
             self._last_skip_reason = f"no {'ask' if side == Side.BUY else 'bid'} in orderbook"
-            logger.warning("Live execution blocked: no %s in orderbook",
-                           "ask" if side == Side.BUY else "bid")
+            logger.warning("Live execution blocked: no %s in orderbook", "ask" if side == Side.BUY else "bid")
             return None
 
         # Estimate order cost
@@ -229,16 +227,20 @@ class LiveExecutionEngine:
             self._last_skip_reason = f"order ${est_cost:.2f} exceeds max ${self._config.max_order_size_usd:.2f}"
             logger.warning(
                 "Live execution blocked: order $%.2f exceeds max $%.2f",
-                est_cost, self._config.max_order_size_usd,
+                est_cost,
+                self._config.max_order_size_usd,
             )
             return None
 
         # Min wallet balance (BUY only, skipped in dry run)
         if side == Side.BUY and not self._config.dry_run and self._wallet_balance < self._config.min_wallet_balance_usd:
-            self._last_skip_reason = f"wallet ${self._wallet_balance:.2f} below min ${self._config.min_wallet_balance_usd:.2f}"
+            self._last_skip_reason = (
+                f"wallet ${self._wallet_balance:.2f} below min ${self._config.min_wallet_balance_usd:.2f}"
+            )
             logger.warning(
                 "Live execution blocked: wallet $%.2f below min $%.2f",
-                self._wallet_balance, self._config.min_wallet_balance_usd,
+                self._wallet_balance,
+                self._config.min_wallet_balance_usd,
             )
             return None
 
@@ -253,7 +255,8 @@ class LiveExecutionEngine:
             if actual is not None and actual < order_size:
                 logger.info(
                     "SELL size capped: %.4f → %.4f (on-chain balance)",
-                    order_size, actual,
+                    order_size,
+                    actual,
                 )
                 order_size = actual
             if actual is not None and actual <= 0:
@@ -293,9 +296,12 @@ class LiveExecutionEngine:
                     self._wallet_balance += abs(result.fill.total_cost)
                 logger.info(
                     "LIVE %s %s %.1f @ %.4f (cost=$%.2f, fee=$%.4f)",
-                    side.value, decision.token_side.value,
-                    result.fill.size, result.fill.fill_price,
-                    result.fill.total_cost, result.fill.fee_amount,
+                    side.value,
+                    decision.token_side.value,
+                    result.fill.size,
+                    result.fill.fill_price,
+                    result.fill.total_cost,
+                    result.fill.fee_amount,
                 )
                 # Refresh CLOB server's cached balance/allowance after fill.
                 await self._refresh_allowance_after_fill(token_id, side)
@@ -348,17 +354,16 @@ class LiveExecutionEngine:
         )
 
         # Create the signed order
-        signed_order = await loop.run_in_executor(
-            None, partial(self._client.create_order, order_args)
-        )
+        signed_order = await loop.run_in_executor(None, partial(self._client.create_order, order_args))
 
         # Post the order as GTC
         response = await loop.run_in_executor(
-            None, partial(
+            None,
+            partial(
                 self._client.post_order,
                 signed_order,
                 OrderType.GTC,
-            )
+            ),
         )
         result.submit_ts = time.time()
 
@@ -367,7 +372,11 @@ class LiveExecutionEngine:
         if isinstance(response, dict):
             order_id = response.get("orderID") or response.get("order_id") or response.get("id")
         else:
-            order_id = getattr(response, "orderID", None) or getattr(response, "order_id", None) or getattr(response, "id", None)
+            order_id = (
+                getattr(response, "orderID", None)
+                or getattr(response, "order_id", None)
+                or getattr(response, "id", None)
+            )
 
         if not order_id:
             logger.warning("GTC order posted but no order_id in response: %s", response)
@@ -382,16 +391,19 @@ class LiveExecutionEngine:
         result.order_id = order_id
         logger.info(
             "GTC limit order posted: %s %s %.1f @ %.4f (order_id=%s, ttl=%ds)",
-            clob_side, token_id[:8], size, limit_price, order_id, ttl,
+            clob_side,
+            token_id[:8],
+            size,
+            limit_price,
+            order_id,
+            ttl,
         )
 
         # Poll for fill — check both status AND size_matched
         for i in range(ttl):
             await asyncio.sleep(1.0)
             try:
-                order_status = await loop.run_in_executor(
-                    None, partial(self._client.get_order, order_id)
-                )
+                order_status = await loop.run_in_executor(None, partial(self._client.get_order, order_id))
 
                 status, sm = self._extract_order_fill_info(order_status)
                 result.polls.append({"ts": time.time(), "status": status, "size_matched": sm})
@@ -400,13 +412,14 @@ class LiveExecutionEngine:
                     fill_source = "status_poll" if status in ("MATCHED", "FILLED") else "size_matched"
                     logger.info(
                         "GTC order filled after %ds (order_id=%s, status=%s, size_matched=%.4f)",
-                        i + 1, order_id, status, sm,
+                        i + 1,
+                        order_id,
+                        status,
+                        sm,
                     )
                     # Cancel to clean up (already filled, but good hygiene)
                     try:
-                        await loop.run_in_executor(
-                            None, partial(self._client.cancel, order_id)
-                        )
+                        await loop.run_in_executor(None, partial(self._client.cancel, order_id))
                     except Exception:
                         pass  # Already filled, cancel may fail — that's fine
 
@@ -441,9 +454,7 @@ class LiveExecutionEngine:
         logger.info("GTC order timeout after %ds, cancelling (order_id=%s)", ttl, order_id)
         result.cancel_ts = time.time()
         try:
-            await loop.run_in_executor(
-                None, partial(self._client.cancel, order_id)
-            )
+            await loop.run_in_executor(None, partial(self._client.cancel, order_id))
         except Exception:
             logger.warning("Failed to cancel timed-out order %s", order_id, exc_info=True)
 
@@ -461,9 +472,7 @@ class LiveExecutionEngine:
         result.ob_post_cancel = self._snapshot_ob(post_cancel_ob)
 
         try:
-            final_status = await loop.run_in_executor(
-                None, partial(self._client.get_order, order_id)
-            )
+            final_status = await loop.run_in_executor(None, partial(self._client.get_order, order_id))
             status, sm = self._extract_order_fill_info(final_status)
             result.final_order_status = status
             result.size_matched = sm
@@ -472,7 +481,9 @@ class LiveExecutionEngine:
                 logger.warning(
                     "GTC order filled AFTER cancel attempt (order_id=%s, status=%s, "
                     "size_matched=%.4f) — capturing fill",
-                    order_id, status, sm,
+                    order_id,
+                    status,
+                    sm,
                 )
                 fill = self._parse_order_response(final_status, side, size, limit_price)
                 result.fill = fill
@@ -486,7 +497,12 @@ class LiveExecutionEngine:
         # Nuclear fallback: compare on-chain balance to detect stealth fills
         # where the CLOB API status never propagated to MATCHED.
         stealth_fill, post_bal = await self._detect_stealth_fill(
-            token_id, side, size, limit_price, pre_balance, order_id,
+            token_id,
+            side,
+            size,
+            limit_price,
+            pre_balance,
+            order_id,
         )
         result.post_balance = post_bal
         if stealth_fill:
@@ -547,7 +563,11 @@ class LiveExecutionEngine:
                 logger.warning(
                     "STEALTH FILL detected via balance check (order_id=%s): "
                     "pre=%.4f post=%.4f delta=%.4f (expected ~%.4f)",
-                    order_id, pre_balance, post_balance, delta, size,
+                    order_id,
+                    pre_balance,
+                    post_balance,
+                    delta,
+                    size,
                 )
                 return self._make_fill_from_balance(side, delta, limit_price), post_balance
         else:
@@ -557,14 +577,21 @@ class LiveExecutionEngine:
                 logger.warning(
                     "STEALTH FILL detected via balance check (order_id=%s): "
                     "pre=%.4f post=%.4f delta=%.4f (expected ~%.4f)",
-                    order_id, pre_balance, post_balance, delta, size,
+                    order_id,
+                    pre_balance,
+                    post_balance,
+                    delta,
+                    size,
                 )
                 return self._make_fill_from_balance(side, delta, limit_price), post_balance
 
         return None, post_balance
 
     def _make_fill_from_balance(
-        self, side: Side, fill_size: float, limit_price: float,
+        self,
+        side: Side,
+        fill_size: float,
+        limit_price: float,
     ) -> SimulatedFill:
         """Construct a SimulatedFill from a balance-detected fill."""
         notional = limit_price * fill_size
@@ -602,7 +629,10 @@ class LiveExecutionEngine:
 
         logger.info(
             "DRY RUN: limit order simulation %s %.1f @ %.4f (ttl=%ds)",
-            side.value, size, limit_price, ttl,
+            side.value,
+            size,
+            limit_price,
+            ttl,
         )
 
         # Snapshot initial orderbook
@@ -617,13 +647,15 @@ class LiveExecutionEngine:
                 continue
 
             ob_snap = self._snapshot_ob(fresh_ob)
-            result.polls.append({
-                "ts": time.time(),
-                "status": "POLLING",
-                "size_matched": 0,
-                "best_ask": ob_snap.get("best_ask"),
-                "best_bid": ob_snap.get("best_bid"),
-            })
+            result.polls.append(
+                {
+                    "ts": time.time(),
+                    "status": "POLLING",
+                    "size_matched": 0,
+                    "best_ask": ob_snap.get("best_ask"),
+                    "best_bid": ob_snap.get("best_bid"),
+                }
+            )
 
             filled = False
             if side == Side.BUY:
@@ -636,7 +668,8 @@ class LiveExecutionEngine:
             if filled:
                 logger.info(
                     "DRY RUN: limit order filled after %ds (limit=%.4f)",
-                    i, limit_price,
+                    i,
+                    limit_price,
                 )
                 fee_bps = 20  # Polymarket taker fee
                 notional = limit_price * size
@@ -670,7 +703,8 @@ class LiveExecutionEngine:
 
     async def _get_conditional_balance(self, token_id: str) -> float | None:
         """Query actual on-chain conditional token balance from the CLOB server."""
-        from py_clob_client.clob_types import BalanceAllowanceParams, AssetType
+        from py_clob_client.clob_types import AssetType, BalanceAllowanceParams
+
         loop = asyncio.get_event_loop()
         try:
             params = BalanceAllowanceParams(
@@ -678,9 +712,7 @@ class LiveExecutionEngine:
                 token_id=token_id,
                 signature_type=2,
             )
-            result = await loop.run_in_executor(
-                None, partial(self._client.get_balance_allowance, params)
-            )
+            result = await loop.run_in_executor(None, partial(self._client.get_balance_allowance, params))
             raw = float(result.get("balance", 0)) if isinstance(result, dict) else 0.0
             # Conditional token balance is in 6-decimal units (like USDC)
             balance = raw / 1e6
@@ -693,11 +725,10 @@ class LiveExecutionEngine:
     async def _refetch_orderbook(self, token_id: str) -> OrderbookSnapshot | None:
         """Re-fetch orderbook from CLOB."""
         from polybot.models import OrderbookLevel
+
         loop = asyncio.get_event_loop()
         try:
-            raw = await loop.run_in_executor(
-                None, partial(self._client.get_order_book, token_id)
-            )
+            raw = await loop.run_in_executor(None, partial(self._client.get_order_book, token_id))
             raw_bids = raw.bids if hasattr(raw, "bids") else (raw.get("bids") or [])
             raw_asks = raw.asks if hasattr(raw, "asks") else (raw.get("asks") or [])
 
@@ -721,7 +752,8 @@ class LiveExecutionEngine:
         After SELL: update COLLATERAL allowance so the server knows we have
         more USDC for future BUYs.
         """
-        from py_clob_client.clob_types import BalanceAllowanceParams, AssetType
+        from py_clob_client.clob_types import AssetType, BalanceAllowanceParams
+
         loop = asyncio.get_event_loop()
         try:
             if side == Side.BUY:
@@ -735,9 +767,7 @@ class LiveExecutionEngine:
                     asset_type=AssetType.COLLATERAL,
                     signature_type=2,
                 )
-            await loop.run_in_executor(
-                None, partial(self._client.update_balance_allowance, params)
-            )
+            await loop.run_in_executor(None, partial(self._client.update_balance_allowance, params))
             logger.info(
                 "Refreshed %s allowance after %s fill",
                 "conditional" if side == Side.BUY else "collateral",

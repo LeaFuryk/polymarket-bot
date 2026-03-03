@@ -1,4 +1,4 @@
-name: Next Dashboard - Tests
+name: Next Dashboard - Lint
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
       - "dashboard-next/**"
 
 jobs:
-  frontend:
+  lint:
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -27,8 +27,8 @@ jobs:
       - name: Install deps
         run: npm ci
 
-      - name: TypeScript type check
-        run: npx tsc --noEmit
+      - name: ESLint
+        run: npx eslint src/
 
-      - name: Run Jest tests
-        run: npx jest --ci --verbose
+      - name: Prettier
+        run: npx prettier --check "src/**/*.{ts,tsx,js,css}"

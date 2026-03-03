@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import time
+from datetime import UTC
 from pathlib import Path
 
 import anthropic
@@ -90,7 +91,6 @@ def compute_scorecard(
 
     # Count trades that had actual fills (not HOLDs)
     traded = [t for t in trades if t.fill_price is not None and t.action.value != "HOLD"]
-    holds = [t for t in trades if t.action.value == "HOLD" or t.fill_price is None]
 
     # Win/loss from resolutions (only those with positions)
     wins = [r for r in resolutions if r.total_pnl > 0.001]
@@ -144,7 +144,9 @@ def format_scorecard(delta: ScorecardDelta) -> str:
         wr_delta = c.win_rate - p.win_rate
         pnl_delta = c.avg_pnl_per_trade - p.avg_pnl_per_trade
         lines.append(f"- Win rate: {p.win_rate:.0%} -> {c.win_rate:.0%} ({wr_delta:+.0%})")
-        lines.append(f"- Avg PnL: ${p.avg_pnl_per_trade:+.4f} -> ${c.avg_pnl_per_trade:+.4f} (delta: ${pnl_delta:+.4f})")
+        lines.append(
+            f"- Avg PnL: ${p.avg_pnl_per_trade:+.4f} -> ${c.avg_pnl_per_trade:+.4f} (delta: ${pnl_delta:+.4f})"
+        )
         lines.append(f"- Trades taken: {p.trades_taken} -> {c.trades_taken}")
         hr_delta = c.hold_rate - p.hold_rate
         lines.append(f"- Hold rate: {p.hold_rate:.0%} -> {c.hold_rate:.0%} ({hr_delta:+.0%})")
@@ -187,11 +189,7 @@ class KnowledgeManager:
         """Return state dict for persistence in agent_state.json."""
         return {
             "total_resolutions": self._total_resolutions,
-            "previous_scorecard": (
-                self._previous_scorecard.model_dump()
-                if self._previous_scorecard
-                else None
-            ),
+            "previous_scorecard": (self._previous_scorecard.model_dump() if self._previous_scorecard else None),
         }
 
     def load_state(self, data: dict) -> None:
@@ -325,8 +323,9 @@ class KnowledgeManager:
                         existing_rows.append(line)
 
             # Add new row
-            from datetime import datetime, timezone
-            date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M")
+            from datetime import datetime
+
+            date_str = datetime.now(UTC).strftime("%Y-%m-%d %H:%M")
             new_row = f"| {date_str} | {entry} |"
             existing_rows.append(new_row)
 
@@ -357,7 +356,9 @@ class KnowledgeManager:
         # Session stats
         total = session_wins + session_losses
         win_rate = (session_wins / total * 100) if total > 0 else 0.0
-        lines.append(f"Session: {session_wins}W/{session_losses}L ({win_rate:.0f}% win rate) | PnL: ${session_pnl:+.4f}")
+        lines.append(
+            f"Session: {session_wins}W/{session_losses}L ({win_rate:.0f}% win rate) | PnL: ${session_pnl:+.4f}"
+        )
         lines.append("")
 
         # Safeguard #5: Drawdown awareness — rolling drawdown from recent resolutions
@@ -378,19 +379,13 @@ class KnowledgeManager:
         if recent_trades:
             # Filter to trades with fills (BUY/SELL) and match to resolutions
             res_by_slug = {r.slug: r for r in resolutions}
-            filled_trades = [
-                t for t in recent_trades
-                if t.action.value in ("BUY", "SELL") and t.fill_price
-            ]
+            filled_trades = [t for t in recent_trades if t.action.value in ("BUY", "SELL") and t.fill_price]
             if filled_trades:
                 # Show last 10 trade decisions with outcomes
                 recent_filled = filled_trades[-10:]
 
                 # Resolved BUY trades (used for trailing records + losing streak)
-                resolved_buys = [
-                    t for t in filled_trades
-                    if t.action.value == "BUY" and res_by_slug.get(t.candle_slug)
-                ]
+                resolved_buys = [t for t in filled_trades if t.action.value == "BUY" and res_by_slug.get(t.candle_slug)]
                 up_resolved = [t for t in resolved_buys if t.token_side.value == "up"]
                 down_resolved = [t for t in resolved_buys if t.token_side.value == "down"]
 
@@ -420,8 +415,16 @@ class KnowledgeManager:
                     # Fall back to cumulative-only when <5 resolved trades
                     up_trades = [t for t in filled_trades if t.token_side.value == "up" and t.action.value == "BUY"]
                     down_trades = [t for t in filled_trades if t.token_side.value == "down" and t.action.value == "BUY"]
-                    up_wins = sum(1 for t in up_trades if res_by_slug.get(t.candle_slug, None) and res_by_slug[t.candle_slug].winner == "up")
-                    down_wins = sum(1 for t in down_trades if res_by_slug.get(t.candle_slug, None) and res_by_slug[t.candle_slug].winner == "down")
+                    up_wins = sum(
+                        1
+                        for t in up_trades
+                        if res_by_slug.get(t.candle_slug) and res_by_slug[t.candle_slug].winner == "up"
+                    )
+                    down_wins = sum(
+                        1
+                        for t in down_trades
+                        if res_by_slug.get(t.candle_slug) and res_by_slug[t.candle_slug].winner == "down"
+                    )
                     lines.append(
                         f"Your trade record: UP buys {up_wins}W/{len(up_trades) - up_wins}L "
                         f"| DOWN buys {down_wins}W/{len(down_trades) - down_wins}L"
@@ -506,9 +509,7 @@ class KnowledgeManager:
             lines.append("|------|--------|----------|-----|")
             for r in recent:
                 btc_move = r.btc_close - r.btc_open
-                lines.append(
-                    f"| {r.slug[-20:]} | {r.winner} | ${btc_move:+.0f} | ${r.total_pnl:+.4f} |"
-                )
+                lines.append(f"| {r.slug[-20:]} | {r.winner} | ${btc_move:+.0f} | ${r.total_pnl:+.4f} |")
             lines.append("")
 
         # Confidence calibration data
@@ -612,8 +613,7 @@ class KnowledgeManager:
             side_selection_analysis = (
                 "## Side Selection Analysis\n"
                 "Trades that bought the expensive side (>$0.55) when the opposite was cheap (<$0.40) "
-                "in uncertain/contrarian markets:\n"
-                + "\n".join(side_flags)
+                "in uncertain/contrarian markets:\n" + "\n".join(side_flags)
             )
         else:
             side_selection_analysis = ""
@@ -667,8 +667,10 @@ class KnowledgeManager:
             self.total_api_cost += self.last_reflection_cost
             logger.info(
                 "Reflection API cost: $%.4f (total: $%.4f) | tokens: %d in / %d out | stop_reason: %s",
-                self.last_reflection_cost, self.total_api_cost,
-                response.usage.input_tokens, response.usage.output_tokens,
+                self.last_reflection_cost,
+                self.total_api_cost,
+                response.usage.input_tokens,
+                response.usage.output_tokens,
                 response.stop_reason,
             )
 
@@ -737,9 +739,7 @@ class KnowledgeManager:
             fc = data.get("feature_config")
             if fc and isinstance(fc, dict):
                 try:
-                    self._feature_config_path.write_text(
-                        json.dumps(fc, indent=2) + "\n"
-                    )
+                    self._feature_config_path.write_text(json.dumps(fc, indent=2) + "\n")
                     logger.info("Updated feature config from reflection")
                 except OSError:
                     logger.warning("Could not write feature config")
@@ -752,7 +752,9 @@ class KnowledgeManager:
 
             logger.info(
                 "Reflection complete — added %d observations, expired %d, session_entry=%s",
-                added, len(expire_ids), bool(session_entry),
+                added,
+                len(expire_ids),
+                bool(session_entry),
             )
 
         except json.JSONDecodeError as e:

@@ -10,10 +10,12 @@ const AppShell = dynamic(
     ssr: false,
     loading: () => (
       <div className="flex h-screen items-center justify-center bg-[#080a0e]">
-        <div className="text-zinc-500 text-sm animate-pulse">Loading dashboard...</div>
+        <div className="animate-pulse text-sm text-zinc-500">
+          Loading dashboard...
+        </div>
       </div>
     ),
-  }
+  },
 );
 
 export default function Template({ children }: { children: React.ReactNode }) {

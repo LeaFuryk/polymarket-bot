@@ -26,12 +26,14 @@ def render_report(report: ForensicsReport, features: set[str] | None = None) -> 
     """Render the complete forensics report to the terminal."""
     console = Console()
     console.print()
-    console.print(Panel(
-        f"[bold cyan]Polybot Forensics Report[/]\n"
-        f"[dim]Generated: {report.generated_at}[/]\n"
-        f"[dim]DB: {report.db_path}[/]",
-        border_style="cyan",
-    ))
+    console.print(
+        Panel(
+            f"[bold cyan]Polybot Forensics Report[/]\n"
+            f"[dim]Generated: {report.generated_at}[/]\n"
+            f"[dim]DB: {report.db_path}[/]",
+            border_style="cyan",
+        )
+    )
 
     show_all = features is None
 
@@ -88,8 +90,7 @@ def _render_execution(
     # Drift summary
     if agg.p50_drift_bps is not None:
         console.print(
-            f"  Ask drift: p50 [yellow]{agg.p50_drift_bps:+.1f}bps[/] | "
-            f"p95 [yellow]{agg.p95_drift_bps:+.1f}bps[/]"
+            f"  Ask drift: p50 [yellow]{agg.p50_drift_bps:+.1f}bps[/] | p95 [yellow]{agg.p95_drift_bps:+.1f}bps[/]"
         )
 
     # Per-order table
@@ -131,11 +132,13 @@ def _render_ttl(
     agg: TTLAggregate,
 ) -> None:
     console.print()
-    console.print(Panel(
-        f"[bold]{agg.total_timeouts}[/] timed-out orders analyzed",
-        title="[bold]B: TTL Counterfactuals[/]",
-        border_style="yellow",
-    ))
+    console.print(
+        Panel(
+            f"[bold]{agg.total_timeouts}[/] timed-out orders analyzed",
+            title="[bold]B: TTL Counterfactuals[/]",
+            border_style="yellow",
+        )
+    )
 
     if not agg.grid_ttls:
         console.print("  [dim]No TTL data.[/]")
@@ -167,9 +170,7 @@ def _render_ttl(
 
         for cf in cfs:
             row = [cf.order_id[:12], str(cf.candle_id), str(cf.actual_ttl)]
-            row.append(
-                Text(str(cf.rescue_ttl), style="green") if cf.rescue_ttl else Text("--", style="red")
-            )
+            row.append(Text(str(cf.rescue_ttl), style="green") if cf.rescue_ttl else Text("--", style="red"))
             for ttl in agg.grid_ttls:
                 filled = cf.grid.get(ttl, False)
                 row.append(Text("Y", style="green") if filled else Text(".", style="dim"))
@@ -338,12 +339,13 @@ def _render_context(console: Console, contexts: list[DecisionContext]) -> None:
 
     wins = sum(1 for c in contexts if c.outcome == "win")
     losses = sum(1 for c in contexts if c.outcome == "loss")
-    console.print(Panel(
-        f"[bold]{len(contexts)}[/] decisions | "
-        f"[green]{wins}W[/] / [red]{losses}L[/]",
-        title="[bold]F: Decision Context[/]",
-        border_style="cyan",
-    ))
+    console.print(
+        Panel(
+            f"[bold]{len(contexts)}[/] decisions | [green]{wins}W[/] / [red]{losses}L[/]",
+            title="[bold]F: Decision Context[/]",
+            border_style="cyan",
+        )
+    )
 
     table = Table(show_lines=False, padding=(0, 1))
     table.add_column("Candle", justify="right")

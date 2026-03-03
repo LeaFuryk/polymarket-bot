@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-import time
 from pathlib import Path
 
 from polybot.forensics.aggregate import build_report
@@ -21,10 +20,8 @@ try:
     from fastapi import FastAPI
     from fastapi.middleware.cors import CORSMiddleware
     from fastapi.responses import StreamingResponse
-except ImportError:
-    raise ImportError(
-        "FastAPI not installed. Install with: uv pip install -e '.[server]'"
-    )
+except ImportError as err:
+    raise ImportError("FastAPI not installed. Install with: uv pip install -e '.[server]'") from err
 
 DB_PATH: str = os.environ.get("POLYBOT_DB", "logs/polybot.db")
 

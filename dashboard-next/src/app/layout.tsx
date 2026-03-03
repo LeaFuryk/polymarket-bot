@@ -1,5 +1,18 @@
 import type { Metadata } from "next";
+import { JetBrains_Mono, Space_Grotesk } from "next/font/google";
 import "./globals.css";
+
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ["latin"],
+  variable: "--font-jetbrains-mono",
+  weight: ["400", "500", "600", "700"],
+});
+
+const spaceGrotesk = Space_Grotesk({
+  subsets: ["latin"],
+  variable: "--font-space-grotesk",
+  weight: ["400", "500", "600", "700"],
+});
 
 export const metadata: Metadata = {
   title: "Polybot Dashboard",
@@ -12,16 +25,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark">
-      <head>
-        <link
-          href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap"
-          rel="stylesheet"
-        />
-      </head>
-      <body className="bg-[#080a0e] text-zinc-200 antialiased">
-        {children}
-      </body>
+    <html
+      lang="en"
+      className={`dark ${jetbrainsMono.variable} ${spaceGrotesk.variable}`}
+    >
+      <body className="bg-[#080a0e] text-zinc-200 antialiased">{children}</body>
     </html>
   );
 }

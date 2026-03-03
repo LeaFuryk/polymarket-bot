@@ -18,10 +18,10 @@ export function PnLSummary({ session, allTime }: PnLSummaryProps) {
 
   return (
     <div className="space-y-3">
-      <h3 className="text-xs uppercase tracking-wider text-zinc-500 font-semibold">
+      <h3 className="text-xs font-semibold tracking-wider text-zinc-500 uppercase">
         Session Performance
       </h3>
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <MetricCard
           label="PnL"
           value={
@@ -65,12 +65,12 @@ export function PnLSummary({ session, allTime }: PnLSummaryProps) {
         />
       </div>
 
-      {allTime && (allTime.total_resolutions > 0) && (
+      {allTime && allTime.total_resolutions > 0 && (
         <>
-          <h3 className="text-xs uppercase tracking-wider text-zinc-500 font-semibold mt-4">
+          <h3 className="mt-4 text-xs font-semibold tracking-wider text-zinc-500 uppercase">
             All Time
           </h3>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <MetricCard
               label="Total PnL"
               value={
@@ -84,14 +84,8 @@ export function PnLSummary({ session, allTime }: PnLSummaryProps) {
               value={`${allTime.win_rate.toFixed(0)}%`}
               subText={`${allTime.wins}W / ${allTime.losses}L`}
             />
-            <MetricCard
-              label="Resolutions"
-              value={allTime.total_resolutions}
-            />
-            <MetricCard
-              label="Trades"
-              value={allTime.total_trades}
-            />
+            <MetricCard label="Resolutions" value={allTime.total_resolutions} />
+            <MetricCard label="Trades" value={allTime.total_trades} />
           </div>
         </>
       )}

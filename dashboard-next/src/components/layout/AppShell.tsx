@@ -34,14 +34,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <WSContext.Provider value={effectiveWs}>
       <div className="flex h-screen overflow-hidden">
         <Sidebar />
-        <div className="flex-1 flex flex-col min-w-0">
+        <div className="flex min-w-0 flex-1 flex-col">
           <Header
             wsState={ws.state}
             botVersion={effectiveWs.snapshot?.bot_version}
           />
-          <main className="flex-1 overflow-y-auto p-4 lg:p-6">
-            {children}
-          </main>
+          <main className="flex-1 overflow-y-auto p-4 lg:p-6">{children}</main>
         </div>
       </div>
     </WSContext.Provider>
