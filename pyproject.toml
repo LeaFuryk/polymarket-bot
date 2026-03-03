@@ -58,7 +58,6 @@ ignore = [
     "SIM108",  # ternary — multi-line if/else is often clearer
     "SIM105",  # contextlib.suppress — try/except/pass is explicit
     "SIM102",  # collapsible-if — nested ifs are often clearer with comments
-    "UP038",   # isinstance-union — isinstance(x, (A, B)) is idiomatic
     "UP042",   # str-enum — keep str+Enum for backwards compat
 ]
 
