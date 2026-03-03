@@ -535,6 +535,41 @@ polybot-replay --slug btc-updown-5m --limit-price 0.45  # Fixed limit price scan
 
 Reads from `logs/polybot.db` (per-session data with decisions). Use `--db` to point at a different database.
 
+### Execution Forensics
+
+Deep post-session analysis of order execution across 6 feature areas. Extracts data from `polybot.db` to answer *why* orders fill or miss, *what they cost*, and *how to improve*.
+
+```bash
+polybot-forensics --db logs/polybot.db              # Full Rich report (all 6 features)
+polybot-forensics --db logs/polybot.db --json        # JSON output for scripting
+polybot-forensics --db logs/polybot.db --feature B   # Single feature
+polybot-forensics --feature A,C,E                    # Multiple features
+```
+
+| Feature | What it analyzes |
+|---------|-----------------|
+| **A: Execution** | Per-order latency (decision→submit, submit→fill), ask drift in bps, fill source histogram, p50/p95/max |
+| **B: TTL** | For each timeout, tests which TTL (1s–60s) would have rescued it; rescue curve |
+| **C: Costs** | Fees + slippage + decision-drift cost per order; grouped by outcome and side |
+| **D: Blocked** | Classifies blocked orders by category; assesses TTL and reprice recoverability |
+| **E: Round-trips** | FIFO BUY/SELL pairing with realized PnL, MFE/MAE, exit efficiency |
+| **F: Context** | Correlates confidence, R/R, indicators, ML score with win/loss outcomes |
+
+Metric definitions: [`docs/forensics.md`](docs/forensics.md)
+
+### Forensics API Server
+
+Real-time FastAPI server for the dashboard forensics tab:
+
+```bash
+uv pip install -e ".[server]"                           # Install server deps
+polybot-server --db logs/polybot.db --port 8888          # Start server
+curl http://localhost:8888/api/forensics/execution       # Feature A
+curl -N http://localhost:8888/api/sse                     # SSE auto-refresh stream
+```
+
+API docs at `http://localhost:8888/docs`. Dashboard forensics tab auto-connects when the server is running.
+
 ---
 
 ## How Iterations Work
@@ -754,7 +789,8 @@ polymarket-bot/
 ├── config/
 │   └── default.yaml              # Primary configuration
 ├── dashboard/
-│   └── index.html                # Standalone web dashboard (no build step)
+│   ├── index.html                # Standalone web dashboard (no build step)
+│   └── forensics.js              # Forensics tab — connects to polybot-server API
 ├── data/
 │   ├── feature_config.json       # AI-managed indicator config
 │   └── knowledge/                # AI-written knowledge files
@@ -776,6 +812,21 @@ polymarket-bot/
 │   │   ├── replay.py             # polybot-replay CLI — candle orderbook replay & fill analysis
 │   │   ├── report.py             # polybot-analyze CLI
 │   │   └── validate.py           # polybot-validate CLI — assumption validation against market history
+│   ├── forensics/
+│   │   ├── types.py             # Pydantic models for all forensics output
+│   │   ├── db.py                # Shared DB helpers (connect, load orders/snapshots)
+│   │   ├── execution.py         # Feature A: order execution metrics
+│   │   ├── ttl.py               # Feature B: TTL counterfactual analysis
+│   │   ├── costs.py             # Feature C: cost breakdown (fees, slippage, drift)
+│   │   ├── blocked.py           # Feature D: blocked order classification
+│   │   ├── roundtrips.py        # Feature E: entry-to-exit FIFO pairing
+│   │   ├── context.py           # Feature F: decision context (indicators, R/R, ML)
+│   │   ├── aggregate.py         # Cross-feature report assembly
+│   │   ├── render.py            # Rich CLI rendering
+│   │   └── cli.py               # polybot-forensics CLI entry point
+│   ├── server/
+│   │   ├── app.py               # FastAPI forensics API + SSE stream
+│   │   └── run.py               # polybot-server CLI entry point
 │   ├── execution/
 │   │   ├── __init__.py
 │   │   └── live.py              # Live CLOB execution (GTC limit orders, safety checks)

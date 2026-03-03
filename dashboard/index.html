@@ -1637,6 +1637,7 @@ body::after {
   </div>
 </div>
 
+<script src="forensics.js"></script>
 <script>
 const DATA_URL = '../logs/dashboard_data.json';
 const ITER_URL = '../logs/iterations.json';
@@ -1896,6 +1897,13 @@ function renderSidebar(data) {
     </div>
   </div>`;
 
+  // Forensics tab
+  const fa = selectedView === 'forensics' ? ' active' : '';
+  h += `<div class="sb-item${fa}" onclick="selectView('forensics')">
+    <div class="sb-item-top"><span class="sb-item-label">Forensics</span>
+    <span class="sb-item-count">6 features</span></div>
+  </div>`;
+
   h += '<div class="sb-divider"></div>';
 
   for (const dateStr of dates) {
@@ -2073,6 +2081,20 @@ function updateOutageBanner(outage) {
 
 // ── Main render ──
 function render(d) {
+  // Forensics view
+  if (selectedView === 'forensics') {
+    $('viewTitle').textContent = 'Forensics';
+    $('viewSub').textContent = 'Execution Analysis';
+    $('metricsRow').innerHTML = '';
+    $('liveRow').innerHTML = '';
+    if (!_forensicsData) {
+      fetchForensicsData().then(() => renderForensicsView());
+      startForensicsSSE();
+    }
+    renderForensicsView();
+    return;
+  }
+
   // Iteration detail view
   const iterMatch = selectedView.match(/^iter_(\d+)$/);
   if (iterMatch && d.iterations?.length) {

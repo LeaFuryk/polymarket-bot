@@ -4,6 +4,52 @@ All notable changes to this project will be documented in this file.
 
 ## [v0.15.0] — 2026-03-02
 
+### Added — `polybot-forensics` execution forensics system
+
+New CLI + API + dashboard for deep post-session analysis of order execution. Six feature modules extract and cross-reference data from `polybot.db` to answer *why* orders fill or miss, *what they cost*, and *how to improve*.
+
+```bash
+polybot-forensics --db logs/polybot.db              # Full Rich report (all 6 features)
+polybot-forensics --db logs/polybot.db --json        # JSON output
+polybot-forensics --db logs/polybot.db --feature B   # Single feature (TTL counterfactuals)
+polybot-forensics --feature A,C,E                    # Multiple features
+```
+
+**Feature modules:**
+- **A: Execution Metrics** — per-order latency (decision→submit, submit→fill), ask drift in bps, fill source histogram, p50/p95/max aggregates
+- **B: TTL Counterfactuals** — for each timed-out order, tests which TTL values (1s–60s grid) would have rescued it; produces a rescue curve
+- **C: Cost Breakdown** — fees, slippage, and decision-drift cost per filled order; grouped by outcome (win/loss) and side (BUY/SELL)
+- **D: Blocked Orders** — classifies risk-blocked orders into categories (kill_switch, timeout, no_book, etc.); assesses TTL and reprice recoverability
+- **E: Round-Trips** — FIFO pairs BUY entries with SELL exits; computes realized PnL, MFE/MAE (max favorable/adverse excursion), exit efficiency
+- **F: Decision Context** — correlates AI confidence, R/R ratio, indicators, and ML score with win/loss outcomes
+
+**Metric glossary:** `docs/forensics.md` — full definitions, units, and formulas for every metric.
+
+### Added — `polybot-server` FastAPI forensics API
+
+Real-time API server for the forensics system, consumed by the web dashboard.
+
+```bash
+uv pip install -e ".[server]"                           # Install FastAPI + uvicorn
+polybot-server --db logs/polybot.db --port 8888          # Start server
+curl http://localhost:8888/api/forensics/execution       # Query feature A
+curl -N http://localhost:8888/api/sse                     # SSE stream (auto-refresh)
+```
+
+**Endpoints:** `/api/forensics` (full report), `/api/forensics/{execution,ttl,costs,blocked,roundtrips,context}` (per-feature), `/api/sse` (server-sent events stream, polls DB every 2s).
+
+### Added — Dashboard forensics tab
+
+New "Forensics" tab in the web dashboard (`dashboard/index.html`). Connects to `polybot-server` and renders:
+- Execution overview with fill rate gauge, latency metrics, fill source breakdown
+- TTL rescue curve bar chart
+- Cost waterfall with stacked bar (fees vs slippage vs drift)
+- Blocked orders category bar with rescuability badges
+- Round-trips table with PnL, MFE/MAE, exit efficiency
+- Decision context heatmap (confidence vs outcome grid)
+
+Auto-refreshes via SSE when server is running; falls back to static fetch.
+
 ### Added — `polybot-replay` candle replay runner
 
 New CLI tool that deterministically replays any candle's per-second orderbook timeline offline, turning raw SQLite snapshot data into actionable fill-strategy insights.
