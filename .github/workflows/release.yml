@@ -55,9 +55,16 @@ jobs:
 
           echo "✓ Version $PROJ_VER is consistent and tag $TAG does not exist yet"
 
-      - name: Extract release notes
+      - name: Extract release notes from [Unreleased]
         run: |
-          awk '/^## \[v/{if(found) exit; found=1; next} found' CHANGELOG.md > /tmp/release-notes.md
+          # Extract content between ## [Unreleased] and the next ## heading
+          awk '/^## \[Unreleased\]/{found=1; next} /^## /{if(found) exit} found' CHANGELOG.md > /tmp/release-notes.md
+
+          if [ ! -s /tmp/release-notes.md ]; then
+            echo "::warning::No content under [Unreleased] — falling back to first version section"
+            awk '/^## \[v/{if(found) exit; found=1; next} found' CHANGELOG.md > /tmp/release-notes.md
+          fi
+
           echo "--- Release notes ---"
           cat /tmp/release-notes.md
 
@@ -89,6 +96,21 @@ jobs:
             echo "" > /tmp/pr-list.md
           fi
 
+      - name: Rename [Unreleased] to version heading
+        run: |
+          TAG="${{ steps.versions.outputs.tag }}"
+          TODAY=$(date +%Y-%m-%d)
+
+          # Replace ## [Unreleased] with ## [vX.Y.Z] — YYYY-MM-DD
+          sed -i "s/^## \[Unreleased\]/## [${TAG}] — ${TODAY}/" CHANGELOG.md
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add CHANGELOG.md
+          git commit -m "chore: release ${TAG} — update CHANGELOG heading"
+
+          echo "✓ Renamed [Unreleased] to [${TAG}] — ${TODAY}"
+
       - name: Create tag & release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -99,7 +121,7 @@ jobs:
           cat /tmp/release-notes.md /tmp/pr-list.md > /tmp/release-body.md
 
           gh release create "$TAG" \
-            --target main \
+            --target "$(git rev-parse HEAD)" \
             --title "$TAG" \
             --notes-file /tmp/release-body.md
 
@@ -132,10 +154,10 @@ jobs:
           # Bump pyproject.toml
           sed -i "s/^version = \".*\"/version = \"${NEXT}\"/" pyproject.toml
 
-          # Insert new changelog section before the first ## [v...] header
-          awk -v ver="$NEXT" '
+          # Insert ## [Unreleased] section before the first ## [v...] header
+          awk '
             /^## \[v/ && !inserted {
-              print "## [v" ver "] — Unreleased"
+              print "## [Unreleased]"
               print ""
               print ""
               inserted=1
