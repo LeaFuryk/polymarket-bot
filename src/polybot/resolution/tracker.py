@@ -6,10 +6,8 @@ import logging
 
 from polybot.models import CandleMarket, ResolutionRecord
 from polybot.resolution.checker import determine_btc_winner
-from polybot.resolution.protocol import BtcPriceFeedProtocol, PriceClient
+from polybot.resolution.protocol import ResolutionRepository
 from polybot.resolution.verifier import verify_winner
-
-logger = logging.getLogger(__name__)
 
 
 class ResolutionTracker:
@@ -22,17 +20,17 @@ class ResolutionTracker:
 
     def __init__(
         self,
-        btc_feed: BtcPriceFeedProtocol,
-        rest_client: PriceClient | None = None,
+        repository: ResolutionRepository,
+        logger: logging.Logger | None = None,
     ) -> None:
-        self._btc_feed = btc_feed
-        self._rest_client = rest_client
+        self._repo = repository
+        self._log = logger or logging.getLogger(__name__)
         self._open_prices: dict[str, float] = {}
 
     def record_candle_open(self, market: CandleMarket, btc_price: float) -> None:
         """Record the BTC price at candle open for later resolution."""
         self._open_prices[market.condition_id] = btc_price
-        logger.info(
+        self._log.info(
             "Recorded candle open: %s BTC=$%.2f",
             market.slug,
             btc_price,
@@ -52,16 +50,16 @@ class ResolutionTracker:
         """
         btc_close = current_btc_price
 
-        # Get opening price: prefer live-captured, fallback to Binance historical
+        # Get opening price: prefer live-captured, fallback to historical
         btc_open = self._open_prices.pop(market.condition_id, None)
         if btc_open is None:
-            logger.warning(
-                "No live open price for %s, fetching from Binance",
+            self._log.warning(
+                "No live open price for %s, fetching historical",
                 market.slug,
             )
-            btc_open = await self._btc_feed.get_price_at(market.start_time)
+            btc_open = await self._repo.get_btc_price_at(market.start_time)
             if btc_open is None:
-                logger.error(
+                self._log.error(
                     "Could not determine open price for %s, defaulting to close",
                     market.slug,
                 )
@@ -69,7 +67,7 @@ class ResolutionTracker:
 
         btc_winner = determine_btc_winner(btc_open, btc_close)
 
-        logger.info(
+        self._log.info(
             "BTC resolution for %s: open=$%.2f close=$%.2f → %s",
             market.slug,
             btc_open,
@@ -77,10 +75,10 @@ class ResolutionTracker:
             btc_winner,
         )
 
-        winner = await verify_winner(market, btc_winner, self._rest_client)
+        winner = await verify_winner(market, btc_winner, self._repo, self._log)
 
         if winner != btc_winner:
-            logger.warning(
+            self._log.warning(
                 "Final resolution for %s: OVERRIDDEN to %s (BTC said %s, Polymarket said %s)",
                 market.slug,
                 winner,
