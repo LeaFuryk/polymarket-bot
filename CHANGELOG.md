@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 ## [v0.15.0] — 2026-03-02
 
+### Fixed — Reviewdog CI warnings
+
+- **Ruff**: Removed `UP038` from the ruff `ignore` list in `pyproject.toml` — the rule was removed from ruff and ignoring it emitted a warning on every CI run
+- **Prettier**: Pinned `EPMatt/reviewdog-action-prettier` to `v1.3.0` (was `@v1`) to resolve the `fail_on_error` deprecation warning — v1.3.0 added proper `-fail-level` support
+
 ### Added — Release workflow
 
 Added a `release.yml` on-demand workflow (`workflow_dispatch`) that automates the full release cycle:

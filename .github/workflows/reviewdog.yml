@@ -57,7 +57,7 @@ jobs:
         working-directory: dashboard-next
 
       - name: Prettier via reviewdog
-        uses: EPMatt/reviewdog-action-prettier@v1
+        uses: EPMatt/reviewdog-action-prettier@v1.3.0
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           reporter: github-pr-review
