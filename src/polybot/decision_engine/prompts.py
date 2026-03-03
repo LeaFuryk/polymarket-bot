@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import statistics
 
-from polybot.models import BtcCandle, FeatureVector
+from polybot.models import FeatureVector
 
 SCREENING_PROMPT = """\
 You are a fast screening agent for a Polymarket BTC 5-minute candle prediction market bot.
@@ -152,8 +152,11 @@ For HOLD: explain what would need to change for you to trade.
 
 
 def format_feature_vector(
-    fv: FeatureVector, feedback_context: str = "", indicators_text: str = "",
-    ai_cycle_cost: float = 0.0, ai_session_cost: float = 0.0,
+    fv: FeatureVector,
+    feedback_context: str = "",
+    indicators_text: str = "",
+    ai_cycle_cost: float = 0.0,
+    ai_session_cost: float = 0.0,
     candle_open_btc: float | None = None,
 ) -> str:
     """Format a FeatureVector into a clear prompt for Claude."""
@@ -188,18 +191,20 @@ def format_feature_vector(
     # Compact orderbook — data only, explanations in system prompt
     up_spread_str = f"{up_ob.spread_pct:.2%}" if up_ob.spread_pct else "N/A"
     down_spread_str = f"{down_ob.spread_pct:.2%}" if down_ob.spread_pct else "N/A"
-    lines.extend([
-        "## Current Market",
-        f"Time remaining: {fv.time_remaining:.0f}s",
-        "",
-        f"**UP token**: ask={up_ob.best_ask or 'N/A'} bid={up_ob.best_bid or 'N/A'} "
-        f"mid={up_ob.midpoint or 'N/A'} spread={up_spread_str} "
-        f"depth: ${up_ob.bid_depth:.0f}bid/${up_ob.ask_depth:.0f}ask",
-        f"**DOWN token**: ask={down_ob.best_ask or 'N/A'} bid={down_ob.best_bid or 'N/A'} "
-        f"mid={down_ob.midpoint or 'N/A'} spread={down_spread_str} "
-        f"depth: ${down_ob.bid_depth:.0f}bid/${down_ob.ask_depth:.0f}ask",
-        f"Spreads: UP={up_spread_str} DOWN={down_spread_str}",
-    ])
+    lines.extend(
+        [
+            "## Current Market",
+            f"Time remaining: {fv.time_remaining:.0f}s",
+            "",
+            f"**UP token**: ask={up_ob.best_ask or 'N/A'} bid={up_ob.best_bid or 'N/A'} "
+            f"mid={up_ob.midpoint or 'N/A'} spread={up_spread_str} "
+            f"depth: ${up_ob.bid_depth:.0f}bid/${up_ob.ask_depth:.0f}ask",
+            f"**DOWN token**: ask={down_ob.best_ask or 'N/A'} bid={down_ob.best_bid or 'N/A'} "
+            f"mid={down_ob.midpoint or 'N/A'} spread={down_spread_str} "
+            f"depth: ${down_ob.bid_depth:.0f}bid/${down_ob.ask_depth:.0f}ask",
+            f"Spreads: UP={up_spread_str} DOWN={down_spread_str}",
+        ]
+    )
 
     # Price history for trend (Up token midpoints)
     if fv.market.price_history:
@@ -243,9 +248,7 @@ def format_feature_vector(
         lines.append("| # | Open | Close | Direction | Body% |")
         lines.append("|---|------|-------|-----------|-------|")
         for i, c in enumerate(last_6, 1):
-            lines.append(
-                f"| {i} | ${c.open:,.0f} | ${c.close:,.0f} | {c.direction.upper()} | {c.body_pct:+.3f}% |"
-            )
+            lines.append(f"| {i} | ${c.open:,.0f} | ${c.close:,.0f} | {c.direction.upper()} | {c.body_pct:+.3f}% |")
 
         # MA5 vs MA12 crossover
         closes = [c.close for c in candles]
@@ -303,9 +306,7 @@ def format_feature_vector(
             if abs(t_score) >= 0.3:
                 weak_side = "DOWN" if t_score > 0 else "UP"
                 reduce_pct = "50%" if abs(t_score) >= 0.7 else "30%"
-                lines.append(
-                    f"- Counter-trend ({weak_side}) positions size-reduced by {reduce_pct}"
-                )
+                lines.append(f"- Counter-trend ({weak_side}) positions size-reduced by {reduce_pct}")
 
     # Positions — compact
     lines.extend(["", "## Positions"])
@@ -325,32 +326,38 @@ def format_feature_vector(
         lines.append("- DOWN: no position")
 
     # Portfolio + Risk — compact
-    lines.extend([
-        "",
-        f"## Portfolio & Risk",
-        f"Cash: ${fv.portfolio_cash:.2f} | Portfolio: ${fv.portfolio_total_value:.2f} | "
-        f"AI cost: ${ai_session_cost:.4f}",
-        f"Daily PnL: ${fv.risk.daily_pnl:.4f} | Trades: {fv.risk.daily_trades} | "
-        f"Fees: ${fv.risk.daily_fees:.4f} | Drawdown: ${fv.risk.max_drawdown:.4f}"
-        + (f" | **HALTED**" if fv.risk.is_halted else ""),
-    ])
+    lines.extend(
+        [
+            "",
+            "## Portfolio & Risk",
+            f"Cash: ${fv.portfolio_cash:.2f} | Portfolio: ${fv.portfolio_total_value:.2f} | "
+            f"AI cost: ${ai_session_cost:.4f}",
+            f"Daily PnL: ${fv.risk.daily_pnl:.4f} | Trades: {fv.risk.daily_trades} | "
+            f"Fees: ${fv.risk.daily_fees:.4f} | Drawdown: ${fv.risk.max_drawdown:.4f}"
+            + (" | **HALTED**" if fv.risk.is_halted else ""),
+        ]
+    )
 
     if indicators_text:
         lines.extend(["", indicators_text])
 
     if feedback_context:
-        lines.extend([
-            "",
-            "## Performance Feedback & Observations",
-            feedback_context,
-        ])
+        lines.extend(
+            [
+                "",
+                "## Performance Feedback & Observations",
+                feedback_context,
+            ]
+        )
 
-    lines.extend([
-        "",
-        f"## Cycle #{fv.cycle_number}",
-        "What is your trading decision? Choose which token (up/down) and action. "
-        "Respond with the structured JSON output.",
-    ])
+    lines.extend(
+        [
+            "",
+            f"## Cycle #{fv.cycle_number}",
+            "What is your trading decision? Choose which token (up/down) and action. "
+            "Respond with the structured JSON output.",
+        ]
+    )
 
     return "\n".join(lines)
 

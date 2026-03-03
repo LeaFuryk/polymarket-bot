@@ -12,7 +12,7 @@ from __future__ import annotations
 import json
 import logging
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -163,7 +163,7 @@ class ConfidenceCalibrator:
         # Score actual trades
         if slug in self._pending:
             confidence, token_side, entry_price = self._pending.pop(slug)
-            won = (token_side == winner)
+            won = token_side == winner
 
             # Update bin
             key = self._bin_key(confidence)
@@ -178,10 +178,13 @@ class ConfidenceCalibrator:
 
             logger.info(
                 "Calibration: conf=%.2f side=%s winner=%s → %s (bin %s: %d/%d = %.0f%%)",
-                confidence, token_side, winner,
+                confidence,
+                token_side,
+                winner,
                 "WIN" if won else "LOSS",
                 f"{key:.2f}-{key + BIN_WIDTH:.2f}",
-                self._bins[key].wins, self._bins[key].total,
+                self._bins[key].wins,
+                self._bins[key].total,
                 self._bins[key].win_rate * 100,
             )
 
@@ -189,14 +192,16 @@ class ConfidenceCalibrator:
         if slug in self._shadow_pending:
             shadow_dir, shadow_conf = self._shadow_pending.pop(slug)
             self._shadow_total += 1
-            shadow_correct = (shadow_dir == winner)
+            shadow_correct = shadow_dir == winner
             if shadow_correct:
                 self._shadow_correct += 1
             logger.info(
                 "Shadow prediction: predicted=%s winner=%s → %s (accuracy: %d/%d = %.0f%%)",
-                shadow_dir, winner,
+                shadow_dir,
+                winner,
                 "CORRECT" if shadow_correct else "WRONG",
-                self._shadow_correct, self._shadow_total,
+                self._shadow_correct,
+                self._shadow_total,
                 (self._shadow_correct / self._shadow_total * 100) if self._shadow_total > 0 else 0,
             )
 
@@ -220,10 +225,7 @@ class ConfidenceCalibrator:
             )
 
         should_trade = b.win_rate >= self._break_even
-        reason = (
-            f"Calibrated: {b.win_rate:.0%} win rate from {b.total} trades "
-            f"(need {self._break_even:.0%} break-even)"
-        )
+        reason = f"Calibrated: {b.win_rate:.0%} win rate from {b.total} trades (need {self._break_even:.0%} break-even)"
 
         return CalibrationResult(
             stated_confidence=confidence,

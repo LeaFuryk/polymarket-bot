@@ -111,14 +111,18 @@ class ChainlinkWSFeed:
 
         async with websockets.connect(self._url, ping_interval=None) as ws:
             # Subscribe to Chainlink BTC/USD
-            subscribe_msg = json.dumps({
-                "action": "subscribe",
-                "subscriptions": [{
-                    "topic": "crypto_prices_chainlink",
-                    "type": "*",
-                    "filters": json.dumps({"symbol": "btc/usd"}),
-                }],
-            })
+            subscribe_msg = json.dumps(
+                {
+                    "action": "subscribe",
+                    "subscriptions": [
+                        {
+                            "topic": "crypto_prices_chainlink",
+                            "type": "*",
+                            "filters": json.dumps({"symbol": "btc/usd"}),
+                        }
+                    ],
+                }
+            )
             await ws.send(subscribe_msg)
             logger.info("Chainlink WS: subscribed to btc/usd")
             self._connected = True
@@ -218,7 +222,8 @@ class ChainlinkWSFeed:
                 if tick_count > 0:
                     logger.debug(
                         "Chainlink WS: processed %d ticks, latest $%.2f",
-                        tick_count, self._price,
+                        tick_count,
+                        self._price,
                     )
                     return
 
@@ -331,5 +336,8 @@ class ChainlinkWSFeed:
         self._current_bucket = None
         logger.info(
             "Chainlink WS: completed candle %s → $%.2f (ticks=%d, dir=%s)",
-            candle.open_time, candle.close, b["tick_count"], candle.direction,
+            candle.open_time,
+            candle.close,
+            b["tick_count"],
+            candle.direction,
         )

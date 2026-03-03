@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from .blocked import analyze_blocked
 from .context import analyze_context
@@ -24,7 +24,7 @@ def build_report(conn: sqlite3.Connection, db_path: str) -> ForensicsReport:
     decision_contexts = analyze_context(conn)
 
     return ForensicsReport(
-        generated_at=datetime.now(timezone.utc).isoformat(),
+        generated_at=datetime.now(UTC).isoformat(),
         db_path=db_path,
         order_metrics=order_metrics,
         aggregate_metrics=aggregate_metrics,

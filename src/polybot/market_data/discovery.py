@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import time
+from datetime import UTC
 
 import httpx
 
@@ -110,14 +111,14 @@ class MarketDiscovery:
     @staticmethod
     def _parse_iso_timestamp(iso_str: str) -> float:
         """Parse an ISO 8601 timestamp string to Unix epoch float."""
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         # Handle common formats: with or without Z, with or without microseconds
         iso_str = iso_str.replace("Z", "+00:00")
         try:
             dt = datetime.fromisoformat(iso_str)
             if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=timezone.utc)
+                dt = dt.replace(tzinfo=UTC)
             return dt.timestamp()
         except ValueError:
             logger.warning("Could not parse ISO timestamp: %s", iso_str)

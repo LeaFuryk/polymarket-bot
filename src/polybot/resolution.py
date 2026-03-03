@@ -35,7 +35,8 @@ class ResolutionTracker:
         self._open_prices[market.condition_id] = btc_price
         logger.info(
             "Recorded candle open: %s BTC=$%.2f",
-            market.slug, btc_price,
+            market.slug,
+            btc_price,
         )
 
     def get_candle_open(self, condition_id: str) -> float | None:
@@ -43,7 +44,9 @@ class ResolutionTracker:
         return self._open_prices.get(condition_id)
 
     async def _verify_winner_on_polymarket(
-        self, market: CandleMarket, btc_winner: str,
+        self,
+        market: CandleMarket,
+        btc_winner: str,
     ) -> str:
         """Verify the winner by checking token prices on Polymarket after resolution.
 
@@ -93,9 +96,11 @@ class ResolutionTracker:
             if polymarket_winner is None:
                 # Prices are ambiguous (market may not have settled yet)
                 logger.warning(
-                    "Polymarket prices ambiguous for %s (UP=%.4f DOWN=%.4f), "
-                    "using BTC-based winner: %s",
-                    market.slug, up_price or 0.0, down_price or 0.0, btc_winner,
+                    "Polymarket prices ambiguous for %s (UP=%.4f DOWN=%.4f), using BTC-based winner: %s",
+                    market.slug,
+                    up_price or 0.0,
+                    down_price or 0.0,
+                    btc_winner,
                 )
                 return btc_winner
 
@@ -103,26 +108,31 @@ class ResolutionTracker:
                 logger.warning(
                     "WINNER MISMATCH for %s! BTC says %s but Polymarket says %s. "
                     "Using Polymarket's outcome as authoritative.",
-                    market.slug, btc_winner, polymarket_winner,
+                    market.slug,
+                    btc_winner,
+                    polymarket_winner,
                 )
                 return polymarket_winner
 
             logger.info(
                 "Winner verified for %s: %s (BTC and Polymarket agree)",
-                market.slug, btc_winner,
+                market.slug,
+                btc_winner,
             )
             return btc_winner
 
         except Exception:
             logger.exception(
-                "Failed to verify winner on Polymarket for %s, "
-                "using BTC-based winner: %s",
-                market.slug, btc_winner,
+                "Failed to verify winner on Polymarket for %s, using BTC-based winner: %s",
+                market.slug,
+                btc_winner,
             )
             return btc_winner
 
     async def resolve(
-        self, market: CandleMarket, current_btc_price: float,
+        self,
+        market: CandleMarket,
+        current_btc_price: float,
     ) -> ResolutionRecord:
         """Resolve a candle market by comparing open vs close BTC price,
         then verify against Polymarket's actual outcome.
@@ -157,7 +167,10 @@ class ResolutionTracker:
 
         logger.info(
             "BTC resolution for %s: open=$%.2f close=$%.2f → %s",
-            market.slug, btc_open, btc_close, btc_winner,
+            market.slug,
+            btc_open,
+            btc_close,
+            btc_winner,
         )
 
         # Verify against Polymarket's actual outcome
@@ -165,9 +178,11 @@ class ResolutionTracker:
 
         if winner != btc_winner:
             logger.warning(
-                "Final resolution for %s: OVERRIDDEN to %s "
-                "(BTC said %s, Polymarket said %s)",
-                market.slug, winner, btc_winner, winner,
+                "Final resolution for %s: OVERRIDDEN to %s (BTC said %s, Polymarket said %s)",
+                market.slug,
+                winner,
+                btc_winner,
+                winner,
             )
 
         return ResolutionRecord(

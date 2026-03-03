@@ -7,8 +7,8 @@ import logging
 from polybot.config import SimulatorConfig
 from polybot.models import (
     Action,
-    OrderType,
     OrderbookSnapshot,
+    OrderType,
     Side,
     SimulatedFill,
     TradingDecision,
@@ -23,9 +23,7 @@ class ExecutionSimulator:
     def __init__(self, config: SimulatorConfig) -> None:
         self._config = config
 
-    def calculate_slippage_bps(
-        self, size: float, orderbook: OrderbookSnapshot
-    ) -> float:
+    def calculate_slippage_bps(self, size: float, orderbook: OrderbookSnapshot) -> float:
         """Calculate slippage in basis points based on order size vs liquidity."""
         if orderbook.best_bid is None or orderbook.best_ask is None:
             return self._config.base_slippage_bps
@@ -37,13 +35,9 @@ class ExecutionSimulator:
         size_ratio = size / total_liquidity
         # Use higher proportional factor for more realistic slippage modeling
         prop_factor = self._config.proportional_factor
-        return self._config.base_slippage_bps + (
-            size_ratio * prop_factor * 10000
-        )
+        return self._config.base_slippage_bps + (size_ratio * prop_factor * 10000)
 
-    def simulate_market_order(
-        self, decision: TradingDecision, orderbook: OrderbookSnapshot
-    ) -> SimulatedFill | None:
+    def simulate_market_order(self, decision: TradingDecision, orderbook: OrderbookSnapshot) -> SimulatedFill | None:
         """Simulate a market order fill with slippage and fees."""
         if decision.action == Action.HOLD or decision.size <= 0:
             return None
@@ -87,9 +81,7 @@ class ExecutionSimulator:
             total_cost=total_cost,
         )
 
-    def execute(
-        self, decision: TradingDecision, orderbook: OrderbookSnapshot
-    ) -> SimulatedFill | None:
+    def execute(self, decision: TradingDecision, orderbook: OrderbookSnapshot) -> SimulatedFill | None:
         """Execute a trading decision, dispatching to market or limit logic."""
         if decision.action == Action.HOLD:
             return None

@@ -10,9 +10,13 @@ import asyncio
 import json
 import logging
 import time
+from typing import TYPE_CHECKING
 
 from polybot.adaptive_entry import AdaptiveEntryTracker
 from polybot.config import AppConfig
+
+if TYPE_CHECKING:
+    from polybot.datastore import DataStore, MarketHistoryStore
 from polybot.indicators import (
     FeatureConfig,
     SessionContext,
@@ -38,9 +42,9 @@ class MarketMonitor:
         prefilter: PreFilter,
         portfolio: Portfolio,
         resolution_tracker: ResolutionTracker,
-        datastore: "DataStore | None" = None,
-        feature_config: "FeatureConfig | None" = None,
-        market_history: "MarketHistoryStore | None" = None,
+        datastore: DataStore | None = None,
+        feature_config: FeatureConfig | None = None,
+        market_history: MarketHistoryStore | None = None,
         adaptive_entry: AdaptiveEntryTracker | None = None,
     ) -> None:
         self._config = config
@@ -114,10 +118,7 @@ class MarketMonitor:
             btc_move = btc_price_val - candle_open
 
         # Run prefilter checks (1-5, no R/R gate)
-        has_position = (
-            self._portfolio.up_position.shares > 0
-            or self._portfolio.down_position.shares > 0
-        )
+        has_position = self._portfolio.up_position.shares > 0 or self._portfolio.down_position.shares > 0
         pf_result = self._prefilter.check(time_remaining, snapshot, has_position)
 
         # Build snapshot record
@@ -151,13 +152,22 @@ class MarketMonitor:
         # Queue snapshot for SQLite analytics
         if self._datastore is not None and self._datastore.current_candle_id is not None:
             self._queue_snapshot(
-                snapshot, pf_snapshot, pf_result, rr_up, rr_down, btc_move,
+                snapshot,
+                pf_snapshot,
+                pf_result,
+                rr_up,
+                rr_down,
+                btc_move,
             )
 
         # Queue snapshot for persistent market history
         if self._market_history is not None and self._market_history.current_candle_id is not None:
             self._queue_market_history_snapshot(
-                snapshot, pf_snapshot, rr_up, rr_down, btc_move,
+                snapshot,
+                pf_snapshot,
+                rr_up,
+                rr_down,
+                btc_move,
             )
 
         # Decide whether to trigger AI (entry only — exits come from PositionMonitor's queue)
@@ -257,12 +267,18 @@ class MarketMonitor:
                 self._shared.ai_trigger_event.set()
                 logger.info(
                     "AI triggered: %s (cooldown=%.0fs elapsed)",
-                    self._shared.ai_trigger_reason, elapsed,
+                    self._shared.ai_trigger_reason,
+                    elapsed,
                 )
 
     def _queue_snapshot(
-        self, snapshot, pf_snapshot: PreFilterSnapshot, pf_result,
-        rr_up: float, rr_down: float, btc_move: float,
+        self,
+        snapshot,
+        pf_snapshot: PreFilterSnapshot,
+        pf_result,
+        rr_up: float,
+        rr_down: float,
+        btc_move: float,
     ) -> None:
         """Build a SnapshotRow from current tick data and queue it."""
         from polybot.datastore import SnapshotRow
@@ -281,10 +297,7 @@ class MarketMonitor:
                     candle_open_btc=self._shared.candle_open_btc,
                 )
                 results = compute_indicators(snapshot, self._feature_config, session_ctx)
-                indicators_dict = {
-                    r.name: {"value": r.value, "label": r.label}
-                    for r in results
-                }
+                indicators_dict = {r.name: {"value": r.value, "label": r.label} for r in results}
             except Exception:
                 logger.debug("Indicator computation failed for snapshot", exc_info=True)
 
@@ -317,8 +330,12 @@ class MarketMonitor:
         self._datastore.queue_snapshot(row)
 
     def _queue_market_history_snapshot(
-        self, snapshot, pf_snapshot: PreFilterSnapshot,
-        rr_up: float, rr_down: float, btc_move: float,
+        self,
+        snapshot,
+        pf_snapshot: PreFilterSnapshot,
+        rr_up: float,
+        rr_down: float,
+        btc_move: float,
     ) -> None:
         """Build a MarketSnapshotRow and queue it for persistent market history."""
         from polybot.datastore import MarketSnapshotRow

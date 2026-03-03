@@ -101,13 +101,15 @@ def analyze_ttl(
             if grid_results.get(ttl, False):
                 rescued_at[ttl] += 1
 
-        counterfactuals.append(TTLCounterfactual(
-            order_id=order_id,
-            candle_id=candle_id,
-            actual_ttl=actual_ttl,
-            grid=grid_results,
-            rescue_ttl=rescue_ttl,
-        ))
+        counterfactuals.append(
+            TTLCounterfactual(
+                order_id=order_id,
+                candle_id=candle_id,
+                actual_ttl=actual_ttl,
+                grid=grid_results,
+                rescue_ttl=rescue_ttl,
+            )
+        )
 
     agg = TTLAggregate(
         grid_ttls=grid,

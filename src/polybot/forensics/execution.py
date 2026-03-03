@@ -70,24 +70,26 @@ def analyze_orders(conn: sqlite3.Connection) -> tuple[list[OrderMetrics], Aggreg
         src = fill_source or "timeout"
         source_counts[src] = source_counts.get(src, 0) + 1
 
-        metrics.append(OrderMetrics(
-            order_id=order_id,
-            candle_id=d.get("candle_id", 0),
-            side=action,
-            decision_ts=decision_ts,
-            submit_ts=submit_ts,
-            decision_to_submit_ms=decision_to_submit_ms,
-            decision_ask=decision_ask,
-            submit_ask=submit_ask,
-            ask_drift_bps=ask_drift_bps,
-            filled=filled,
-            fill_source=fill_source,
-            fill_ts=fill_ts,
-            fill_latency_ms=fill_latency_ms,
-            ttl_used=lo.get("ttl_used", 3),
-            polls=lo.get("polls", []),
-            balance_delta=balance_delta,
-        ))
+        metrics.append(
+            OrderMetrics(
+                order_id=order_id,
+                candle_id=d.get("candle_id", 0),
+                side=action,
+                decision_ts=decision_ts,
+                submit_ts=submit_ts,
+                decision_to_submit_ms=decision_to_submit_ms,
+                decision_ask=decision_ask,
+                submit_ask=submit_ask,
+                ask_drift_bps=ask_drift_bps,
+                filled=filled,
+                fill_source=fill_source,
+                fill_ts=fill_ts,
+                fill_latency_ms=fill_latency_ms,
+                ttl_used=lo.get("ttl_used", 3),
+                polls=lo.get("polls", []),
+                balance_delta=balance_delta,
+            )
+        )
 
     filled_count = sum(1 for m in metrics if m.filled)
     total = len(metrics)

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 
-from polybot.models import PositionState, SimulatedFill, Side, TokenSide
+from polybot.models import PositionState, Side, SimulatedFill, TokenSide
 
 logger = logging.getLogger(__name__)
 
@@ -65,16 +65,14 @@ class Portfolio:
             down_price = max(0.01, 1.0 - up_price)
 
         if self.up_position.shares > 0:
-            self.up_position.unrealized_pnl = (
-                (up_price - self.up_position.avg_entry_price) * self.up_position.shares
-            )
+            self.up_position.unrealized_pnl = (up_price - self.up_position.avg_entry_price) * self.up_position.shares
         else:
             self.up_position.unrealized_pnl = 0.0
 
         if self.down_position.shares > 0:
             self.down_position.unrealized_pnl = (
-                (down_price - self.down_position.avg_entry_price) * self.down_position.shares
-            )
+                down_price - self.down_position.avg_entry_price
+            ) * self.down_position.shares
         else:
             self.down_position.unrealized_pnl = 0.0
 
@@ -82,11 +80,7 @@ class Portfolio:
         """Portfolio value using current market prices for positions."""
         if down_price is None:
             down_price = max(0.01, 1.0 - up_price)
-        return (
-            self.cash
-            + self.up_position.shares * up_price
-            + self.down_position.shares * down_price
-        )
+        return self.cash + self.up_position.shares * up_price + self.down_position.shares * down_price
 
     def apply_fill(self, fill: SimulatedFill, token_side: TokenSide = TokenSide.UP) -> None:
         """Apply a simulated fill to update position and cash."""
@@ -112,7 +106,11 @@ class Portfolio:
 
         logger.info(
             "BUY %s %.2f shares @ %.4f | cash=%.2f | shares=%.2f",
-            token_side.value, fill.size, fill.fill_price, self.cash, pos.shares,
+            token_side.value,
+            fill.size,
+            fill.fill_price,
+            self.cash,
+            pos.shares,
         )
 
     def _apply_sell(self, fill: SimulatedFill, pos: PositionState, token_side: TokenSide) -> None:
@@ -134,7 +132,12 @@ class Portfolio:
 
         logger.info(
             "SELL %s %.2f shares @ %.4f | pnl=%.4f | cash=%.2f | shares=%.2f",
-            token_side.value, fill.size, fill.fill_price, pnl, self.cash, pos.shares,
+            token_side.value,
+            fill.size,
+            fill.fill_price,
+            pnl,
+            self.cash,
+            pos.shares,
         )
 
     def resolve_market(self, winner: str) -> float:
@@ -176,7 +179,9 @@ class Portfolio:
 
         logger.info(
             "Market resolved: winner=%s, resolution_pnl=%.4f (trading=%.4f, settlement=%.4f)",
-            winner, resolution_pnl, self._market_trading_pnl,
+            winner,
+            resolution_pnl,
+            self._market_trading_pnl,
             resolution_pnl - self._market_trading_pnl,
         )
         self.reset_positions()

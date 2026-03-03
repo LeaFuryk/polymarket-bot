@@ -15,7 +15,7 @@ import logging
 import time
 
 from polybot.config import AppConfig
-from polybot.shared_state import EntryContext, PreFilterSnapshot, SharedState
+from polybot.shared_state import EntryContext, SharedState
 from polybot.simulator.portfolio import Portfolio
 
 logger = logging.getLogger(__name__)
@@ -44,7 +44,8 @@ class PositionMonitor:
         """Main loop — checks positions every second."""
         logger.info(
             "PositionMonitor started (SL=%.0f%%, TP=+%.0f%%, dynamic_sl=%s, dynamic_tp=%s)",
-            self._stop_loss_pct * 100, self._take_profit_pct * 100,
+            self._stop_loss_pct * 100,
+            self._take_profit_pct * 100,
             self._config.monitor.dynamic_sl_enabled,
             self._config.monitor.dynamic_tp_enabled,
         )
@@ -141,12 +142,12 @@ class PositionMonitor:
             if prob > 0.55:
                 return -0.04  # ML agreed → widen 4%
             elif prob < 0.45:
-                return 0.05   # ML disagreed → tighten 5%
+                return 0.05  # ML disagreed → tighten 5%
         else:  # down
             if prob < 0.45:
                 return -0.04  # ML agreed with DOWN → widen 4%
             elif prob > 0.55:
-                return 0.05   # ML disagreed → tighten 5%
+                return 0.05  # ML disagreed → tighten 5%
 
         return 0.0
 
@@ -198,7 +199,7 @@ class PositionMonitor:
         if favors:
             vel_adj = -min(0.06, vel_mag / 25.0)  # widen up to 6%
         else:
-            vel_adj = min(0.08, vel_mag / 15.0)    # tighten up to 8%
+            vel_adj = min(0.08, vel_mag / 15.0)  # tighten up to 8%
 
         # Factors 4 & 5: ML alignment + Entry price (need EntryContext)
         ml_adj = 0.0
@@ -211,13 +212,13 @@ class PositionMonitor:
             # Factor 5: Entry price quality
             ep = ctx.entry_price
             if ep >= 0.75:
-                price_adj = 0.06    # expensive → tighten 6%
+                price_adj = 0.06  # expensive → tighten 6%
             elif ep >= 0.60:
-                price_adj = 0.03    # moderately expensive → tighten 3%
+                price_adj = 0.03  # moderately expensive → tighten 3%
             elif ep <= 0.30:
-                price_adj = -0.15   # very cheap → widen 15% (huge % swings are normal)
+                price_adj = -0.15  # very cheap → widen 15% (huge % swings are normal)
             elif ep <= 0.40:
-                price_adj = -0.10   # cheap → widen 10%
+                price_adj = -0.10  # cheap → widen 10%
 
         # Combine: positive adjustments = tighter (less negative SL), negative = wider
         raw_sl = time_sl + regime_adj + vel_adj + ml_adj + price_adj
@@ -266,17 +267,17 @@ class PositionMonitor:
         rr = self._shared.reversal_rate
         if rr > 0:
             if rr < 0.35:
-                regime_adj = 0.10    # MOMENTUM → let winners run
+                regime_adj = 0.10  # MOMENTUM → let winners run
             elif rr > 0.55:
-                regime_adj = -0.15   # CHOPPY → take profits early
+                regime_adj = -0.15  # CHOPPY → take profits early
 
         # Adjustment 2: BTC velocity
         vel_adj = 0.0
         vel_mag, favors = self._btc_velocity(token_side)
         if favors:
-            vel_adj = min(0.10, vel_mag / 20.0)     # accelerating in favor → raise TP
+            vel_adj = min(0.10, vel_mag / 20.0)  # accelerating in favor → raise TP
         else:
-            vel_adj = -min(0.10, vel_mag / 20.0)    # turning against → lower TP
+            vel_adj = -min(0.10, vel_mag / 20.0)  # turning against → lower TP
 
         # Adjustment 3: Entry price
         price_adj = 0.0
@@ -284,9 +285,9 @@ class PositionMonitor:
         if ctx is not None:
             ep = ctx.entry_price
             if ep > 0.70:
-                price_adj = -0.15   # expensive → lower TP (less room to grow)
+                price_adj = -0.15  # expensive → lower TP (less room to grow)
             elif ep < 0.40:
-                price_adj = 0.10    # cheap → raise TP (more room to grow)
+                price_adj = 0.10  # cheap → raise TP (more room to grow)
 
         # Combine
         raw_tp = time_tp + regime_adj + vel_adj + price_adj
@@ -331,7 +332,9 @@ class PositionMonitor:
             if self._btc_favors_position(token_side):
                 logger.info(
                     "SL suppressed: %s P&L=%.1f%% hit SL %.1f%% but BTC favors position",
-                    token_side.upper(), pnl_pct * 100, dynamic_sl * 100,
+                    token_side.upper(),
+                    pnl_pct * 100,
+                    dynamic_sl * 100,
                 )
                 return
 
@@ -339,15 +342,20 @@ class PositionMonitor:
             components = self._sl_components_str(token_side)
             logger.warning(
                 "STOP-LOSS triggered: %s P&L=%.1f%% <= %.1f%% [%s]",
-                token_side.upper(), pnl_pct * 100, dynamic_sl * 100, components,
+                token_side.upper(),
+                pnl_pct * 100,
+                dynamic_sl * 100,
+                components,
             )
             self._triggered[token_side] = "stop_loss"
-            await self._shared.exit_trigger_queue.put({
-                "token_side": token_side,
-                "reason": f"stop_loss ({pnl_pct:+.1%}, dynamic SL={dynamic_sl:+.0%})",
-                "pnl_pct": pnl_pct,
-                "trigger_type": "stop_loss",
-            })
+            await self._shared.exit_trigger_queue.put(
+                {
+                    "token_side": token_side,
+                    "reason": f"stop_loss ({pnl_pct:+.1%}, dynamic SL={dynamic_sl:+.0%})",
+                    "pnl_pct": pnl_pct,
+                    "trigger_type": "stop_loss",
+                }
+            )
 
         # Reversal retracement: BTC retraced 80%+ from peak toward open
         # Triggers AI to decide: HOLD (SL stays active) or SELL + flip
@@ -380,35 +388,43 @@ class PositionMonitor:
                     if retracement >= 0.80:
                         components = self._sl_components_str(token_side)
                         logger.info(
-                            "REVERSAL RETRACEMENT: %s peak=$%+.0f, now=$%+.0f, "
-                            "retraced %.0f%% [%s]",
-                            token_side.upper(), peak_move, current_move,
-                            retracement * 100, components,
+                            "REVERSAL RETRACEMENT: %s peak=$%+.0f, now=$%+.0f, retraced %.0f%% [%s]",
+                            token_side.upper(),
+                            peak_move,
+                            current_move,
+                            retracement * 100,
+                            components,
                         )
                         self._triggered[token_side] = "reversal_retracement"
-                        await self._shared.exit_trigger_queue.put({
-                            "token_side": token_side,
-                            "reason": (
-                                f"reversal_retracement (peak=${peak_move:+.0f}, "
-                                f"now=${current_move:+.0f}, {retracement:.0%} retraced)"
-                            ),
-                            "pnl_pct": pnl_pct,
-                            "trigger_type": "reversal_retracement",
-                        })
+                        await self._shared.exit_trigger_queue.put(
+                            {
+                                "token_side": token_side,
+                                "reason": (
+                                    f"reversal_retracement (peak=${peak_move:+.0f}, "
+                                    f"now=${current_move:+.0f}, {retracement:.0%} retraced)"
+                                ),
+                                "pnl_pct": pnl_pct,
+                                "trigger_type": "reversal_retracement",
+                            }
+                        )
                         return  # Don't also check TP on same tick
 
         elif pnl_pct >= dynamic_tp:
             logger.info(
                 "TAKE-PROFIT triggered: %s P&L=+%.1f%% >= +%.1f%% (dynamic TP)",
-                token_side.upper(), pnl_pct * 100, dynamic_tp * 100,
+                token_side.upper(),
+                pnl_pct * 100,
+                dynamic_tp * 100,
             )
             self._triggered[token_side] = "take_profit"
-            await self._shared.exit_trigger_queue.put({
-                "token_side": token_side,
-                "reason": f"take_profit ({pnl_pct:+.1%}, dynamic TP=+{dynamic_tp:.0%})",
-                "pnl_pct": pnl_pct,
-                "trigger_type": "take_profit",
-            })
+            await self._shared.exit_trigger_queue.put(
+                {
+                    "token_side": token_side,
+                    "reason": f"take_profit ({pnl_pct:+.1%}, dynamic TP=+{dynamic_tp:.0%})",
+                    "pnl_pct": pnl_pct,
+                    "trigger_type": "take_profit",
+                }
+            )
 
     def _sl_components_str(self, token_side: str) -> str:
         """Build a short string showing SL factor breakdown for logging."""

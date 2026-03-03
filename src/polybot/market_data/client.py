@@ -8,7 +8,7 @@ from functools import partial
 
 from py_clob_client.client import ClobClient
 
-from polybot.config import MarketConfig, ApiConfig
+from polybot.config import ApiConfig, MarketConfig
 from polybot.models import OrderbookLevel, OrderbookSnapshot
 
 logger = logging.getLogger(__name__)
@@ -31,9 +31,7 @@ class PolymarketRestClient:
 
         loop = asyncio.get_event_loop()
         try:
-            raw = await loop.run_in_executor(
-                None, partial(self._client.get_order_book, tid)
-            )
+            raw = await loop.run_in_executor(None, partial(self._client.get_order_book, tid))
         except Exception:
             logger.exception("Failed to fetch orderbook")
             return OrderbookSnapshot()
@@ -64,9 +62,7 @@ class PolymarketRestClient:
 
         loop = asyncio.get_event_loop()
         try:
-            raw = await loop.run_in_executor(
-                None, partial(self._client.get_last_trade_price, tid)
-            )
+            raw = await loop.run_in_executor(None, partial(self._client.get_last_trade_price, tid))
             if raw is None:
                 return None
             price = raw.price if hasattr(raw, "price") else raw.get("price", 0)
@@ -80,9 +76,7 @@ class PolymarketRestClient:
         cid = condition_id or self._market_config.condition_id
         loop = asyncio.get_event_loop()
         try:
-            raw = await loop.run_in_executor(
-                None, partial(self._client.get_market, cid)
-            )
+            raw = await loop.run_in_executor(None, partial(self._client.get_market, cid))
             return raw or {}
         except Exception:
             logger.exception("Failed to fetch market info")

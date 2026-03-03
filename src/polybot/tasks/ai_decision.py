@@ -10,20 +10,21 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from pathlib import Path
 
+from polybot.adaptive_entry import AdaptiveEntryTracker
 from polybot.calibration import ConfidenceCalibrator
 from polybot.config import AppConfig
 from polybot.decision_engine.engine import DecisionEngine
+from polybot.execution.live import LiveExecutionEngine
 from polybot.exit_tracker import ExitTracker
 from polybot.indicators import (
     FeatureConfig,
-    IndicatorResult,
     SessionContext,
     compute_indicators,
     format_indicators,
 )
 from polybot.knowledge import KnowledgeManager
+from polybot.logging.trade_log import TradeLog
 from polybot.ml_scorer import MLScorer
 from polybot.models import (
     Action,
@@ -35,17 +36,13 @@ from polybot.models import (
     TradeRecord,
     TradingDecision,
 )
-from polybot.adaptive_entry import AdaptiveEntryTracker
-from polybot.execution.live import LiveExecutionEngine
 from polybot.prefilter import PreFilter
-from polybot.shared_state import EntryContext, PreFilterSnapshot
 from polybot.resolution import ResolutionTracker
 from polybot.risk.manager import RiskManager
-from polybot.shared_state import SharedState
+from polybot.shared_state import EntryContext, PreFilterSnapshot, SharedState
 from polybot.simulator.engine import ExecutionSimulator
 from polybot.simulator.orderbook import SimulatedOrderBook
 from polybot.simulator.portfolio import Portfolio
-from polybot.logging.trade_log import TradeLog
 
 logger = logging.getLogger(__name__)
 
@@ -82,13 +79,21 @@ def _compute_btc_trajectory(history: list[PreFilterSnapshot]) -> str | None:
         drawback = abs(peak) - abs(current_move)
 
     # Format
-    vel_dir = "accelerating" if abs(current_vel) > abs(earlier_vel) * 1.2 else "decelerating" if abs(current_vel) < abs(earlier_vel) * 0.8 else "steady"
+    vel_dir = (
+        "accelerating"
+        if abs(current_vel) > abs(earlier_vel) * 1.2
+        else "decelerating"
+        if abs(current_vel) < abs(earlier_vel) * 0.8
+        else "steady"
+    )
     parts = [
-        f"## BTC Trajectory (intra-candle)",
+        "## BTC Trajectory (intra-candle)",
         f"- Velocity: ${current_vel:+.1f}/s ({vel_dir}, was ${earlier_vel:+.1f}/s)",
     ]
     if abs(drawback) >= 5.0:
-        parts.append(f"- Peak drawback: peak was ${peak:+,.0f} from open, now ${current_move:+,.0f} (pulled back ${drawback:.0f})")
+        parts.append(
+            f"- Peak drawback: peak was ${peak:+,.0f} from open, now ${current_move:+,.0f} (pulled back ${drawback:.0f})"
+        )
     else:
         parts.append(f"- No significant drawback (peak ${peak:+,.0f}, current ${current_move:+,.0f})")
 
@@ -185,7 +190,7 @@ def _compute_retracement_context(
 
     # Build prompt section
     parts = [
-        f"## Reversal Analysis (from per-second data)",
+        "## Reversal Analysis (from per-second data)",
         f"- Peak BTC move: ${peak_val:+,.0f} from open (at t={peak_idx}s, {peak_age:.0f}s ago)",
         f"- Current BTC move: ${current_move:+,.0f} from open",
         f"- Retracement: {retracement_pct:.0f}% of peak given back",
@@ -215,12 +220,24 @@ def _format_microstructure(history: list) -> str | None:
     # Spread trend
     spread_up_delta = recent.avg_spread_up - prev.avg_spread_up
     spread_down_delta = recent.avg_spread_down - prev.avg_spread_down
-    spread_dir = "widening" if (spread_up_delta + spread_down_delta) > 0.002 else "narrowing" if (spread_up_delta + spread_down_delta) < -0.002 else "stable"
+    spread_dir = (
+        "widening"
+        if (spread_up_delta + spread_down_delta) > 0.002
+        else "narrowing"
+        if (spread_up_delta + spread_down_delta) < -0.002
+        else "stable"
+    )
 
     # Volatility trend (BTC range per candle)
     ranges = [h.btc_range for h in history]
     avg_range = sum(ranges) / len(ranges)
-    range_dir = "increasing" if recent.btc_range > avg_range * 1.2 else "decreasing" if recent.btc_range < avg_range * 0.8 else "stable"
+    range_dir = (
+        "increasing"
+        if recent.btc_range > avg_range * 1.2
+        else "decreasing"
+        if recent.btc_range < avg_range * 0.8
+        else "stable"
+    )
 
     parts = [
         f"## Cross-Candle Microstructure (last {len(history)} candles)",
@@ -337,10 +354,7 @@ def _compute_entry_timing_stats(
                 best_bucket = label
 
     if best_bucket is not None:
-        parts.append(
-            f"- Best bucket: {best_bucket} ({best_wr:.0%} WR) "
-            f"\u2014 consider patience on marginal setups"
-        )
+        parts.append(f"- Best bucket: {best_bucket} ({best_wr:.0%} WR) \u2014 consider patience on marginal setups")
 
     return "\n".join(parts)
 
@@ -495,7 +509,7 @@ class AIDecision:
             )
             self._shared.ai_trigger_event.clear()
             return "entry"
-        except asyncio.TimeoutError:
+        except TimeoutError:
             return None
 
     async def _handle_entry_trigger(self) -> None:
@@ -565,7 +579,10 @@ class AIDecision:
         pnl_pct = exit_signal.get("pnl_pct", 0.0)
         logger.info(
             "=== AI Exit Decision Cycle %d (SL/TP: %s %s, P&L=%.1f%%) ===",
-            cycle, token_side_str, reason, pnl_pct * 100,
+            cycle,
+            token_side_str,
+            reason,
+            pnl_pct * 100,
         )
 
         # Exit trigger cooldown: skip if on cooldown and not a true emergency (> -30%)
@@ -576,7 +593,9 @@ class AIDecision:
         if elapsed < cooldown and pnl_pct > -0.30 and trigger_type != "reversal_retracement":
             logger.info(
                 "Exit trigger on cooldown (%.0fs < %.0fs, pnl=%.1f%% > -30%%) — skipping",
-                elapsed, cooldown, pnl_pct * 100,
+                elapsed,
+                cooldown,
+                pnl_pct * 100,
             )
             return
 
@@ -596,15 +615,16 @@ class AIDecision:
                 btc_diff = btc_price_now - candle_open
                 btc_favors_up = btc_diff >= 0
                 position_is_up = token_side_str.lower() == "up"
-                direction_matches = (position_is_up and btc_favors_up) or (
-                    not position_is_up and not btc_favors_up
-                )
+                direction_matches = (position_is_up and btc_favors_up) or (not position_is_up and not btc_favors_up)
                 if direction_matches:
                     logger.info(
                         "Skipping exit on winning %s position (P&L=%.1f%%, BTC %s$%.0f, "
                         "%.0fs left) — let it ride to resolution",
-                        token_side_str, pnl_pct * 100,
-                        "+" if btc_diff >= 0 else "", btc_diff, time_remaining,
+                        token_side_str,
+                        pnl_pct * 100,
+                        "+" if btc_diff >= 0 else "",
+                        btc_diff,
+                        time_remaining,
                     )
                     return
 
@@ -652,7 +672,11 @@ class AIDecision:
             self._contrarian_flip_active = True
             try:
                 await self._run_ai_decision(
-                    cycle, snapshot, market, time_remaining, portfolio_value,
+                    cycle,
+                    snapshot,
+                    market,
+                    time_remaining,
+                    portfolio_value,
                     extra_context=exit_context,
                     # No forced_exit_side — AI chooses HOLD or BUY opposite
                 )
@@ -669,7 +693,11 @@ class AIDecision:
             )
 
             await self._run_ai_decision(
-                cycle, snapshot, market, time_remaining, portfolio_value,
+                cycle,
+                snapshot,
+                market,
+                time_remaining,
+                portfolio_value,
                 extra_context=exit_context,
                 forced_exit_side=token_side_str,
             )
@@ -686,8 +714,7 @@ class AIDecision:
             # After SL, if position closed and BTC confirms reversal,
             # trigger a second AI call for the opposite side.
             if trigger_type == "stop_loss":
-                pos = (self._portfolio.up_position if sold_up
-                       else self._portfolio.down_position)
+                pos = self._portfolio.up_position if sold_up else self._portfolio.down_position
                 if pos.shares <= 0:
                     await self._try_contrarian_flip(token_side_str, pnl_pct, trigger_type)
 
@@ -741,9 +768,13 @@ class AIDecision:
         reason_label = "stop-loss" if trigger_type == "stop_loss" else "reversal exit"
         logger.info(
             "Contrarian flip: triggering %s entry after %s (BTC %s$%.0f, %s ask=$%.2f, %.0fs left)",
-            opposite_side, reason_label,
-            "+" if btc_move >= 0 else "", btc_move,
-            opposite_side, opp_ask or 0, tr,
+            opposite_side,
+            reason_label,
+            "+" if btc_move >= 0 else "",
+            btc_move,
+            opposite_side,
+            opp_ask or 0,
+            tr,
         )
         flip_context = (
             f"\n## CONTRARIAN FLIP OPPORTUNITY\n"
@@ -763,7 +794,11 @@ class AIDecision:
         try:
             self._cycle_count += 1
             await self._run_ai_decision(
-                self._cycle_count, snap, mkt, tr, pv,
+                self._cycle_count,
+                snap,
+                mkt,
+                tr,
+                pv,
                 extra_context=flip_context,
             )
         finally:
@@ -829,7 +864,10 @@ class AIDecision:
 
         logger.info(
             "Reversal flip: auto-closed %s (%.1f shares @ $%.4f, P&L $%.2f)",
-            close_side.upper(), fill.size, fill.fill_price, realized,
+            close_side.upper(),
+            fill.size,
+            fill.fill_price,
+            realized,
         )
         self._log_cycle(cycle, snapshot, decision=sell_decision, fill=fill)
         return True
@@ -965,7 +1003,8 @@ class AIDecision:
 
         # Safeguard #6: Counter-trend accuracy context
         trend_result = next(
-            (r for r in indicator_results if r.name == "Market Trend"), None,
+            (r for r in indicator_results if r.name == "Market Trend"),
+            None,
         )
         if trend_result and abs(trend_result.value) >= 0.3:
             weak_side = "DOWN" if trend_result.value > 0 else "UP"
@@ -992,13 +1031,11 @@ class AIDecision:
             indicators_text = indicators_text + sl_warning if indicators_text else sl_warning
 
         # Two-pass screening (entry only, not exits)
-        has_position = (
-            self._portfolio.up_position.shares > 0
-            or self._portfolio.down_position.shares > 0
-        )
+        has_position = self._portfolio.up_position.shares > 0 or self._portfolio.down_position.shares > 0
         if self._config.ai.two_pass_enabled and not has_position and not extra_context:
             should_trade, screen_reason, screen_cost = await self._engine.screen(
-                features, indicators_text=indicators_text,
+                features,
+                indicators_text=indicators_text,
                 candle_open_btc=candle_open_btc,
             )
             self._portfolio.cash -= screen_cost
@@ -1013,8 +1050,11 @@ class AIDecision:
                 # Build a lightweight decision so reasoning + screen context
                 # are captured in the trade record for the dashboard
                 from polybot.decision_engine.prompts import format_screening_context
+
                 screen_input = format_screening_context(
-                    features, indicators_text, candle_open_btc=candle_open_btc,
+                    features,
+                    indicators_text,
+                    candle_open_btc=candle_open_btc,
                 )
                 screen_decision = TradingDecision(
                     action=Action.HOLD,
@@ -1026,8 +1066,11 @@ class AIDecision:
                     token_side=TokenSide.UP,
                 )
                 self._log_cycle(
-                    cycle, snapshot, decision=screen_decision,
-                    risk_blocked=False, risk_reason="",
+                    cycle,
+                    snapshot,
+                    decision=screen_decision,
+                    risk_blocked=False,
+                    risk_reason="",
                     screen_input=screen_input,
                 )
                 return
@@ -1039,8 +1082,11 @@ class AIDecision:
 
         # Full AI decision
         decision, latency_ms, api_cost = await self._engine.decide(
-            features, feedback_context=feedback_context, indicators_text=indicators_text,
-            ai_cycle_cost=self._last_cycle_api_cost, ai_session_cost=self._total_api_cost,
+            features,
+            feedback_context=feedback_context,
+            indicators_text=indicators_text,
+            ai_cycle_cost=self._last_cycle_api_cost,
+            ai_session_cost=self._total_api_cost,
             candle_open_btc=candle_open_btc,
         )
 
@@ -1060,8 +1106,10 @@ class AIDecision:
             else:
                 logger.info(
                     "Ensemble disagreement: ML=%s (%.0f%%) vs Sonnet=%s (conf=%.2f)",
-                    ml_dir, ml_prediction.up_probability * 100,
-                    sonnet_dir, decision.confidence,
+                    ml_dir,
+                    ml_prediction.up_probability * 100,
+                    sonnet_dir,
+                    decision.confidence,
                 )
 
         # Clamp sell size to actual held shares (fixes rounding bug where
@@ -1072,7 +1120,9 @@ class AIDecision:
             if decision.size > held and held > 0:
                 logger.info(
                     "Clamping sell size: %.2f → %.2f (held) for %s",
-                    decision.size, held, decision.token_side.value,
+                    decision.size,
+                    held,
+                    decision.token_side.value,
                 )
                 decision = TradingDecision(
                     action=decision.action,
@@ -1093,7 +1143,8 @@ class AIDecision:
             if decision.token_side != correct_side:
                 logger.warning(
                     "Forcing exit token_side: AI said %s but exit trigger is %s",
-                    decision.token_side.value, correct_side.value,
+                    decision.token_side.value,
+                    correct_side.value,
                 )
                 decision = TradingDecision(
                     action=decision.action,
@@ -1112,7 +1163,9 @@ class AIDecision:
         if decision.action == Action.BUY and decision.confidence < min_conf:
             logger.info(
                 "Overriding %s to HOLD — confidence %.2f < %.2f",
-                decision.action.value, decision.confidence, min_conf,
+                decision.action.value,
+                decision.confidence,
+                min_conf,
             )
             decision = TradingDecision(
                 action=Action.HOLD,
@@ -1120,7 +1173,7 @@ class AIDecision:
                 size=0.0,
                 confidence=decision.confidence,
                 reasoning=f"Overridden: confidence {decision.confidence:.2f} below {min_conf}. "
-                          f"Original: {decision.reasoning[:100]}",
+                f"Original: {decision.reasoning[:100]}",
                 market_view=decision.market_view,
                 token_side=decision.token_side,
                 hypothetical_direction=decision.hypothetical_direction,
@@ -1133,7 +1186,8 @@ class AIDecision:
             if cal.is_reliable and not cal.should_trade:
                 logger.info(
                     "Calibration override to HOLD — stated %.2f but actual %.0f%%",
-                    decision.confidence, cal.calibrated_win_rate * 100,
+                    decision.confidence,
+                    cal.calibrated_win_rate * 100,
                 )
                 decision = TradingDecision(
                     action=Action.HOLD,
@@ -1222,7 +1276,9 @@ class AIDecision:
             if opposite in sold:
                 logger.info(
                     "Anti-flip block: already sold %s on %s, blocking %s buy",
-                    opposite, market.slug, decision.token_side.value,
+                    opposite,
+                    market.slug,
+                    decision.token_side.value,
                 )
                 decision = TradingDecision(
                     action=Action.HOLD,
@@ -1242,7 +1298,8 @@ class AIDecision:
             if side_key in self._bought_sides.get(market.slug, set()):
                 logger.info(
                     "Single-entry block: already bought %s on %s, overriding to HOLD",
-                    side_key, market.slug,
+                    side_key,
+                    market.slug,
                 )
                 decision = TradingDecision(
                     action=Action.HOLD,
@@ -1263,7 +1320,8 @@ class AIDecision:
             if cap_price >= 0.85:
                 logger.info(
                     "Entry price cap: %s ask $%.2f >= $0.85 (R/R=%.2f), overriding to HOLD",
-                    decision.token_side.value, cap_price,
+                    decision.token_side.value,
+                    cap_price,
                     (1.0 - cap_price) / cap_price,
                 )
                 decision = TradingDecision(
@@ -1312,28 +1370,34 @@ class AIDecision:
 
             # Counter-trend size scaling (trend-aware position reduction)
             trend_result = next(
-                (r for r in indicator_results if r.name == "Market Trend"), None,
+                (r for r in indicator_results if r.name == "Market Trend"),
+                None,
             )
             trend_scale = 1.0
             if trend_result is not None:
                 trend_score = trend_result.value
-                is_counter = (
-                    (decision.token_side == TokenSide.DOWN and trend_score > 0.3)
-                    or (decision.token_side == TokenSide.UP and trend_score < -0.3)
+                is_counter = (decision.token_side == TokenSide.DOWN and trend_score > 0.3) or (
+                    decision.token_side == TokenSide.UP and trend_score < -0.3
                 )
                 if is_counter:
                     abs_score = abs(trend_score)
                     trend_scale = 0.50 if abs_score >= 0.7 else 0.70
                     trend_label = (
-                        "STRONG BULLISH" if trend_score >= 0.5
-                        else "BULLISH" if trend_score >= 0.2
-                        else "NEUTRAL" if trend_score > -0.2
-                        else "BEARISH" if trend_score > -0.5
+                        "STRONG BULLISH"
+                        if trend_score >= 0.5
+                        else "BULLISH"
+                        if trend_score >= 0.2
+                        else "NEUTRAL"
+                        if trend_score > -0.2
+                        else "BEARISH"
+                        if trend_score > -0.5
                         else "STRONG BEARISH"
                     )
                     logger.info(
                         "Counter-trend sizing: %s in %s trend (score=%.2f) → %.0f%%",
-                        decision.token_side.value, trend_label, trend_score,
+                        decision.token_side.value,
+                        trend_label,
+                        trend_score,
                         trend_scale * 100,
                     )
 
@@ -1354,8 +1418,12 @@ class AIDecision:
                     )
                     logger.info(
                         "Position sizing: %.1f → %.1f (R/R=%.2f×%.0f%%, move=$%.0f×%.0f%%)",
-                        original_size, scaled_size, rr_ratio, rr_scale * 100,
-                        btc_move, move_scale * 100,
+                        original_size,
+                        scaled_size,
+                        rr_ratio,
+                        rr_scale * 100,
+                        btc_move,
+                        move_scale * 100,
                     )
 
             # Enforce minimum position size (lower floor for counter-trend)
@@ -1363,7 +1431,8 @@ class AIDecision:
             if decision.size < min_shares:
                 logger.info(
                     "Min size floor: %.1f → %d shares%s",
-                    decision.size, min_shares,
+                    decision.size,
+                    min_shares,
                     " (counter-trend)" if trend_scale < 1.0 else "",
                 )
                 decision = TradingDecision(
@@ -1395,14 +1464,18 @@ class AIDecision:
         if decision.action != Action.HOLD:
             token_position = self._portfolio.get_position(decision.token_side)
             post_checks = self._risk.post_trade_checks(
-                decision, token_position,
-                self._portfolio.cash, portfolio_value, snapshot,
+                decision,
+                token_position,
+                self._portfolio.cash,
+                portfolio_value,
+                snapshot,
             )
             post_failed = [c for c in post_checks if not c.passed]
             if post_failed:
                 risk_reason = "; ".join(c.reason for c in post_failed)
-                logger.warning("Post-trade risk blocked %s %s: %s",
-                               decision.action.value, decision.token_side.value, risk_reason)
+                logger.warning(
+                    "Post-trade risk blocked %s %s: %s", decision.action.value, decision.token_side.value, risk_reason
+                )
                 self.last_action = f"BLOCKED ({decision.action.value} {decision.token_side.value})"
                 self.last_risk_status = risk_reason
                 risk_blocked = True
@@ -1425,10 +1498,16 @@ class AIDecision:
                     self._shadow_portfolio.apply_fill(paper_fill, decision.token_side)
 
                 if fill and paper_fill:
-                    drift_pct = ((fill.fill_price - paper_fill.fill_price) / paper_fill.fill_price * 100) if paper_fill.fill_price > 0 else 0
+                    drift_pct = (
+                        ((fill.fill_price - paper_fill.fill_price) / paper_fill.fill_price * 100)
+                        if paper_fill.fill_price > 0
+                        else 0
+                    )
                     logger.info(
                         "Live fill $%.4f vs Paper fill $%.4f (drift %+.1f%%)",
-                        fill.fill_price, paper_fill.fill_price, drift_pct,
+                        fill.fill_price,
+                        paper_fill.fill_price,
+                        drift_pct,
                     )
                 elif not fill and paper_fill:
                     logger.info(
@@ -1507,10 +1586,15 @@ class AIDecision:
 
         # Log
         self._log_cycle(
-            cycle, snapshot,
-            decision=decision, latency_ms=latency_ms,
-            fill=fill, risk_blocked=risk_blocked, risk_reason=risk_reason,
-            paper_fill=paper_fill, live_result=live_result,
+            cycle,
+            snapshot,
+            decision=decision,
+            latency_ms=latency_ms,
+            fill=fill,
+            risk_blocked=risk_blocked,
+            risk_reason=risk_reason,
+            paper_fill=paper_fill,
+            live_result=live_result,
         )
 
         self._record_ai_call_time()
@@ -1520,9 +1604,17 @@ class AIDecision:
         self._shared.ai_last_call_time = time.time()
 
     def _log_cycle(
-        self, cycle, snapshot, decision=None, latency_ms=0.0,
-        fill=None, risk_blocked=False, risk_reason="",
-        paper_fill=None, screen_input=None, live_result=None,
+        self,
+        cycle,
+        snapshot,
+        decision=None,
+        latency_ms=0.0,
+        fill=None,
+        risk_blocked=False,
+        risk_reason="",
+        paper_fill=None,
+        screen_input=None,
+        live_result=None,
     ) -> None:
         """Log a cycle to trade log and update trade history."""
         ob = snapshot.orderbook
@@ -1609,7 +1701,9 @@ class AIDecision:
 
         # Queue decision for SQLite analytics
         if self._datastore is not None and self._datastore.current_candle_id is not None:
-            self._queue_decision(cycle, snapshot, decision, latency_ms, fill, risk_blocked, risk_reason, live_result=live_result)
+            self._queue_decision(
+                cycle, snapshot, decision, latency_ms, fill, risk_blocked, risk_reason, live_result=live_result
+            )
 
         self._recent_trades.append(record)
         if len(self._recent_trades) > 50:
@@ -1620,17 +1714,25 @@ class AIDecision:
         if self.on_trade_callback is not None:
             try:
                 import asyncio
+
                 asyncio.get_event_loop().create_task(self.on_trade_callback(record))
             except Exception:
                 logger.debug("on_trade_callback failed", exc_info=True)
 
     def _queue_decision(
-        self, cycle, snapshot, decision=None, latency_ms=0.0,
-        fill=None, risk_blocked=False, risk_reason="",
+        self,
+        cycle,
+        snapshot,
+        decision=None,
+        latency_ms=0.0,
+        fill=None,
+        risk_blocked=False,
+        risk_reason="",
         live_result=None,
     ) -> None:
         """Build a DecisionRow and queue it for SQLite analytics."""
         import json
+
         from polybot.datastore import DecisionRow
 
         # Compute indicators for the decision context
@@ -1643,10 +1745,7 @@ class AIDecision:
                 candle_open_btc=self._shared.candle_open_btc,
             )
             results = compute_indicators(snapshot, self._feature_config, session_ctx)
-            indicators_dict = {
-                r.name: {"value": r.value, "label": r.label}
-                for r in results
-            }
+            indicators_dict = {r.name: {"value": r.value, "label": r.label} for r in results}
         except Exception:
             logger.debug("Indicator computation failed for decision", exc_info=True)
 

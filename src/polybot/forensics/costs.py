@@ -52,13 +52,15 @@ def analyze_costs(conn: sqlite3.Connection) -> tuple[list[CostBreakdown], CostAg
 
         total_cost = fee + abs(drift_cost)
 
-        breakdowns.append(CostBreakdown(
-            order_id=order_id,
-            fee_amount=fee,
-            slippage_bps=slippage,
-            drift_cost=drift_cost,
-            total_cost=total_cost,
-        ))
+        breakdowns.append(
+            CostBreakdown(
+                order_id=order_id,
+                fee_amount=fee,
+                slippage_bps=slippage,
+                drift_cost=drift_cost,
+                total_cost=total_cost,
+            )
+        )
 
         total_fees += fee
         total_slippage_cost += abs(slippage * fill_size / 10000) if fill_size else 0.0
