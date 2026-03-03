@@ -902,6 +902,15 @@ Three GitHub Actions workflows run on push and pull requests to `main`, each sco
 | **Next Dashboard - Tests** | `frontend.yml` | `dashboard-next/` | TypeScript type checking (`tsc --noEmit`) + Jest test suite |
 | **Next Dashboard - Lint** | `frontend-lint.yml` | `dashboard-next/` | ESLint (`eslint-config-next/core-web-vitals`) + Prettier (`prettier-plugin-tailwindcss`) |
 
+### Release (`release.yml`)
+
+An on-demand workflow triggered via **Actions → "Release - Tag & Bump" → Run workflow**. Creates a GitHub tag + release from `main`, then opens a PR to bump the version for the next development cycle.
+
+1. Validates `pyproject.toml` and `CHANGELOG.md` versions match and the tag doesn't exist yet
+2. Extracts release notes from the CHANGELOG and lists merged PRs since the previous tag
+3. Creates the tag + GitHub Release with combined notes
+4. Bumps the version (minor or patch) in a new branch and opens a PR
+
 ### Reviewdog (PR reviews)
 
 A fourth workflow (`reviewdog.yml`) runs **only on pull requests** and posts inline review comments on new/changed lines:
