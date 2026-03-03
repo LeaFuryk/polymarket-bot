@@ -1,0 +1,168 @@
+name: Release - Tag & Bump
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: "Version bump type for the next development cycle"
+        required: true
+        type: choice
+        options:
+          - minor
+          - patch
+        default: minor
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Read & validate versions
+        id: versions
+        run: |
+          # Extract version from pyproject.toml
+          PROJ_VER=$(grep '^version = ' pyproject.toml | sed 's/version = "\(.*\)"/\1/')
+          echo "proj_ver=$PROJ_VER" >> "$GITHUB_OUTPUT"
+
+          # Extract version from CHANGELOG.md
+          CL_VER=$(grep -m1 '^## \[v' CHANGELOG.md | sed 's/## \[v\([^]]*\)\].*/\1/')
+          echo "cl_ver=$CL_VER" >> "$GITHUB_OUTPUT"
+
+          TAG="v${PROJ_VER}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+          # Validate versions match
+          if [ "$PROJ_VER" != "$CL_VER" ]; then
+            echo "::error::Version mismatch — pyproject.toml has $PROJ_VER but CHANGELOG.md has $CL_VER"
+            exit 1
+          fi
+
+          # Check tag doesn't already exist
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "::error::Tag $TAG already exists. Bump the version in pyproject.toml and CHANGELOG.md first."
+            exit 1
+          fi
+
+          echo "✓ Version $PROJ_VER is consistent and tag $TAG does not exist yet"
+
+      - name: Extract release notes
+        run: |
+          awk '/^## \[v/{if(found) exit; found=1; next} found' CHANGELOG.md > /tmp/release-notes.md
+          echo "--- Release notes ---"
+          cat /tmp/release-notes.md
+
+      - name: List merged PRs since previous tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD 2>/dev/null || echo "")
+          if [ -n "$PREV_TAG" ]; then
+            PREV_DATE=$(git log -1 --format=%as "$PREV_TAG")
+            echo "Previous tag: $PREV_TAG ($PREV_DATE)"
+
+            PR_LIST=$(gh pr list --state merged --search "merged:>=${PREV_DATE}" \
+              --json number,title,author \
+              --template '{{range .}}- #{{.number}} {{.title}} (@{{.author.login}}){{"\n"}}{{end}}')
+
+            if [ -n "$PR_LIST" ]; then
+              {
+                echo ""
+                echo "### Merged PRs"
+                echo ""
+                echo "$PR_LIST"
+              } > /tmp/pr-list.md
+            else
+              echo "" > /tmp/pr-list.md
+            fi
+          else
+            echo "No previous tag found"
+            echo "" > /tmp/pr-list.md
+          fi
+
+      - name: Create tag & release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${{ steps.versions.outputs.tag }}"
+
+          # Combine release notes + PR list
+          cat /tmp/release-notes.md /tmp/pr-list.md > /tmp/release-body.md
+
+          gh release create "$TAG" \
+            --target main \
+            --title "$TAG" \
+            --notes-file /tmp/release-body.md
+
+          echo "✓ Created release $TAG"
+
+      - name: Compute next version
+        id: next
+        run: |
+          CURRENT="${{ steps.versions.outputs.proj_ver }}"
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
+
+          if [ "${{ inputs.bump }}" = "minor" ]; then
+            NEXT="${MAJOR}.$((MINOR + 1)).0"
+          else
+            NEXT="${MAJOR}.${MINOR}.$((PATCH + 1))"
+          fi
+
+          echo "next_ver=$NEXT" >> "$GITHUB_OUTPUT"
+          echo "✓ Next version: $CURRENT → $NEXT (${{ inputs.bump }} bump)"
+
+      - name: Create version-bump PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          NEXT="${{ steps.next.outputs.next_ver }}"
+          BRANCH="chore/bump-v${NEXT}"
+
+          git checkout -b "$BRANCH"
+
+          # Bump pyproject.toml
+          sed -i "s/^version = \".*\"/version = \"${NEXT}\"/" pyproject.toml
+
+          # Insert new changelog section before the first ## [v...] header
+          awk -v ver="$NEXT" '
+            /^## \[v/ && !inserted {
+              print "## [v" ver "] — Unreleased"
+              print ""
+              print ""
+              inserted=1
+            }
+            {print}
+          ' CHANGELOG.md > /tmp/changelog-new.md
+          mv /tmp/changelog-new.md CHANGELOG.md
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add pyproject.toml CHANGELOG.md
+          git commit -m "chore: bump version to v${NEXT} for next development cycle"
+          git push origin "$BRANCH"
+
+          TAG="${{ steps.versions.outputs.tag }}"
+
+          BODY="Automated version bump after releasing ${TAG}.
+
+          Bumps \`pyproject.toml\` and \`CHANGELOG.md\` to \`v${NEXT}\` for the next development cycle.
+
+          Created by the **Release - Tag & Bump** workflow."
+
+          gh pr create \
+            --base main \
+            --head "$BRANCH" \
+            --title "chore: bump version to v${NEXT}" \
+            --body "$BODY"
+
+          echo "✓ Created bump PR for v${NEXT}"
