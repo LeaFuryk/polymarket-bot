@@ -894,12 +894,10 @@ polymarket-bot/
 
 ## CI
 
-GitHub Actions runs on every push to `main`:
+Two GitHub Actions workflows run in parallel on every push to `main`:
 
-- **pytest** — full Python test suite with JUnit report
-- **tsc --noEmit** — TypeScript type checking for `dashboard-next/`
-
-Test results are posted as check annotations directly on the commit.
+- **Python Tests** (`python.yml`) — pytest with JUnit report posted as check annotations
+- **Frontend Tests** (`frontend.yml`) — TypeScript type checking (`tsc --noEmit`) + Jest test suite for `dashboard-next/`
 
 ---
 
