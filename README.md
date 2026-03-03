@@ -894,7 +894,7 @@ polymarket-bot/
 
 ## CI
 
-Three GitHub Actions workflows run on push to `main`, each scoped by `paths` filters so they only trigger when relevant code changes:
+Three GitHub Actions workflows run on push and pull requests to `main`, each scoped by `paths` filters so they only trigger when relevant code changes. All checks are eligible as required status checks:
 
 | Workflow | File | Triggers on | Checks |
 |----------|------|-------------|--------|
