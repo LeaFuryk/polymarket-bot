@@ -1619,7 +1619,8 @@ class AIDecision:
         # Push trade event to WS clients
         if self.on_trade_callback is not None:
             try:
-                await self.on_trade_callback(record)
+                import asyncio
+                asyncio.get_event_loop().create_task(self.on_trade_callback(record))
             except Exception:
                 logger.debug("on_trade_callback failed", exc_info=True)
 

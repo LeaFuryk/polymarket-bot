@@ -1,6 +1,6 @@
 interface StatusBadgeProps {
   label: string;
-  variant?: "green" | "red" | "amber" | "cyan" | "purple" | "zinc";
+  variant?: "green" | "red" | "amber" | "cyan" | "blue" | "purple" | "zinc";
   className?: string;
 }
 
@@ -9,6 +9,7 @@ const variantClasses: Record<string, string> = {
   red: "bg-red-500/15 text-red-400 border-red-500/20",
   amber: "bg-amber-500/15 text-amber-400 border-amber-500/20",
   cyan: "bg-cyan-500/15 text-cyan-400 border-cyan-500/20",
+  blue: "bg-blue-500/15 text-blue-400 border-blue-500/20",
   purple: "bg-purple-500/15 text-purple-400 border-purple-500/20",
   zinc: "bg-zinc-500/15 text-zinc-400 border-zinc-500/20",
 };

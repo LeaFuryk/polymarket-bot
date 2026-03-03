@@ -195,6 +195,7 @@ def _compute_summary(label: str, dest: Path) -> dict:
     # Read version from dashboard data (captured at bot startup) for accuracy;
     # fall back to importlib.metadata if dashboard is unavailable.
     bot_version = "unknown"
+    dash: dict = {}
     dash_path = LOG_DIR / "dashboard_data.json"
     if dash_path.exists():
         try:
@@ -211,9 +212,17 @@ def _compute_summary(label: str, dest: Path) -> dict:
         except Exception:
             pass
 
+    # Determine trading mode from dashboard data
+    trading_mode = dash.get("trading_mode", "paper")
+    if trading_mode == "paper":
+        lt = dash.get("live_trading")
+        if lt:
+            trading_mode = "dry_run" if lt.get("dry_run") else "live"
+
     summary = {
         "label": label,
         "version": bot_version,
+        "trading_mode": trading_mode,
         "archived_at": datetime.now(timezone.utc).isoformat(),
         "date_range": {"start": date_start, "end": date_end},
         "total_candles": total_candles,

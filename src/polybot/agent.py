@@ -587,6 +587,20 @@ class TradingAgent:
                 except Exception:
                     pass
 
+        # Live trading mode + metrics
+        lt = dd.get("live_trading")
+        if lt:
+            summary["trading_mode"] = "dry_run" if lt.get("dry_run") else "live"
+            summary["live_trading"] = {
+                "mode": lt.get("mode", "live"),
+                "dry_run": lt.get("dry_run", False),
+                "wallet_balance": lt.get("wallet_balance", 0),
+                "shadow_paper_pnl": lt.get("shadow_paper_pnl", 0),
+                "execution_cost": lt.get("execution_cost", 0),
+            }
+        elif "trading_mode" not in summary:
+            summary["trading_mode"] = dd.get("trading_mode", "paper")
+
     def _compute_iteration_label(self) -> str:
         """Determine current iteration label from archive count."""
         archive_dir = Path.cwd() / "archive"
@@ -1315,6 +1329,12 @@ class TradingAgent:
             "iterations": self._iteration_summaries,
             "candle_snapshots": candle_snapshots,
         }
+
+        # Explicit trading mode (paper / live / dry_run)
+        if self._config.trading.mode == "live" and self._config.trading.dry_run:
+            data["trading_mode"] = "dry_run"
+        else:
+            data["trading_mode"] = self._config.trading.mode  # "paper" or "live"
 
         # Live trading section (only in live mode)
         if self._live_mode and self._live_engine:
