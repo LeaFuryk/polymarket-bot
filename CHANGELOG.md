@@ -18,6 +18,7 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Added
 - **`market_data/protocol.py`** — `MarketDataRepository` protocol defining the external data access contract for all market data sources
 - **`market_data/README.md`** — Module README documenting architecture, data flow, data sources, and key consumers
+- **`tests/test_market_data.py`** — 43 unit tests covering constants, `_boundary_ts`, ISO timestamp parsing, ChainlinkWSFeed tick/price logic, injectable loggers, and package re-exports
 - **CI** — Added mypy type checking to reviewdog workflow; only new type errors on changed lines trigger PR comments
 - **`tests/test_shared_state.py`** — 17 unit tests covering constants, all dataclasses, and SharedState initialization
 - **`src/polybot/shared_state/README.md`** — Module README documenting package architecture, state sections, and ownership
