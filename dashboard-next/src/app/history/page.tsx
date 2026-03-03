@@ -7,6 +7,17 @@ import { MetricCard } from "@/components/shared/MetricCard";
 import { formatCurrency, formatUsd, pnlColor } from "@/lib/format";
 import type { IterationSummary } from "@/lib/types";
 
+const MODE_BADGE: Record<string, { label: string; variant: "green" | "blue" | "amber" }> = {
+  paper: { label: "PAPER", variant: "green" },
+  live: { label: "LIVE", variant: "blue" },
+  dry_run: { label: "DRY RUN", variant: "amber" },
+};
+
+function TradingModeBadge({ mode }: { mode?: string }) {
+  const cfg = MODE_BADGE[mode ?? "paper"] ?? MODE_BADGE.paper;
+  return <StatusBadge label={cfg.label} variant={cfg.variant} />;
+}
+
 function IterationCard({
   iter,
   expanded,
@@ -25,6 +36,8 @@ function IterationCard({
       ? new Date(iter.archived_at).toLocaleDateString()
       : "";
 
+  const mode = iter.trading_mode ?? "paper";
+
   return (
     <div className="rounded-lg bg-[#131720] border border-white/5 overflow-hidden">
       <button
@@ -36,6 +49,7 @@ function IterationCard({
             {iter.label}
           </span>
           <StatusBadge label={iter.version || "---"} variant="purple" />
+          <TradingModeBadge mode={mode} />
           <span className="text-xs text-zinc-500 shrink-0">
             {iter.total_candles} candles
           </span>
@@ -49,6 +63,11 @@ function IterationCard({
           <span className={`font-mono text-sm ${pnlColor(iter.total_pnl)}`}>
             {formatCurrency(iter.total_pnl, 2)}
           </span>
+          {iter.live_trading && (
+            <span className={`font-mono text-[11px] ${pnlColor(-iter.live_trading.execution_cost)}`}>
+              {iter.live_trading.execution_cost >= 0 ? "+" : ""}{formatCurrency(iter.live_trading.execution_cost, 2)} cost
+            </span>
+          )}
           <span className="text-xs text-zinc-400">
             {winRate.toFixed(0)}% WR
           </span>
@@ -107,6 +126,45 @@ function IterationCard({
               />
             )}
           </div>
+
+          {/* Live vs Paper comparison (only for live/dry_run iterations) */}
+          {iter.live_trading && (
+            <div>
+              <h4 className="text-[11px] uppercase tracking-wider text-zinc-500 font-semibold mb-2">
+                Live vs Paper
+              </h4>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <MetricCard
+                  label="Real PnL"
+                  value={
+                    <span className={pnlColor(iter.total_pnl)}>
+                      {formatCurrency(iter.total_pnl, 4)}
+                    </span>
+                  }
+                />
+                <MetricCard
+                  label="Shadow Paper PnL"
+                  value={
+                    <span className={pnlColor(iter.live_trading.shadow_paper_pnl)}>
+                      {formatCurrency(iter.live_trading.shadow_paper_pnl, 4)}
+                    </span>
+                  }
+                />
+                <MetricCard
+                  label="Execution Cost"
+                  value={
+                    <span className={pnlColor(-iter.live_trading.execution_cost)}>
+                      {formatCurrency(iter.live_trading.execution_cost, 4)}
+                    </span>
+                  }
+                />
+                <MetricCard
+                  label="Wallet Balance"
+                  value={formatUsd(iter.live_trading.wallet_balance, 2)}
+                />
+              </div>
+            </div>
+          )}
 
           {/* Trade Analysis */}
           {iter.trade_analysis && (
@@ -334,6 +392,8 @@ export default function HistoryPage() {
   const ws = useWSContext();
   const [expanded, setExpanded] = useState<string | null>(null);
   const [fetchedIterations, setFetchedIterations] = useState<IterationSummary[] | null>(null);
+  const [modeFilter, setModeFilter] = useState<Set<string>>(new Set(["paper", "live", "dry_run"]));
+  const [pnlFilter, setPnlFilter] = useState<"all" | "profitable" | "unprofitable">("all");
 
   // Always fetch iterations from API (works even when bot is offline)
   useEffect(() => {
@@ -360,10 +420,47 @@ export default function HistoryPage() {
     b.label.localeCompare(a.label)
   );
 
-  const totalPnl = sorted.reduce((sum, i) => sum + i.total_pnl, 0);
-  const totalWins = sorted.reduce((sum, i) => sum + i.wins, 0);
-  const totalLosses = sorted.reduce((sum, i) => sum + i.losses, 0);
-  const totalCandles = sorted.reduce((sum, i) => sum + i.total_candles, 0);
+  // Toggle a mode filter chip (prevent deselecting the last one)
+  const toggleMode = (mode: string) => {
+    setModeFilter((prev) => {
+      const next = new Set(prev);
+      if (next.has(mode)) {
+        if (next.size <= 1) return prev; // keep at least one active
+        next.delete(mode);
+      } else {
+        next.add(mode);
+      }
+      return next;
+    });
+  };
+
+  // Apply filters
+  const filtered = sorted.filter((i) => {
+    const mode = i.trading_mode ?? "paper";
+    if (!modeFilter.has(mode)) return false;
+    if (pnlFilter === "profitable" && i.total_pnl <= 0) return false;
+    if (pnlFilter === "unprofitable" && i.total_pnl > 0) return false;
+    return true;
+  });
+
+  const filtersActive = filtered.length !== sorted.length;
+
+  const totalPnl = filtered.reduce((sum, i) => sum + i.total_pnl, 0);
+  const totalWins = filtered.reduce((sum, i) => sum + i.wins, 0);
+  const totalLosses = filtered.reduce((sum, i) => sum + i.losses, 0);
+  const totalCandles = filtered.reduce((sum, i) => sum + i.total_candles, 0);
+
+  // Mode breakdown
+  const paperCount = filtered.filter((i) => (i.trading_mode ?? "paper") === "paper").length;
+  const liveCount = filtered.filter((i) => i.trading_mode === "live").length;
+  const dryRunCount = filtered.filter((i) => i.trading_mode === "dry_run").length;
+
+  const paperPnl = filtered
+    .filter((i) => (i.trading_mode ?? "paper") === "paper")
+    .reduce((sum, i) => sum + i.total_pnl, 0);
+  const livePnl = filtered
+    .filter((i) => i.trading_mode === "live")
+    .reduce((sum, i) => sum + i.total_pnl, 0);
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
@@ -372,24 +469,110 @@ export default function HistoryPage() {
           Iteration History
         </h1>
         <div className="flex items-center gap-4 text-xs text-zinc-400">
-          <span>{sorted.length} iterations</span>
-          <span>{totalCandles} candles</span>
-          <span className={`font-mono ${pnlColor(totalPnl)}`}>
-            {formatCurrency(totalPnl, 2)} total
+          <span>
+            {paperCount > 0 && <span className="text-green-400">{paperCount} paper</span>}
+            {liveCount > 0 && <>{paperCount > 0 && " / "}<span className="text-blue-400">{liveCount} live</span></>}
+            {dryRunCount > 0 && <>{(paperCount > 0 || liveCount > 0) && " / "}<span className="text-amber-400">{dryRunCount} dry-run</span></>}
           </span>
+          <span>{totalCandles} candles</span>
+          {paperCount > 0 && (
+            <span className={`font-mono ${pnlColor(paperPnl)}`}>
+              {formatCurrency(paperPnl, 2)} paper
+            </span>
+          )}
+          {liveCount > 0 && (
+            <span className={`font-mono ${pnlColor(livePnl)}`}>
+              {formatCurrency(livePnl, 2)} live
+            </span>
+          )}
+          {paperCount > 0 && liveCount > 0 && (
+            <span className={`font-mono ${pnlColor(totalPnl)}`}>
+              {formatCurrency(totalPnl, 2)} total
+            </span>
+          )}
+          {liveCount === 0 && (
+            <span className={`font-mono ${pnlColor(totalPnl)}`}>
+              {formatCurrency(totalPnl, 2)} total
+            </span>
+          )}
           <span>
             {totalWins}W / {totalLosses}L
           </span>
         </div>
       </div>
 
+      {/* Filter bar */}
+      {sorted.length > 0 && (
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+          {/* Mode filter chips */}
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] uppercase tracking-wider text-zinc-600 mr-1">Mode</span>
+            {(["paper", "live", "dry_run"] as const).map((mode) => {
+              const active = modeFilter.has(mode);
+              const cfg = MODE_BADGE[mode];
+              const colorClasses: Record<string, string> = {
+                green: active ? "bg-green-500/20 text-green-400 border-green-500/30" : "",
+                blue: active ? "bg-blue-500/20 text-blue-400 border-blue-500/30" : "",
+                amber: active ? "bg-amber-500/20 text-amber-400 border-amber-500/30" : "",
+              };
+              return (
+                <button
+                  key={mode}
+                  onClick={() => toggleMode(mode)}
+                  className={`px-2.5 py-1 rounded-full text-[11px] font-medium border transition-colors ${
+                    active
+                      ? colorClasses[cfg.variant]
+                      : "bg-white/5 text-zinc-500 border-transparent hover:bg-white/10"
+                  }`}
+                >
+                  {cfg.label}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* PnL filter chips */}
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] uppercase tracking-wider text-zinc-600 mr-1">PnL</span>
+            {([
+              { value: "all" as const, label: "All", cls: "bg-white/15 text-zinc-200 border-white/20" },
+              { value: "profitable" as const, label: "Profitable", cls: "bg-green-500/20 text-green-400 border-green-500/30" },
+              { value: "unprofitable" as const, label: "Unprofitable", cls: "bg-red-500/20 text-red-400 border-red-500/30" },
+            ]).map((opt) => (
+              <button
+                key={opt.value}
+                onClick={() => setPnlFilter(opt.value)}
+                className={`px-2.5 py-1 rounded-full text-[11px] font-medium border transition-colors ${
+                  pnlFilter === opt.value
+                    ? opt.cls
+                    : "bg-white/5 text-zinc-500 border-transparent hover:bg-white/10"
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Showing X of Y */}
+          {filtersActive && (
+            <span className="text-[11px] text-zinc-500">
+              Showing {filtered.length} of {sorted.length}
+            </span>
+          )}
+        </div>
+      )}
+
       {sorted.length === 0 ? (
         <div className="text-zinc-600 text-sm text-center py-12">
           No iterations found. Run the bot and archive sessions to generate iteration data.
         </div>
+      ) : filtered.length === 0 ? (
+        <div className="text-zinc-600 text-sm text-center py-12">
+          No iterations match the current filters.
+        </div>
       ) : (
         <div className="space-y-2">
-          {sorted.map((iter) => (
+          {filtered.map((iter) => (
             <IterationCard
               key={iter.label}
               iter={iter}
