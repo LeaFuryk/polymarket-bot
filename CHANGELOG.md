@@ -7,6 +7,9 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+- **`prefilter`** — Refactored from single file to package with composable `MarketFilter` protocol, one class per filter criterion, extracted constants, and `README.md`; 37 tests at 100% coverage
+
 ### Added
 - **`CLAUDE.md`** — Project-level configuration for Claude Code with Notion IDs, active skills, and repo conventions
 - **`.github/PULL_REQUEST_TEMPLATE.md`** — PR template with delivery checklist enforcing SOLID principles, >80% test coverage, CI checks, documentation, and CHANGELOG updates
