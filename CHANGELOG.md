@@ -4,14 +4,20 @@ All notable changes to this project will be documented in this file.
 
 ## [v0.15.0] — 2026-03-02
 
-### Added — GitHub Actions CI workflow
+### Added — GitHub Actions CI (two parallel workflows)
 
-Automated CI pipeline runs on every push to `main` via `.github/workflows/ci.yml`:
+Two independent workflows run simultaneously on every push to `main`:
 
-- Python 3.11 + uv for dependency management
-- pytest with JUnit XML report and check annotations (via `mikepenz/action-junit-report`)
-- Node 22 + TypeScript type checking (`tsc --noEmit`) for the Next.js dashboard
-- Runs pytest and tsc directly (bypasses `polybot-check` which attempts a non-existent Jest step)
+- **Python Tests** (`python.yml`) — Python 3.11 + uv, pytest with JUnit XML report and check annotations (via `mikepenz/action-junit-report`)
+- **Frontend Tests** (`frontend.yml`) — Node 22, TypeScript type checking (`tsc --noEmit`), and Jest test suite
+
+### Added — Jest test suite for dashboard-next
+
+Bootstrapped Jest + Testing Library in `dashboard-next/` with 25 tests across 3 suites:
+
+- `format.test.ts` — unit tests for all formatting utilities (currency, percent, countdown, PnL colors)
+- `MetricCard.test.tsx` — render tests for the MetricCard component
+- `StatusBadge.test.tsx` — render tests for the StatusBadge component
 
 ### Added — Filter bar on iteration history page
 
