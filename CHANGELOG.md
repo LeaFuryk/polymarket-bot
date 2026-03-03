@@ -7,7 +7,12 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+- **`shared_state`** — Converted from single `shared_state.py` module to a package (`shared_state/`) with each class in its own file; extracted defaults into `constants.py`; added typed `StopLossRecord` dataclass replacing untyped dict; tightened `dict[str, Any]` types; added `MarketSnapshot` type annotation
+
 ### Added
+- **`tests/test_shared_state.py`** — 17 unit tests covering constants, all dataclasses, and SharedState initialization
+- **`src/polybot/shared_state/README.md`** — Module README documenting package architecture, state sections, and ownership
 - **`CLAUDE.md`** — Project-level configuration for Claude Code with Notion IDs, active skills, and repo conventions
 - **`.github/PULL_REQUEST_TEMPLATE.md`** — PR template with delivery checklist enforcing SOLID principles, >80% test coverage, CI checks, documentation, and CHANGELOG updates
 - **Keep a Changelog** format header and `[Unreleased]` section in CHANGELOG.md
