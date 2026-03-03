@@ -265,7 +265,7 @@ npm run dev        # Start at http://localhost:3000
 **Pages:**
 - `/` — Trading: PnL, market countdown, positions, BTC, trades, resolutions
 - `/status` — Live Status: API latencies, gate pipeline, risk state, AI engine
-- `/history` — Iteration cards with expandable stats
+- `/history` — Iteration cards with expandable stats, paper/live/dry-run mode badges, live vs paper PnL comparison, and filter bar (mode toggle chips + PnL profit/loss filter with dynamic summary stats)
 - `/forensics` — Connects to `polybot-server` (port 8888)
 
 Config: `ws_enabled: true` and `ws_port: 8765` in `config/default.yaml` under `logging:`. The bot also still writes `dashboard_data.json` as fallback — the Next.js app reads it when the WebSocket is offline.

@@ -4,6 +4,26 @@ All notable changes to this project will be documented in this file.
 
 ## [v0.15.0] — 2026-03-02
 
+### Added — Filter bar on iteration history page
+
+The History page now has a filter bar below the header with two filter groups:
+
+- **Mode toggle chips** — PAPER (green), LIVE (blue), DRY RUN (amber) — click to toggle modes in/out; at least one must remain active
+- **PnL radio chips** — All / Profitable / Unprofitable — filters iterations by `total_pnl > 0` or `<= 0`
+- Summary stats (iteration count, candles, PnL totals, W/L) update dynamically to reflect filtered results
+- "Showing X of Y" indicator appears when filters are active
+- Empty state message when no iterations match current filters
+
+### Added — Paper vs Live trading mode differentiation in iteration history
+
+Every iteration now carries an explicit `trading_mode` field (`paper`, `live`, or `dry_run`) throughout the data pipeline — from live dashboard data through archive summaries to the frontend. The History page shows colored mode badges (green PAPER, blue LIVE, amber DRY RUN) on each iteration card, and the summary bar breaks down iteration counts and PnL totals by mode.
+
+- `_assemble_dashboard_data()` always writes `trading_mode` (paper/live/dry_run)
+- `_compute_summary()` persists `trading_mode` into `summary.json`
+- `_enrich_iteration_summary()` extracts `live_trading` metrics (wallet balance, shadow paper PnL, execution cost) with backcompat inference for old archives
+- Expanded live iterations show a "Live vs Paper" comparison: real PnL, shadow paper PnL, execution cost, and wallet balance
+- Backfill: `_rebuild_iterations_json()` populates all 29 archived iterations (21 paper, 3 dry-run, 5 live)
+
 ### Added — Real-time WebSocket dashboard with Next.js frontend
 
 Embedded WebSocket server inside the bot process pushes live state directly to a modern Next.js frontend at `dashboard-next/`. The frontend updates in real-time with animated numbers and cleanly separates Trading data from Tech/Status data.
