@@ -8,9 +8,12 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Changed
+- **`shared_state`** — Converted from single `shared_state.py` module to a package (`shared_state/`) with each class in its own file; extracted defaults into `constants.py`; added typed `StopLossRecord` dataclass replacing untyped dict; tightened `dict[str, Any]` types; added `MarketSnapshot` type annotation
 - **`config`** — Converted from single `config.py` module to a package (`config/`) with each config class in its own file; extracted all hardcoded defaults into `constants.py`; added `ConfigLoader` class; added field validators for `min_confidence` and risk percentage fields
 
 ### Added
+- **`tests/test_shared_state.py`** — 17 unit tests covering constants, all dataclasses, and SharedState initialization
+- **`src/polybot/shared_state/README.md`** — Module README documenting package architecture, state sections, and ownership
 - **`tests/test_config.py`** — 17 unit tests covering constants, model validation, YAML loading, env overrides, and backward compatibility
 - **`src/polybot/config/README.md`** — Module README documenting package architecture, env variables, validation rules, and usage
 - **`CLAUDE.md`** — Project-level configuration for Claude Code with Notion IDs, active skills, and repo conventions
