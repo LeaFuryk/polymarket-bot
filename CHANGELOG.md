@@ -2,7 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
-## [v0.15.0] — 2026-03-02
+## [v0.16.0] — 2026-03-03
+
+### Added — GitHub App integration for automated PRs
+
+- **`scripts/gh_app_token.py`** — Generates short-lived GitHub App installation tokens for `tars-bot-01`, enabling Claude Code to push branches and create PRs under its own identity
+- **`PULL_REQUEST_PROCESS.md`** — Documents the full PR creation workflow using the GitHub App (token generation, push via `x-access-token`, PR creation via `gh`)
+- **`.env.example`** — Added `GH_APP_ID`, `GH_INSTALLATION_ID`, `GH_APP_PRIVATE_KEY_PATH` variables
+- **`.gitignore`** — Added `*.pem` to prevent accidental commit of private keys
 
 ### Fixed — Reviewdog CI warnings
 
@@ -202,6 +209,8 @@ polybot-replay --slug btc-updown-5m --limit-price 0.45  # Fixed limit price scan
 **Integrated into existing CLIs:**
 - `polybot-analyze` — appends an aggregate Candle Replay Summary table after the performance report (reads `logs/polybot.db`)
 - `polybot-archive` — runs replay on the archived DB, prints the summary, and saves aggregate stats to `summary.json` under the `replay` key
+
+## [v0.15.0] — 2026-03-02
 
 ### Added — Full limit order execution telemetry
 
