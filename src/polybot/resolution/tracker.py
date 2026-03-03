@@ -4,10 +4,9 @@ from __future__ import annotations
 
 import logging
 
-from polybot.market_data.btc_price import BtcPriceFeed
-from polybot.market_data.client import PolymarketRestClient
 from polybot.models import CandleMarket, ResolutionRecord
 from polybot.resolution.checker import determine_btc_winner
+from polybot.resolution.protocol import BtcPriceFeedProtocol, PriceClient
 from polybot.resolution.verifier import verify_winner
 
 logger = logging.getLogger(__name__)
@@ -23,8 +22,8 @@ class ResolutionTracker:
 
     def __init__(
         self,
-        btc_feed: BtcPriceFeed,
-        rest_client: PolymarketRestClient | None = None,
+        btc_feed: BtcPriceFeedProtocol,
+        rest_client: PriceClient | None = None,
     ) -> None:
         self._btc_feed = btc_feed
         self._rest_client = rest_client

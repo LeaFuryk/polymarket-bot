@@ -5,10 +5,10 @@ from __future__ import annotations
 import asyncio
 import logging
 
-from polybot.market_data.client import PolymarketRestClient
 from polybot.models import CandleMarket
 from polybot.resolution.checker import determine_polymarket_winner
 from polybot.resolution.constants import VERIFICATION_DELAY
+from polybot.resolution.protocol import PriceClient
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 async def verify_winner(
     market: CandleMarket,
     btc_winner: str,
-    rest_client: PolymarketRestClient | None,
+    rest_client: PriceClient | None,
 ) -> str:
     """Verify the BTC-based winner against Polymarket's actual outcome.
 
