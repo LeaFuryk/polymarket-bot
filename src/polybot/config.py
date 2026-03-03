@@ -65,21 +65,21 @@ class RiskConfig(BaseModel):
 
 
 class MonitorConfig(BaseModel):
-    market_monitor_interval: float = 1.0     # seconds between market data fetches
-    position_monitor_interval: float = 1.0   # seconds between P&L checks
-    ai_cooldown_seconds: float = 60.0        # min seconds between AI calls
-    rr_trigger_threshold: float = 1.0        # R/R to trigger AI (entry <= $0.50)
-    stop_loss_pct: float = -0.35             # -35% triggers exit evaluation
-    take_profit_pct: float = 0.50            # +50% triggers exit evaluation
-    btc_price_cache_ttl: float = 2.0         # seconds (was 30s)
-    adaptive_entry_enabled: bool = True      # use adaptive BTC threshold + max entry
-    adaptive_entry_window: int = 10          # rolling candle window for adaptive stats
-    dynamic_sl_enabled: bool = True          # adaptive stop-loss using 5 factors
-    dynamic_tp_enabled: bool = True          # adaptive take-profit using 3 factors
-    sl_floor: float = -0.75                  # never wider than -75%
-    sl_ceiling: float = -0.15               # never tighter than -15%
-    tp_floor: float = 0.20                   # never below +20%
-    tp_ceiling: float = 1.20                 # never above +120%
+    market_monitor_interval: float = 1.0  # seconds between market data fetches
+    position_monitor_interval: float = 1.0  # seconds between P&L checks
+    ai_cooldown_seconds: float = 60.0  # min seconds between AI calls
+    rr_trigger_threshold: float = 1.0  # R/R to trigger AI (entry <= $0.50)
+    stop_loss_pct: float = -0.35  # -35% triggers exit evaluation
+    take_profit_pct: float = 0.50  # +50% triggers exit evaluation
+    btc_price_cache_ttl: float = 2.0  # seconds (was 30s)
+    adaptive_entry_enabled: bool = True  # use adaptive BTC threshold + max entry
+    adaptive_entry_window: int = 10  # rolling candle window for adaptive stats
+    dynamic_sl_enabled: bool = True  # adaptive stop-loss using 5 factors
+    dynamic_tp_enabled: bool = True  # adaptive take-profit using 3 factors
+    sl_floor: float = -0.75  # never wider than -75%
+    sl_ceiling: float = -0.15  # never tighter than -15%
+    tp_floor: float = 0.20  # never below +20%
+    tp_ceiling: float = 1.20  # never above +120%
 
 
 class LoggingConfig(BaseModel):

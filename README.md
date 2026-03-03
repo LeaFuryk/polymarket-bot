@@ -896,8 +896,17 @@ polymarket-bot/
 
 Two GitHub Actions workflows run in parallel on every push to `main`:
 
-- **Python Tests** (`python.yml`) — pytest with JUnit report posted as check annotations
+- **Python Tests** (`python.yml`) — Ruff lint + format check, then pytest with JUnit report posted as check annotations
 - **Frontend Tests** (`frontend.yml`) — TypeScript type checking (`tsc --noEmit`) + Jest test suite for `dashboard-next/`
+
+### Pre-commit Hooks
+
+Ruff lint (with auto-fix) and format run on staged files before each commit. Install with:
+
+```bash
+uv sync --extra dev
+uv run pre-commit install
+```
 
 ---
 

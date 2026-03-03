@@ -10,13 +10,11 @@ Architecture: non-blocking asyncio Queue → batched background writer task.
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import sqlite3
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -248,8 +246,8 @@ CREATE INDEX IF NOT EXISTS idx_candles_slug ON candles(slug);
 # ---------------------------------------------------------------------------
 
 # Batch insert thresholds
-_FLUSH_INTERVAL = 5.0   # seconds
-_FLUSH_BATCH = 50       # rows
+_FLUSH_INTERVAL = 5.0  # seconds
+_FLUSH_BATCH = 50  # rows
 
 
 class DataStore:
@@ -325,7 +323,8 @@ class DataStore:
 
             logger.info(
                 "DataStore: begin_candle id=%s slug=%s",
-                self._current_candle_id, slug,
+                self._current_candle_id,
+                slug,
             )
             return self._current_candle_id
         except Exception:
@@ -352,7 +351,9 @@ class DataStore:
             self._conn.commit()
             logger.info(
                 "DataStore: resolve_candle id=%d winner=%s pnl=%.4f",
-                candle_id, winner, resolution_pnl,
+                candle_id,
+                winner,
+                resolution_pnl,
             )
         except Exception:
             logger.exception("DataStore: resolve_candle failed")
@@ -390,7 +391,7 @@ class DataStore:
                 try:
                     item = await asyncio.wait_for(self._queue.get(), timeout=_FLUSH_INTERVAL)
                     self._pending_items.append(item)
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     pass
                 except asyncio.CancelledError:
                     raise
@@ -460,15 +461,29 @@ class DataStore:
                     )""",
                     [
                         (
-                            s.candle_id, s.timestamp, s.time_remaining,
-                            s.up_best_bid, s.up_best_ask, s.up_mid, s.up_spread_pct,
-                            s.up_bid_depth, s.up_ask_depth,
-                            s.down_best_bid, s.down_best_ask, s.down_mid, s.down_spread_pct,
-                            s.down_bid_depth, s.down_ask_depth,
-                            s.rr_up, s.rr_down,
-                            s.btc_price, s.btc_move_from_open,
-                            s.streak, s.streak_direction,
-                            int(s.prefilter_passed), s.prefilter_reasons,
+                            s.candle_id,
+                            s.timestamp,
+                            s.time_remaining,
+                            s.up_best_bid,
+                            s.up_best_ask,
+                            s.up_mid,
+                            s.up_spread_pct,
+                            s.up_bid_depth,
+                            s.up_ask_depth,
+                            s.down_best_bid,
+                            s.down_best_ask,
+                            s.down_mid,
+                            s.down_spread_pct,
+                            s.down_bid_depth,
+                            s.down_ask_depth,
+                            s.rr_up,
+                            s.rr_down,
+                            s.btc_price,
+                            s.btc_move_from_open,
+                            s.streak,
+                            s.streak_direction,
+                            int(s.prefilter_passed),
+                            s.prefilter_reasons,
                             s.indicators_json,
                         )
                         for s in snapshots
@@ -498,14 +513,30 @@ class DataStore:
                     )""",
                     [
                         (
-                            d.candle_id, d.timestamp, d.cycle, d.trigger_type,
-                            d.action, d.token_side, d.confidence, d.reasoning,
-                            d.market_view, d.decision_size,
-                            d.fill_price, d.fill_size, d.slippage_bps, d.fee_amount,
-                            int(d.risk_blocked), d.risk_reason,
-                            d.cash, d.portfolio_value, d.up_shares, d.down_shares,
-                            d.ai_cost, d.ai_latency_ms,
-                            d.indicators_json, d.live_order_json,
+                            d.candle_id,
+                            d.timestamp,
+                            d.cycle,
+                            d.trigger_type,
+                            d.action,
+                            d.token_side,
+                            d.confidence,
+                            d.reasoning,
+                            d.market_view,
+                            d.decision_size,
+                            d.fill_price,
+                            d.fill_size,
+                            d.slippage_bps,
+                            d.fee_amount,
+                            int(d.risk_blocked),
+                            d.risk_reason,
+                            d.cash,
+                            d.portfolio_value,
+                            d.up_shares,
+                            d.down_shares,
+                            d.ai_cost,
+                            d.ai_latency_ms,
+                            d.indicators_json,
+                            d.live_order_json,
                         )
                         for d in decisions
                     ],
@@ -516,7 +547,8 @@ class DataStore:
             if total > 0:
                 logger.debug(
                     "DataStore flushed %d snapshots + %d decisions",
-                    len(snapshots), len(decisions),
+                    len(snapshots),
+                    len(decisions),
                 )
         except Exception:
             logger.exception("DataStore flush error")
@@ -646,7 +678,8 @@ class MarketHistoryStore:
 
             logger.info(
                 "MarketHistoryStore: begin_candle id=%s slug=%s",
-                self._current_candle_id, slug,
+                self._current_candle_id,
+                slug,
             )
             return self._current_candle_id
         except Exception:
@@ -671,7 +704,8 @@ class MarketHistoryStore:
             self._conn.commit()
             logger.info(
                 "MarketHistoryStore: resolve_candle id=%d winner=%s",
-                candle_id, winner,
+                candle_id,
+                winner,
             )
         except Exception:
             logger.exception("MarketHistoryStore: resolve_candle failed")
@@ -695,7 +729,7 @@ class MarketHistoryStore:
                 try:
                     item = await asyncio.wait_for(self._queue.get(), timeout=_FLUSH_INTERVAL)
                     self._pending_items.append(item)
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     pass
                 except asyncio.CancelledError:
                     raise
@@ -755,14 +789,27 @@ class MarketHistoryStore:
                 )""",
                 [
                     (
-                        s.candle_id, s.timestamp, s.time_remaining,
-                        s.up_best_bid, s.up_best_ask, s.up_mid, s.up_spread_pct,
-                        s.up_bid_depth, s.up_ask_depth,
-                        s.down_best_bid, s.down_best_ask, s.down_mid, s.down_spread_pct,
-                        s.down_bid_depth, s.down_ask_depth,
-                        s.rr_up, s.rr_down,
-                        s.btc_price, s.btc_move_from_open,
-                        s.streak, s.streak_direction,
+                        s.candle_id,
+                        s.timestamp,
+                        s.time_remaining,
+                        s.up_best_bid,
+                        s.up_best_ask,
+                        s.up_mid,
+                        s.up_spread_pct,
+                        s.up_bid_depth,
+                        s.up_ask_depth,
+                        s.down_best_bid,
+                        s.down_best_ask,
+                        s.down_mid,
+                        s.down_spread_pct,
+                        s.down_bid_depth,
+                        s.down_ask_depth,
+                        s.rr_up,
+                        s.rr_down,
+                        s.btc_price,
+                        s.btc_move_from_open,
+                        s.streak,
+                        s.streak_direction,
                     )
                     for s in snapshots
                 ],

@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 ## [v0.15.0] — 2026-03-02
 
+### Added — Ruff linter + pre-commit hooks
+
+Integrated [ruff](https://docs.astral.sh/ruff/) for linting and formatting across the Python codebase:
+
+- **`pyproject.toml`** — Added `[tool.ruff]` config (Python 3.11, 120-char line length, rules: E/F/I/UP/B/SIM) and `ruff`/`pre-commit` as dev dependencies
+- **`.pre-commit-config.yaml`** — Ruff lint (with `--fix`) and ruff format hooks run on every commit
+- **CI** — `ruff check` and `ruff format --check` steps added to `python.yml` before pytest
+- Fixed all existing violations: unused imports, unused variables, import sorting, `raise` chaining, `zip()` strictness, ambiguous variable names
+- Auto-formatted all 69 Python files to ruff's style
+
 ### Added — GitHub Actions CI (two parallel workflows)
 
 Two independent workflows run simultaneously on every push to `main`:

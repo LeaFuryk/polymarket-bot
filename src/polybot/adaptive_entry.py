@@ -24,7 +24,6 @@ from __future__ import annotations
 
 import json
 import logging
-import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -38,8 +37,8 @@ DEFAULT_MAX_ENTRY = 0.60  # $0.60 max ask
 
 # Retracement-based reversal detection constants
 RETRACEMENT_THRESHOLD = 0.80  # 80% of peak must be retraced
-MIN_PEAK_COMMIT = 25.0        # $25 minimum peak to evaluate retracement
-VELOCITY_SAMPLE_SEC = 5       # sample interval for acceleration check
+MIN_PEAK_COMMIT = 25.0  # $25 minimum peak to evaluate retracement
+VELOCITY_SAMPLE_SEC = 5  # sample interval for acceleration check
 
 
 @dataclass
@@ -109,12 +108,13 @@ class AdaptiveEntryTracker:
 
             # Keep only the last N*2 for file size, but use last N for stats
             if len(self._history) > self._window * 4:
-                self._history = self._history[-(self._window * 4):]
+                self._history = self._history[-(self._window * 4) :]
 
             if self._history:
                 logger.info(
                     "Loaded %d adaptive entry records (window=%d)",
-                    len(self._history), self._window,
+                    len(self._history),
+                    self._window,
                 )
         except Exception:
             logger.warning("Could not load adaptive entry data", exc_info=True)
@@ -132,7 +132,8 @@ class AdaptiveEntryTracker:
         if len(self._history) >= self._window:
             logger.info(
                 "Adaptive entry already has %d records (window=%d), skipping bootstrap",
-                len(self._history), self._window,
+                len(self._history),
+                self._window,
             )
             return
 
@@ -162,19 +163,21 @@ class AdaptiveEntryTracker:
         # Parse 1-min klines: (open_time_s, open, high, low, close)
         klines_1m = []
         for k in raw_klines:
-            klines_1m.append((
-                float(k[0]) / 1000,  # open_time in seconds
-                float(k[1]),         # open
-                float(k[2]),         # high
-                float(k[3]),         # low
-                float(k[4]),         # close
-            ))
+            klines_1m.append(
+                (
+                    float(k[0]) / 1000,  # open_time in seconds
+                    float(k[1]),  # open
+                    float(k[2]),  # high
+                    float(k[3]),  # low
+                    float(k[4]),  # close
+                )
+            )
 
         # Group into 5-min buckets aligned to 300s boundaries
         buckets: dict[int, list] = {}
-        for ot, o, h, l, c in klines_1m:
+        for ot, o, h, low, c in klines_1m:
             bucket_key = int(ot) // 300 * 300
-            buckets.setdefault(bucket_key, []).append((ot, o, h, l, c))
+            buckets.setdefault(bucket_key, []).append((ot, o, h, low, c))
 
         # Sort buckets by time, drop the last one (likely in-progress)
         sorted_keys = sorted(buckets.keys())
@@ -274,8 +277,7 @@ class AdaptiveEntryTracker:
         if bootstrapped > 0:
             self._recompute()
             logger.info(
-                "Bootstrapped %d candles from Binance 1-min klines → "
-                "reversal_rate=%.0f%%, signal=%s, btc_thresh=$%.0f",
+                "Bootstrapped %d candles from Binance 1-min klines → reversal_rate=%.0f%%, signal=%s, btc_thresh=$%.0f",
                 bootstrapped,
                 self.rolling_reversal_rate * 100,
                 self._signal_type,
@@ -288,33 +290,39 @@ class AdaptiveEntryTracker:
         """Append a candle outcome to JSONL."""
         try:
             with open(self._data_path, "a") as f:
-                f.write(json.dumps({
-                    "slug": outcome.slug,
-                    "winner": outcome.winner,
-                    "btc_open": round(outcome.btc_open, 2),
-                    "btc_close": round(outcome.btc_close, 2),
-                    "direction_at_20": outcome.direction_at_20,
-                    "reversed": outcome.reversed,
-                    "winner_ask_at_20": round(outcome.winner_ask_at_20, 4),
-                    "peak_up_move": round(outcome.peak_up_move, 2),
-                    "peak_down_move": round(outcome.peak_down_move, 2),
-                }) + "\n")
+                f.write(
+                    json.dumps(
+                        {
+                            "slug": outcome.slug,
+                            "winner": outcome.winner,
+                            "btc_open": round(outcome.btc_open, 2),
+                            "btc_close": round(outcome.btc_close, 2),
+                            "direction_at_20": outcome.direction_at_20,
+                            "reversed": outcome.reversed,
+                            "winner_ask_at_20": round(outcome.winner_ask_at_20, 4),
+                            "peak_up_move": round(outcome.peak_up_move, 2),
+                            "peak_down_move": round(outcome.peak_down_move, 2),
+                        }
+                    )
+                    + "\n"
+                )
         except Exception:
             logger.warning("Could not save adaptive entry record", exc_info=True)
 
     def _recompute(self) -> None:
         """Recompute adaptive thresholds from rolling window."""
-        window = self._history[-self._window:]
+        window = self._history[-self._window :]
 
         if len(window) < self._window:
             # Not enough data — use conservative defaults
             self.btc_threshold = DEFAULT_BTC_THRESHOLD
             self.max_entry_price = DEFAULT_MAX_ENTRY
             logger.info(
-                "Adaptive entry: insufficient history (%d/%d), using defaults "
-                "(btc_thresh=$%.0f, max_entry=$%.2f)",
-                len(window), self._window,
-                self.btc_threshold, self.max_entry_price,
+                "Adaptive entry: insufficient history (%d/%d), using defaults (btc_thresh=$%.0f, max_entry=$%.2f)",
+                len(window),
+                self._window,
+                self.btc_threshold,
+                self.max_entry_price,
             )
             return
 
@@ -382,9 +390,14 @@ class AdaptiveEntryTracker:
             "Adaptive entry updated: reversal_rate=%.0f%% (%d/%d) → "
             "signal=%s, btc_thresh=$%.0f (cap=$%.0f, %s, P50=$%.0f), "
             "avg_winner_ask=$%.3f → max_entry=$%.2f",
-            reversal_rate * 100, reversals, len(window),
-            self._signal_type, self.btc_threshold, self._adaptive_cap,
-            method, self._fakeout_median,
+            reversal_rate * 100,
+            reversals,
+            len(window),
+            self._signal_type,
+            self.btc_threshold,
+            self._adaptive_cap,
+            method,
+            self._fakeout_median,
             avg_winner_ask if winner_asks else 0,
             self.max_entry_price,
         )
@@ -400,10 +413,7 @@ class AdaptiveEntryTracker:
             True if BTC has moved enough AND entry price is reasonable,
             OR if entry is very cheap (<=0.35) regardless of BTC move.
         """
-        return (
-            abs_btc_move >= self.btc_threshold
-            and min_ask <= self.max_entry_price
-        )
+        return abs_btc_move >= self.btc_threshold and min_ask <= self.max_entry_price
 
     def record_outcome(
         self,
@@ -531,7 +541,7 @@ class AdaptiveEntryTracker:
         )
 
         # Dedup — skip if this slug was already recorded
-        if any(h.slug == slug for h in self._history[-self._window * 2:]):
+        if any(h.slug == slug for h in self._history[-self._window * 2 :]):
             logger.debug("Adaptive entry: skipping duplicate slug %s", slug)
             return
 
@@ -542,8 +552,13 @@ class AdaptiveEntryTracker:
         logger.info(
             "Adaptive entry recorded: %s winner=%s, dir@$20=%s, reversed=%s, "
             "winner_ask@$20=$%.3f, peak_up=$%.0f, peak_down=$%.0f",
-            slug, winner, direction_at_20, reversed_flag, winner_ask_at_20,
-            peak_up_move, peak_down_move,
+            slug,
+            winner,
+            direction_at_20,
+            reversed_flag,
+            winner_ask_at_20,
+            peak_up_move,
+            peak_down_move,
         )
 
     @property
@@ -565,7 +580,7 @@ class AdaptiveEntryTracker:
     @property
     def rolling_reversal_rate(self) -> float:
         """Current rolling reversal rate."""
-        window = self._history[-self._window:]
+        window = self._history[-self._window :]
         if not window:
             return 0.0
         return sum(1 for c in window if c.reversed) / len(window)
@@ -588,11 +603,15 @@ class AdaptiveEntryTracker:
 
     def get_summary(self) -> str:
         """Generate a human-readable summary for logging/dashboard."""
-        window = self._history[-self._window:]
+        window = self._history[-self._window :]
         if not window:
             return "Adaptive entry: no history yet"
         reversal_rate = self.rolling_reversal_rate
-        method = f"fakeout P50=${self._fakeout_median:.0f}, cap=${self._adaptive_cap:.0f}" if self._using_fakeout else "v-shaped fallback"
+        method = (
+            f"fakeout P50=${self._fakeout_median:.0f}, cap=${self._adaptive_cap:.0f}"
+            if self._using_fakeout
+            else "v-shaped fallback"
+        )
         return (
             f"Adaptive entry (last {len(window)} candles): "
             f"reversal_rate={reversal_rate:.0%}, "
@@ -617,7 +636,7 @@ class AdaptiveEntryTracker:
             return None
 
         rate = self.rolling_reversal_rate
-        window = self._history[-self._window:]
+        window = self._history[-self._window :]
         reversals = sum(1 for c in window if c.reversed)
 
         lines = [
@@ -638,68 +657,78 @@ class AdaptiveEntryTracker:
         # Wild market advisory: fires when recent fakeouts far exceed threshold
         if self._using_fakeout and self._fakeout_max > self.btc_threshold * 1.5:
             pct_above = ((self._fakeout_max / self.btc_threshold) - 1) * 100
-            lines.extend([
-                "",
-                f"\U0001f30a **HIGH-VOLATILITY MARKET**: Recent fakeouts reached "
-                f"${self._fakeout_max:.0f} — {pct_above:.0f}% above the "
-                f"${self.btc_threshold:.0f} threshold. "
-                f"Even moves that clear the threshold may reverse. Wait for sustained "
-                f"confirmation (15-20s above threshold) rather than entering immediately. "
-                f"The 150-200s window has historically outperformed early entries in wild markets.",
-            ])
+            lines.extend(
+                [
+                    "",
+                    f"\U0001f30a **HIGH-VOLATILITY MARKET**: Recent fakeouts reached "
+                    f"${self._fakeout_max:.0f} — {pct_above:.0f}% above the "
+                    f"${self.btc_threshold:.0f} threshold. "
+                    f"Even moves that clear the threshold may reverse. Wait for sustained "
+                    f"confirmation (15-20s above threshold) rather than entering immediately. "
+                    f"The 150-200s window has historically outperformed early entries in wild markets.",
+                ]
+            )
 
         if rate > 0.60:
-            lines.extend([
-                "",
-                f"⚠ **High reversal rate ({rate:.0%})**: The initial commitment "
-                f"has been WRONG {rate:.0%} of the time recently. The cheap (contrarian) side — "
-                f"opposite to the current BTC move — may be the better entry. "
-                f"When reversals dominated, the winning side's average ask was "
-                f"${self._avg_reversal_winner_ask():.2f} at the $20 cross.",
-            ])
+            lines.extend(
+                [
+                    "",
+                    f"⚠ **High reversal rate ({rate:.0%})**: The initial commitment "
+                    f"has been WRONG {rate:.0%} of the time recently. The cheap (contrarian) side — "
+                    f"opposite to the current BTC move — may be the better entry. "
+                    f"When reversals dominated, the winning side's average ask was "
+                    f"${self._avg_reversal_winner_ask():.2f} at the $20 cross.",
+                ]
+            )
         elif rate >= 0.40:
             if abs_btc_move >= self.btc_threshold:
                 # BTC has cleared the fakeout noise floor — momentum is real
-                lines.extend([
-                    "",
-                    f"⚠ **Uncertain reversal history ({rate:.0%} at initial cross)** but BTC has moved "
-                    f"**${abs_btc_move:.0f}** — past the fakeout threshold (${self.btc_threshold:.0f}). "
-                    f"The reversal rate was measured at the initial cross; moves beyond "
-                    f"${self.btc_threshold:.0f} have cleared typical fakeout noise. "
-                    f"Momentum entries are favored over contrarian.",
-                    "",
-                    f"⏳ **Entry timing**: BTC has cleared fakeout noise, but uncertain regimes still show elevated "
-                    f"reversal risk on very early entries (>200s). Size down or wait for brief confirmation if "
-                    f"confidence is marginal.",
-                ])
+                lines.extend(
+                    [
+                        "",
+                        f"⚠ **Uncertain reversal history ({rate:.0%} at initial cross)** but BTC has moved "
+                        f"**${abs_btc_move:.0f}** — past the fakeout threshold (${self.btc_threshold:.0f}). "
+                        f"The reversal rate was measured at the initial cross; moves beyond "
+                        f"${self.btc_threshold:.0f} have cleared typical fakeout noise. "
+                        f"Momentum entries are favored over contrarian.",
+                        "",
+                        "⏳ **Entry timing**: BTC has cleared fakeout noise, but uncertain regimes still show elevated "
+                        "reversal risk on very early entries (>200s). Size down or wait for brief confirmation if "
+                        "confidence is marginal.",
+                    ]
+                )
             else:
                 # Below fakeout threshold — could still be noise, cheapest-side guidance applies
-                lines.extend([
-                    "",
-                    f"⚠ **Uncertain market ({rate:.0%} reversal)**: Direction has been unreliable. "
-                    f"When both sides are priced near even (both asks $0.35–$0.65), "
-                    f"**lean toward the cheaper side** — at ~50% accuracy, only cheap entries are profitable. "
-                    f"An entry at $0.35 profits +$0.15/trade at 50%; $0.60 loses -$0.10/trade at 50%. "
-                    f"However, if one side is clearly confirmed by price (e.g., $0.90 vs $0.10), "
-                    f"trust the market signal — the cheap side is cheap for a reason. "
-                    f"This applies mainly to early-candle balanced prices, not late confirmations.",
-                    "",
-                    f"⏳ **Entry timing**: Early entries (>200s remaining) in uncertain regimes have historically "
-                    f"underperformed. The 150-200s window offers better directional clarity. If the current move "
-                    f"is marginal, consider waiting for stronger confirmation.",
-                ])
+                lines.extend(
+                    [
+                        "",
+                        f"⚠ **Uncertain market ({rate:.0%} reversal)**: Direction has been unreliable. "
+                        f"When both sides are priced near even (both asks $0.35–$0.65), "
+                        f"**lean toward the cheaper side** — at ~50% accuracy, only cheap entries are profitable. "
+                        f"An entry at $0.35 profits +$0.15/trade at 50%; $0.60 loses -$0.10/trade at 50%. "
+                        f"However, if one side is clearly confirmed by price (e.g., $0.90 vs $0.10), "
+                        f"trust the market signal — the cheap side is cheap for a reason. "
+                        f"This applies mainly to early-candle balanced prices, not late confirmations.",
+                        "",
+                        "⏳ **Entry timing**: Early entries (>200s remaining) in uncertain regimes have historically "
+                        "underperformed. The 150-200s window offers better directional clarity. If the current move "
+                        "is marginal, consider waiting for stronger confirmation.",
+                    ]
+                )
         elif rate < 0.25:
-            lines.extend([
-                "",
-                f"✓ **Low reversal rate ({rate:.0%})**: BTC rarely retraces from initial commitment. "
-                f"The initial move is continuing {1-rate:.0%} of the time. "
-                f"Momentum entries aligned with the current BTC direction are favored.",
-            ])
+            lines.extend(
+                [
+                    "",
+                    f"✓ **Low reversal rate ({rate:.0%})**: BTC rarely retraces from initial commitment. "
+                    f"The initial move is continuing {1 - rate:.0%} of the time. "
+                    f"Momentum entries aligned with the current BTC direction are favored.",
+                ]
+            )
 
         return "\n".join(lines)
 
     def _avg_reversal_winner_ask(self) -> float:
         """Average winner ask price on reversed candles in the window."""
-        window = self._history[-self._window:]
+        window = self._history[-self._window :]
         asks = [c.winner_ask_at_20 for c in window if c.reversed and c.winner_ask_at_20 > 0]
         return sum(asks) / len(asks) if asks else 0.0

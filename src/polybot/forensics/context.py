@@ -72,15 +72,17 @@ def analyze_context(conn: sqlite3.Connection) -> list[DecisionContext]:
         if winner and token_side:
             outcome = "win" if winner.upper() == token_side.upper() else "loss"
 
-        contexts.append(DecisionContext(
-            candle_id=candle_id,
-            action=action,
-            confidence=confidence,
-            rr_ratio=rr_ratio,
-            indicators=indicators,
-            ml_score=ml_score,
-            outcome=outcome,
-        ))
+        contexts.append(
+            DecisionContext(
+                candle_id=candle_id,
+                action=action,
+                confidence=confidence,
+                rr_ratio=rr_ratio,
+                indicators=indicators,
+                ml_score=ml_score,
+                outcome=outcome,
+            )
+        )
 
     return contexts
 

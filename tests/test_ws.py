@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import asyncio
 import json
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from polybot.ws.broadcaster import DashboardBroadcaster
 from polybot.ws.protocol import (
     MSG_MARKET,
     MSG_POSITION,
@@ -17,9 +18,7 @@ from polybot.ws.protocol import (
     MSG_TRADE,
     make_message,
 )
-from polybot.ws.broadcaster import DashboardBroadcaster
 from polybot.ws.server import DashboardWSServer
-
 
 # --- Protocol tests ---
 
@@ -237,9 +236,7 @@ class TestServer:
         server = DashboardWSServer(broadcaster, port=18765)
 
         # Set initial snapshot builder
-        server._initial_snapshot_builder = lambda: make_message(
-            "snapshot", {"test": True}
-        )
+        server._initial_snapshot_builder = lambda: make_message("snapshot", {"test": True})
 
         await server.start()
         try:

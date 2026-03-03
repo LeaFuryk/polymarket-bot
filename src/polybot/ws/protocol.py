@@ -12,10 +12,16 @@ MSG_MARKET = "market"
 MSG_POSITION = "position"
 MSG_STATUS = "status"
 
-ALL_TYPES = frozenset({
-    MSG_SNAPSHOT, MSG_TRADE, MSG_RESOLUTION,
-    MSG_MARKET, MSG_POSITION, MSG_STATUS,
-})
+ALL_TYPES = frozenset(
+    {
+        MSG_SNAPSHOT,
+        MSG_TRADE,
+        MSG_RESOLUTION,
+        MSG_MARKET,
+        MSG_POSITION,
+        MSG_STATUS,
+    }
+)
 
 
 def make_message(msg_type: str, data: dict) -> str:

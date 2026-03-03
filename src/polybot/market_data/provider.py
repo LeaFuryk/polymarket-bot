@@ -23,7 +23,7 @@ class MarketDataProvider:
     def __init__(self, config: AppConfig, chainlink_ws=None) -> None:
         self._config = config
         self._rest = PolymarketRestClient(config.market, config.api)
-        cache_ttl = config.monitor.btc_price_cache_ttl if hasattr(config, 'monitor') else 30
+        cache_ttl = config.monitor.btc_price_cache_ttl if hasattr(config, "monitor") else 30
         self._btc = BtcPriceFeed(config.api, cache_ttl=cache_ttl, chainlink_ws=chainlink_ws)
         self._price_history: deque[float] = deque(maxlen=PRICE_HISTORY_SIZE)
         self._btc_price_history: deque[float] = deque(maxlen=PRICE_HISTORY_SIZE)
@@ -46,7 +46,9 @@ class MarketDataProvider:
         self._price_history.clear()
         logger.info(
             "Market set: %s (up=%s, down=%s)",
-            candle.slug, candle.up_token_id[:8], candle.down_token_id[:8],
+            candle.slug,
+            candle.up_token_id[:8],
+            candle.down_token_id[:8],
         )
 
     async def get_snapshot(self) -> MarketSnapshot:
@@ -60,11 +62,10 @@ class MarketDataProvider:
 
         # Fetch Down token orderbook (only if we have a candle market)
         if self._candle:
-            down_orderbook = await self._rest.get_orderbook(
-                token_id=self._candle.down_token_id
-            )
+            down_orderbook = await self._rest.get_orderbook(token_id=self._candle.down_token_id)
         else:
             from polybot.models import OrderbookSnapshot
+
             down_orderbook = OrderbookSnapshot()
 
         if self._ws_last_price is not None:

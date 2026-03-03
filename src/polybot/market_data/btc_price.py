@@ -57,6 +57,7 @@ class BtcPriceFeed:
         self._24h_change_time: float = 0.0
         # Chainlink WS feed (cross-reference only — too unreliable for primary use)
         from polybot.market_data.chainlink_ws import ChainlinkWSFeed
+
         self._chainlink_ws: ChainlinkWSFeed | None = chainlink_ws
 
     @property
@@ -198,7 +199,7 @@ class BtcPriceFeed:
             if answer_int >= 2**255:
                 answer_int -= 2**256
 
-            price = answer_int / (10 ** CHAINLINK_DECIMALS)
+            price = answer_int / (10**CHAINLINK_DECIMALS)
 
             if price <= 0:
                 logger.warning("Chainlink returned non-positive price: %s", price)
@@ -319,7 +320,9 @@ class BtcPriceFeed:
         if divergence is not None:
             logger.debug(
                 "Price cross-ref: Binance=$%.2f Chainlink=$%.2f divergence=$%.2f",
-                price_usd, chainlink_display, divergence,
+                price_usd,
+                chainlink_display,
+                divergence,
             )
 
         # Get 24h change from CoinGecko (non-blocking, cached separately)

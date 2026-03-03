@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from rich.console import Console
@@ -31,7 +31,7 @@ def _format_date(val: str | float | None) -> str:
     if val is None:
         return ""
     if isinstance(val, (int, float)):
-        return datetime.fromtimestamp(val, tz=timezone.utc).strftime("%m/%d")
+        return datetime.fromtimestamp(val, tz=UTC).strftime("%m/%d")
     return str(val)[5:10]
 
 

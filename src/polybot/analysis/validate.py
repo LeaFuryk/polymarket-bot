@@ -15,7 +15,7 @@ from __future__ import annotations
 import argparse
 import sqlite3
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from rich.console import Console
@@ -63,30 +63,35 @@ def _load_candle_data(conn: sqlite3.Connection) -> list[dict]:
     candles = []
     for r in rows:
         candle_id, slug, iteration, btc_open, btc_close, winner, start_time, end_time = r
-        candles.append({
-            "candle_id": candle_id,
-            "slug": slug,
-            "iteration": iteration,
-            "btc_open": btc_open,
-            "btc_close": btc_close,
-            "winner": winner,
-            "start_time": start_time,
-            "end_time": end_time,
-            "btc_move": btc_close - btc_open,
-            "abs_move": abs(btc_close - btc_open),
-        })
+        candles.append(
+            {
+                "candle_id": candle_id,
+                "slug": slug,
+                "iteration": iteration,
+                "btc_open": btc_open,
+                "btc_close": btc_close,
+                "winner": winner,
+                "start_time": start_time,
+                "end_time": end_time,
+                "btc_move": btc_close - btc_open,
+                "abs_move": abs(btc_close - btc_open),
+            }
+        )
     return candles
 
 
 def _load_snapshot_data(conn: sqlite3.Connection, candle_id: int) -> list[dict]:
     """Load snapshots for a candle."""
-    rows = conn.execute("""
+    rows = conn.execute(
+        """
         SELECT time_remaining, btc_price, btc_move_from_open,
                up_best_ask, down_best_ask, up_mid, down_mid
         FROM market_snapshots
         WHERE candle_id = ?
         ORDER BY timestamp
-    """, (candle_id,)).fetchall()
+    """,
+        (candle_id,),
+    ).fetchall()
 
     return [
         {
@@ -115,8 +120,8 @@ def report_summary(conn: sqlite3.Connection, console: Console, candles: list[dic
         return
 
     iterations = sorted(set(c["iteration"] for c in candles if c["iteration"]))
-    start = datetime.fromtimestamp(candles[0]["start_time"], tz=timezone.utc)
-    end = datetime.fromtimestamp(candles[-1]["end_time"], tz=timezone.utc)
+    start = datetime.fromtimestamp(candles[0]["start_time"], tz=UTC)
+    end = datetime.fromtimestamp(candles[-1]["end_time"], tz=UTC)
 
     up_wins = sum(1 for c in candles if c["winner"] == "up")
     down_wins = len(candles) - up_wins
@@ -126,9 +131,9 @@ def report_summary(conn: sqlite3.Connection, console: Console, candles: list[dic
     console.print(f"  Total candles:  {len(candles)}")
     console.print(f"  Date range:     {start:%Y-%m-%d %H:%M} → {end:%Y-%m-%d %H:%M} UTC")
     console.print(f"  Iterations:     {', '.join(iterations) if iterations else 'unknown'}")
-    console.print(f"  UP wins:        {up_wins} ({up_wins/len(candles):.1%})")
-    console.print(f"  DOWN wins:      {down_wins} ({down_wins/len(candles):.1%})")
-    console.print(f"  Avg BTC move:   ${sum(c['abs_move'] for c in candles)/len(candles):.1f}")
+    console.print(f"  UP wins:        {up_wins} ({up_wins / len(candles):.1%})")
+    console.print(f"  DOWN wins:      {down_wins} ({down_wins / len(candles):.1%})")
+    console.print(f"  Avg BTC move:   ${sum(c['abs_move'] for c in candles) / len(candles):.1f}")
 
     data_quality = []
     if len(candles) < 50:
@@ -299,7 +304,7 @@ def report_move_distribution(console: Console, candles: list[dict]) -> None:
         val = percentile(moves, p)
         table.add_row(f"{p}th", f"${val:.1f}")
 
-    table.add_row("Mean", f"${sum(moves)/len(moves):.1f}")
+    table.add_row("Mean", f"${sum(moves) / len(moves):.1f}")
 
     console.print(table)
     console.print()
@@ -316,9 +321,7 @@ REPORT_FUNCS = {
 
 def main() -> None:
     """Entry point for polybot-validate CLI."""
-    parser = argparse.ArgumentParser(
-        description="Validate trading assumptions against accumulated market data."
-    )
+    parser = argparse.ArgumentParser(description="Validate trading assumptions against accumulated market data.")
     parser.add_argument(
         "--report",
         choices=list(REPORT_FUNCS.keys()),
