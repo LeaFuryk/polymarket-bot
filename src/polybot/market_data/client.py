@@ -11,13 +11,17 @@ from py_clob_client.client import ClobClient
 from polybot.config import ApiConfig, MarketConfig
 from polybot.models import OrderbookLevel, OrderbookSnapshot
 
-logger = logging.getLogger(__name__)
-
 
 class PolymarketRestClient:
     """Wraps the sync py-clob-client with run_in_executor for async compat."""
 
-    def __init__(self, market_config: MarketConfig, api_config: ApiConfig) -> None:
+    def __init__(
+        self,
+        market_config: MarketConfig,
+        api_config: ApiConfig,
+        logger: logging.Logger | None = None,
+    ) -> None:
+        self._log = logger or logging.getLogger(__name__)
         self._market_config = market_config
         self._api_config = api_config
         self._client = ClobClient(api_config.polymarket_host)
@@ -26,14 +30,14 @@ class PolymarketRestClient:
         """Fetch current orderbook for the configured token."""
         tid = token_id or self._market_config.token_id
         if not tid:
-            logger.warning("No token_id configured, returning empty orderbook")
+            self._log.warning("No token_id configured, returning empty orderbook")
             return OrderbookSnapshot()
 
         loop = asyncio.get_event_loop()
         try:
             raw = await loop.run_in_executor(None, partial(self._client.get_order_book, tid))
         except Exception:
-            logger.exception("Failed to fetch orderbook")
+            self._log.exception("Failed to fetch orderbook")
             return OrderbookSnapshot()
 
         # py-clob-client returns OrderBookSummary with OrderSummary items
@@ -68,7 +72,7 @@ class PolymarketRestClient:
             price = raw.price if hasattr(raw, "price") else raw.get("price", 0)
             return float(price) if price else None
         except Exception:
-            logger.exception("Failed to fetch last trade price")
+            self._log.exception("Failed to fetch last trade price")
             return None
 
     async def get_market_info(self, condition_id: str | None = None) -> dict:
@@ -79,5 +83,5 @@ class PolymarketRestClient:
             raw = await loop.run_in_executor(None, partial(self._client.get_market, cid))
             return raw or {}
         except Exception:
-            logger.exception("Failed to fetch market info")
+            self._log.exception("Failed to fetch market info")
             return {}
