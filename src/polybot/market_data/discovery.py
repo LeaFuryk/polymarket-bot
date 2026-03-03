@@ -12,10 +12,7 @@ import httpx
 from polybot.config import AppConfig
 from polybot.models import CandleMarket
 
-logger = logging.getLogger(__name__)
-
-GAMMA_API_BASE = "https://gamma-api.polymarket.com"
-CANDLE_INTERVAL = 300  # 5 minutes in seconds
+from .constants import CANDLE_INTERVAL_SECONDS, GAMMA_API_BASE
 
 
 def _boundary_ts(offset: int = 0) -> int:
@@ -24,14 +21,15 @@ def _boundary_ts(offset: int = 0) -> int:
     offset=0 → current candle start, offset=1 → next candle start.
     """
     now = int(time.time())
-    boundary = now - (now % CANDLE_INTERVAL)
-    return boundary + offset * CANDLE_INTERVAL
+    boundary = now - (now % CANDLE_INTERVAL_SECONDS)
+    return boundary + offset * CANDLE_INTERVAL_SECONDS
 
 
 class MarketDiscovery:
     """Discovers active BTC 5-min candle markets from the Gamma API."""
 
-    def __init__(self, config: AppConfig) -> None:
+    def __init__(self, config: AppConfig, logger: logging.Logger | None = None) -> None:
+        self._log = logger or logging.getLogger(__name__)
         self._config = config
         self._series_slug = config.market.series_slug
         self._client = httpx.AsyncClient(timeout=10.0)
@@ -57,11 +55,11 @@ class MarketDiscovery:
             resp.raise_for_status()
             data = resp.json()
         except Exception:
-            logger.exception("Failed to fetch market for slug=%s", slug)
+            self._log.exception("Failed to fetch market for slug=%s", slug)
             return None
 
         if not data:
-            logger.warning("No market found for slug=%s", slug)
+            self._log.warning("No market found for slug=%s", slug)
             return None
 
         # The API returns a list; take the first event
@@ -70,7 +68,7 @@ class MarketDiscovery:
         # Extract market from the event's markets array
         markets = event.get("markets", [])
         if not markets:
-            logger.warning("Event has no markets: slug=%s", slug)
+            self._log.warning("Event has no markets: slug=%s", slug)
             return None
 
         market = markets[0]
@@ -82,10 +80,10 @@ class MarketDiscovery:
             try:
                 clob_token_ids = json.loads(clob_token_ids)
             except (ValueError, TypeError):
-                logger.warning("Could not parse clobTokenIds string for slug=%s", slug)
+                self._log.warning("Could not parse clobTokenIds string for slug=%s", slug)
                 return None
         if not clob_token_ids or len(clob_token_ids) < 2:
-            logger.warning("Missing clobTokenIds for slug=%s", slug)
+            self._log.warning("Missing clobTokenIds for slug=%s", slug)
             return None
 
         up_token_id = clob_token_ids[0]
@@ -95,7 +93,7 @@ class MarketDiscovery:
         title = event.get("title", slug)
 
         # Parse end_date ISO 8601 to Unix timestamp
-        end_time = self._parse_iso_timestamp(end_date) if end_date else float(boundary + CANDLE_INTERVAL)
+        end_time = self._parse_iso_timestamp(end_date) if end_date else float(boundary + CANDLE_INTERVAL_SECONDS)
         start_time = float(boundary)
 
         return CandleMarket(
@@ -108,8 +106,7 @@ class MarketDiscovery:
             end_time=end_time,
         )
 
-    @staticmethod
-    def _parse_iso_timestamp(iso_str: str) -> float:
+    def _parse_iso_timestamp(self, iso_str: str) -> float:
         """Parse an ISO 8601 timestamp string to Unix epoch float."""
         from datetime import datetime
 
@@ -121,7 +118,7 @@ class MarketDiscovery:
                 dt = dt.replace(tzinfo=UTC)
             return dt.timestamp()
         except ValueError:
-            logger.warning("Could not parse ISO timestamp: %s", iso_str)
+            self._log.warning("Could not parse ISO timestamp: %s", iso_str)
             return 0.0
 
     async def fetch_market_by_slug(self, slug: str) -> CandleMarket | None:
@@ -134,17 +131,17 @@ class MarketDiscovery:
             resp.raise_for_status()
             data = resp.json()
         except Exception:
-            logger.exception("Failed to fetch market for slug=%s", slug)
+            self._log.exception("Failed to fetch market for slug=%s", slug)
             return None
 
         if not data:
-            logger.warning("No market found for slug=%s", slug)
+            self._log.warning("No market found for slug=%s", slug)
             return None
 
         event = data[0] if isinstance(data, list) else data
         markets = event.get("markets", [])
         if not markets:
-            logger.warning("Event has no markets: slug=%s", slug)
+            self._log.warning("Event has no markets: slug=%s", slug)
             return None
 
         market = markets[0]
@@ -155,10 +152,10 @@ class MarketDiscovery:
             try:
                 clob_token_ids = json.loads(clob_token_ids)
             except (ValueError, TypeError):
-                logger.warning("Could not parse clobTokenIds string for slug=%s", slug)
+                self._log.warning("Could not parse clobTokenIds string for slug=%s", slug)
                 return None
         if not clob_token_ids or len(clob_token_ids) < 2:
-            logger.warning("Missing clobTokenIds for slug=%s", slug)
+            self._log.warning("Missing clobTokenIds for slug=%s", slug)
             return None
 
         up_token_id = clob_token_ids[0]
@@ -172,7 +169,7 @@ class MarketDiscovery:
             boundary = int(slug.rsplit("-", 1)[-1])
         except (ValueError, IndexError):
             boundary = 0
-        end_time = self._parse_iso_timestamp(end_date) if end_date else float(boundary + CANDLE_INTERVAL)
+        end_time = self._parse_iso_timestamp(end_date) if end_date else float(boundary + CANDLE_INTERVAL_SECONDS)
         start_time = float(boundary)
 
         return CandleMarket(

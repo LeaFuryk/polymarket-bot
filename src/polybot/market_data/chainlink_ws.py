@@ -19,25 +19,26 @@ import websockets
 
 from polybot.models import BtcCandle
 
-logger = logging.getLogger(__name__)
-
-# Price is considered stale if no update in this many seconds
-_STALE_THRESHOLD = 30.0
-
-# Reconnect delay on failure
-_RECONNECT_DELAY = 5.0
-
-# Keepalive ping interval
-_PING_INTERVAL = 5.0
+from .constants import (
+    BTC_CANDLE_WINDOW_SIZE,
+    CHAINLINK_WS_BUCKET_SECONDS,
+    CHAINLINK_WS_DEFAULT_URL,
+    CHAINLINK_WS_PING_INTERVAL,
+    CHAINLINK_WS_RECONNECT_DELAY,
+    CHAINLINK_WS_STALE_THRESHOLD,
+    CHAINLINK_WS_WATCHDOG_INTERVAL,
+)
 
 
 class ChainlinkWSFeed:
     """Async WebSocket client for Polymarket RTDS Chainlink BTC/USD price."""
 
-    # 5-minute bucket width in seconds
-    _BUCKET_SECONDS = 300
-
-    def __init__(self, url: str = "wss://ws-live-data.polymarket.com") -> None:
+    def __init__(
+        self,
+        url: str = CHAINLINK_WS_DEFAULT_URL,
+        logger: logging.Logger | None = None,
+    ) -> None:
+        self._log = logger or logging.getLogger(__name__)
         self._url = url
         self._price: float | None = None
         self._last_update: float = 0.0
@@ -54,7 +55,7 @@ class ChainlinkWSFeed:
         """Latest Chainlink BTC/USD price, or None if stale (>30s) or not connected."""
         if self._price is None:
             return None
-        if time.time() - self._last_update > _STALE_THRESHOLD:
+        if time.time() - self._last_update > CHAINLINK_WS_STALE_THRESHOLD:
             return None
         return self._price
 
@@ -78,7 +79,7 @@ class ChainlinkWSFeed:
         if self._task is not None:
             return
         self._task = asyncio.create_task(self._run(), name="chainlink_ws")
-        logger.info("Chainlink WS: background task started")
+        self._log.info("Chainlink WS: background task started")
 
     async def stop(self) -> None:
         """Cancel the background WebSocket task."""
@@ -90,7 +91,7 @@ class ChainlinkWSFeed:
                 pass
             self._task = None
             self._connected = False
-        logger.info("Chainlink WS: stopped")
+        self._log.info("Chainlink WS: stopped")
 
     async def _run(self) -> None:
         """Reconnect loop — retries every 5s on failure."""
@@ -100,14 +101,16 @@ class ChainlinkWSFeed:
             except asyncio.CancelledError:
                 raise
             except Exception:
-                logger.exception("Chainlink WS: connection error, reconnecting in %.0fs", _RECONNECT_DELAY)
+                self._log.exception(
+                    "Chainlink WS: connection error, reconnecting in %.0fs", CHAINLINK_WS_RECONNECT_DELAY
+                )
             finally:
                 self._connected = False
-            await asyncio.sleep(_RECONNECT_DELAY)
+            await asyncio.sleep(CHAINLINK_WS_RECONNECT_DELAY)
 
     async def _connect_and_listen(self) -> None:
         """Connect, subscribe to btc/usd, and process messages."""
-        logger.info("Chainlink WS: connecting to %s", self._url)
+        self._log.info("Chainlink WS: connecting to %s", self._url)
 
         async with websockets.connect(self._url, ping_interval=None) as ws:
             # Subscribe to Chainlink BTC/USD
@@ -124,7 +127,7 @@ class ChainlinkWSFeed:
                 }
             )
             await ws.send(subscribe_msg)
-            logger.info("Chainlink WS: subscribed to btc/usd")
+            self._log.info("Chainlink WS: subscribed to btc/usd")
             self._connected = True
             self._msg_count = 0  # reset to log first messages after reconnect
             self._last_msg_time = time.time()
@@ -142,7 +145,7 @@ class ChainlinkWSFeed:
                         msg = json.loads(raw_msg)
                         self._handle_message(msg)
                     except (json.JSONDecodeError, KeyError, TypeError):
-                        logger.debug("Chainlink WS: unparseable message: %s", str(raw_msg)[:200])
+                        self._log.debug("Chainlink WS: unparseable message: %s", str(raw_msg)[:200])
             finally:
                 ping_task.cancel()
                 watchdog_task.cancel()
@@ -156,7 +159,7 @@ class ChainlinkWSFeed:
         """Send PING frames every 5s to keep the connection alive."""
         try:
             while True:
-                await asyncio.sleep(_PING_INTERVAL)
+                await asyncio.sleep(CHAINLINK_WS_PING_INTERVAL)
                 await ws.ping()
         except asyncio.CancelledError:
             pass
@@ -170,10 +173,10 @@ class ChainlinkWSFeed:
         """
         try:
             while True:
-                await asyncio.sleep(10.0)
+                await asyncio.sleep(CHAINLINK_WS_WATCHDOG_INTERVAL)
                 silence = time.time() - self._last_msg_time
-                if silence > _STALE_THRESHOLD:
-                    logger.warning(
+                if silence > CHAINLINK_WS_STALE_THRESHOLD:
+                    self._log.warning(
                         "Chainlink WS: no messages for %.0fs — forcing reconnect",
                         silence,
                     )
@@ -191,7 +194,7 @@ class ChainlinkWSFeed:
         """
         # Log first few messages at INFO to debug format issues
         if self._msg_count < 3:
-            logger.info("Chainlink WS: sample message #%d: %s", self._msg_count, str(msg)[:500])
+            self._log.info("Chainlink WS: sample message #%d: %s", self._msg_count, str(msg)[:500])
         self._msg_count += 1
 
         # Try to extract a batch of ticks from payload.data[]
@@ -220,7 +223,7 @@ class ChainlinkWSFeed:
                     self._record_tick(price, tick_ts)
                     tick_count += 1
                 if tick_count > 0:
-                    logger.debug(
+                    self._log.debug(
                         "Chainlink WS: processed %d ticks, latest $%.2f",
                         tick_count,
                         self._price,
@@ -234,7 +237,7 @@ class ChainlinkWSFeed:
             self._price = price
             self._last_update = now
             self._record_tick(price, now)
-            logger.debug("Chainlink WS: BTC/USD = $%.2f", price)
+            self._log.debug("Chainlink WS: BTC/USD = $%.2f", price)
 
     def _extract_price(self, msg: dict) -> float | None:
         """Try multiple strategies to extract BTC/USD price from RTDS message.
@@ -290,8 +293,8 @@ class ChainlinkWSFeed:
 
     def _record_tick(self, price: float, ts: float) -> None:
         """Accumulate a tick into the current 5-min candle bucket."""
-        bucket_start = ts - (ts % self._BUCKET_SECONDS)
-        bucket_end = bucket_start + self._BUCKET_SECONDS
+        bucket_start = ts - (ts % CHAINLINK_WS_BUCKET_SECONDS)
+        bucket_end = bucket_start + CHAINLINK_WS_BUCKET_SECONDS
 
         if self._current_bucket is None or bucket_start > self._current_bucket["open_time"]:
             # Finalize previous bucket if it exists
@@ -330,11 +333,11 @@ class ChainlinkWSFeed:
             source="chainlink_ws",
         )
         self._completed_candles.append(candle)
-        # Cap at 200
-        if len(self._completed_candles) > 200:
-            self._completed_candles = self._completed_candles[-200:]
+        # Cap at BTC_CANDLE_WINDOW_SIZE
+        if len(self._completed_candles) > BTC_CANDLE_WINDOW_SIZE:
+            self._completed_candles = self._completed_candles[-BTC_CANDLE_WINDOW_SIZE:]
         self._current_bucket = None
-        logger.info(
+        self._log.info(
             "Chainlink WS: completed candle %s → $%.2f (ticks=%d, dir=%s)",
             candle.open_time,
             candle.close,
