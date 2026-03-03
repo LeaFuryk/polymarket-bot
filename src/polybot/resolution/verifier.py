@@ -8,15 +8,14 @@ import logging
 from polybot.models import CandleMarket
 from polybot.resolution.checker import determine_polymarket_winner
 from polybot.resolution.constants import VERIFICATION_DELAY
-from polybot.resolution.protocol import PriceClient
-
-logger = logging.getLogger(__name__)
+from polybot.resolution.protocol import ResolutionRepository
 
 
 async def verify_winner(
     market: CandleMarket,
     btc_winner: str,
-    rest_client: PriceClient | None,
+    repository: ResolutionRepository,
+    logger: logging.Logger | None = None,
 ) -> str:
     """Verify the BTC-based winner against Polymarket's actual outcome.
 
@@ -26,20 +25,19 @@ async def verify_winner(
 
     Returns the verified winner ("up" or "down").
     """
-    if rest_client is None:
-        return btc_winner
+    log = logger or logging.getLogger(__name__)
 
     try:
         await asyncio.sleep(VERIFICATION_DELAY)
 
-        up_price = await rest_client.get_last_trade_price(
+        up_price = await repository.get_last_trade_price(
             token_id=market.up_token_id,
         )
-        down_price = await rest_client.get_last_trade_price(
+        down_price = await repository.get_last_trade_price(
             token_id=market.down_token_id,
         )
 
-        logger.info(
+        log.info(
             "Polymarket verification for %s: UP=%.4f DOWN=%.4f (BTC says: %s)",
             market.slug,
             up_price or 0.0,
@@ -50,7 +48,7 @@ async def verify_winner(
         polymarket_winner = determine_polymarket_winner(up_price, down_price)
 
         if polymarket_winner is None:
-            logger.warning(
+            log.warning(
                 "Polymarket prices ambiguous for %s (UP=%.4f DOWN=%.4f), using BTC-based winner: %s",
                 market.slug,
                 up_price or 0.0,
@@ -60,7 +58,7 @@ async def verify_winner(
             return btc_winner
 
         if polymarket_winner != btc_winner:
-            logger.warning(
+            log.warning(
                 "WINNER MISMATCH for %s! BTC says %s but Polymarket says %s. "
                 "Using Polymarket's outcome as authoritative.",
                 market.slug,
@@ -69,7 +67,7 @@ async def verify_winner(
             )
             return polymarket_winner
 
-        logger.info(
+        log.info(
             "Winner verified for %s: %s (BTC and Polymarket agree)",
             market.slug,
             btc_winner,
@@ -77,7 +75,7 @@ async def verify_winner(
         return btc_winner
 
     except Exception:
-        logger.exception(
+        log.exception(
             "Failed to verify winner on Polymarket for %s, using BTC-based winner: %s",
             market.slug,
             btc_winner,
