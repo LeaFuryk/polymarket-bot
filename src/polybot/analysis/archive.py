@@ -103,7 +103,7 @@ def _load_resolutions(log_dir: Path) -> list[dict]:
 
 def _ts_to_iso(ts: float | str) -> str:
     """Convert a timestamp (epoch float or ISO string) to ISO date string."""
-    if isinstance(ts, (int, float)):
+    if isinstance(ts, int | float):
         return datetime.fromtimestamp(ts, tz=UTC).isoformat()
     return str(ts)
 
@@ -239,7 +239,7 @@ def _rebuild_iterations_json() -> int:
     This ensures the dashboard always reflects the latest archived iterations,
     even when the bot isn't running. Uses the same enrichment logic as the agent.
     """
-    from polybot.agent import TradingAgent
+    from polybot.agent import enrich_iteration_summary
 
     summaries: list[dict] = []
     if not ARCHIVE_DIR.exists():
@@ -252,7 +252,7 @@ def _rebuild_iterations_json() -> int:
             dash_path = iter_dir / "logs" / "dashboard_data.json"
             if dash_path.exists():
                 dd = json.loads(dash_path.read_text())
-                TradingAgent._enrich_iteration_summary(data, dd, iter_dir)
+                enrich_iteration_summary(data, dd, iter_dir)
             summaries.append(data)
         except Exception:
             pass
