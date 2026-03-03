@@ -892,6 +892,17 @@ polymarket-bot/
 
 ---
 
+## CI
+
+GitHub Actions runs on every push to `main`:
+
+- **pytest** — full Python test suite with JUnit report
+- **tsc --noEmit** — TypeScript type checking for `dashboard-next/`
+
+Test results are posted as check annotations directly on the commit.
+
+---
+
 ## License
 
 This project is for educational and research purposes. Live trading mode places real orders on Polymarket — use at your own risk.
