@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 ## [v0.15.0] — 2026-03-02
 
+### Added — GitHub Actions CI workflow
+
+Automated CI pipeline runs on every push to `main` via `.github/workflows/ci.yml`:
+
+- Python 3.11 + uv for dependency management
+- pytest with JUnit XML report and check annotations (via `mikepenz/action-junit-report`)
+- Node 22 + TypeScript type checking (`tsc --noEmit`) for the Next.js dashboard
+- Runs pytest and tsc directly (bypasses `polybot-check` which attempts a non-existent Jest step)
+
 ### Added — Filter bar on iteration history page
 
 The History page now has a filter bar below the header with two filter groups:

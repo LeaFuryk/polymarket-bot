@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Install Python deps
+        run: uv sync
+
+      - name: Run pytest
+        run: uv run pytest tests/ -v --tb=short --junitxml=test-results.xml
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: dashboard-next/package-lock.json
+
+      - name: Install frontend deps
+        run: npm ci
+        working-directory: dashboard-next
+
+      - name: TypeScript type check
+        run: npx tsc --noEmit
+        working-directory: dashboard-next
+
+      - name: Post test results
+        uses: mikepenz/action-junit-report@v5
+        if: always()
+        with:
+          report_paths: test-results.xml
