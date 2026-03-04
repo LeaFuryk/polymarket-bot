@@ -8,6 +8,7 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Changed
+- **`tasks`** — Extracted 4 pure prompt-context helpers from `ai_decision.py` (1779 LOC) into `tasks/prompt_context.py`: `compute_btc_trajectory`, `compute_retracement_context`, `format_microstructure`, `compute_entry_timing_stats`; 25 unit tests
 - **`forensics`** — Extracted magic numbers to `constants.py` (risk category map, TTL grid, reprice thresholds, BPS multiplier, ML model path); added `Investigator` protocol in `protocols.py`; populated `__init__.py` with re-exports
 - **`decision_engine`** — Extracted constants to `constants.py`; made logger and AI client injectable in `DecisionEngine`; extracted `extract_tool_data()` and `compute_cost()` helpers; populated `__init__.py` with re-exports; 29 tests at 96% engine coverage
 - **`market_data`** — Extracted all hardcoded values to `constants.py`; populated `__init__.py` with re-exports; made loggers injectable across all 5 modules (`provider`, `client`, `btc_price`, `chainlink_ws`, `discovery`)
