@@ -68,6 +68,7 @@ from polybot.tasks.prompt_context import (
     compute_retracement_context,
     format_microstructure,
 )
+from polybot.tasks.trade_logger import build_decision_row, build_trade_record
 
 logger = logging.getLogger(__name__)
 
@@ -1052,93 +1053,48 @@ class AIDecision:
         live_result=None,
     ) -> None:
         """Log a cycle to trade log and update trade history."""
-        ob = snapshot.orderbook
-        pos = self._portfolio.position
-        mid = ob.midpoint
-        down_mid = snapshot.down_orderbook.midpoint
-
-        record = TradeRecord(
-            cycle_number=cycle,
-            midpoint=ob.midpoint,
-            spread=ob.spread,
-            spread_pct=ob.spread_pct,
-            best_bid=ob.best_bid,
-            best_ask=ob.best_ask,
-            bid_depth=ob.bid_depth,
-            ask_depth=ob.ask_depth,
-            last_trade_price=snapshot.last_trade_price,
-            btc_price_usd=snapshot.btc_price.price_usd if snapshot.btc_price else None,
-            volume_24h=snapshot.volume_24h,
-            position_shares=pos.shares,
-            position_avg_entry=pos.avg_entry_price,
-            cash=self._portfolio.cash,
-            portfolio_value=self._portfolio.total_value_at_market(mid or 0.5, down_mid),
-            realized_pnl=pos.realized_pnl,
-            unrealized_pnl=pos.unrealized_pnl,
-            daily_pnl=self._risk.state.daily_pnl,
-            risk_halted=self._risk.state.is_halted,
+        record = build_trade_record(
+            cycle=cycle,
+            snapshot=snapshot,
+            portfolio=self._portfolio,
+            risk_state=self._risk.state,
+            market=self._shared.current_market,
+            decision=decision,
+            latency_ms=latency_ms,
+            fill=fill,
             risk_blocked=risk_blocked,
-            risk_block_reason=risk_reason,
+            risk_reason=risk_reason,
+            paper_fill=paper_fill,
+            live_result=live_result,
+            screen_passed=self._last_screen_passed,
+            screen_input=screen_input,
+            last_cycle_api_cost=self._last_cycle_api_cost,
+            signal_type=self._shared.signal_type,
+            reversal_rate=self._shared.reversal_rate,
         )
-
-        market = self._shared.current_market
-        if market:
-            record.candle_slug = market.slug
-            record.extra["time_remaining"] = market.time_remaining()
-
-        record.extra["screen_passed"] = self._last_screen_passed
-        if screen_input:
-            record.extra["screen_input"] = screen_input
-
-        if decision:
-            record.action = decision.action
-            record.order_type = decision.order_type
-            record.token_side = decision.token_side
-            record.decision_size = decision.size
-            record.limit_price = decision.limit_price
-            record.confidence = decision.confidence
-            record.reasoning = decision.reasoning
-            record.market_view = decision.market_view
-            record.ai_latency_ms = latency_ms
-            record.ai_cost = self._last_cycle_api_cost
-            if decision.hypothetical_direction:
-                record.extra["hypothetical_direction"] = decision.hypothetical_direction
-            if decision.confidence_drivers:
-                record.extra["confidence_drivers"] = decision.confidence_drivers
-            # Capture opposite-side context for side-selection learning
-            if decision.action.value == "BUY":
-                if decision.token_side.value == "up":
-                    opp_ask = snapshot.down_orderbook.best_ask
-                else:
-                    opp_ask = snapshot.orderbook.best_ask
-                if opp_ask is not None:
-                    record.extra["opposite_ask"] = round(opp_ask, 4)
-                record.extra["signal_type"] = self._shared.signal_type
-                record.extra["reversal_rate"] = round(self._shared.reversal_rate, 2)
-
-        if fill:
-            record.fill_price = fill.fill_price
-            record.fill_size = fill.size
-            record.slippage_bps = fill.slippage_bps
-            record.fee_amount = fill.fee_amount
-
-        if paper_fill:
-            record.paper_fill_price = paper_fill.fill_price
-            record.paper_total_cost = paper_fill.total_cost
-
-        if live_result:
-            # Override limit_price with the actual submitted limit price
-            record.limit_price = live_result.limit_price
-            # Store full telemetry blob (excluding the nested fill to avoid duplication)
-            record.extra["live_order"] = live_result.model_dump(exclude={"fill"})
 
         self._trade_log.write(record)
 
         # Queue decision for SQLite analytics
         if self._datastore is not None and self._datastore.current_candle_id is not None:
-            self._queue_decision(
-                cycle, snapshot, decision, latency_ms, fill, risk_blocked, risk_reason, live_result=live_result
+            row = build_decision_row(
+                datastore_candle_id=self._datastore.current_candle_id,
+                cycle=cycle,
+                snapshot=snapshot,
+                portfolio=self._portfolio,
+                feature_config=self._feature_config,
+                session_wins=self.session_wins,
+                session_losses=self.session_losses,
+                candle_open_btc=self._shared.candle_open_btc,
+                decision=decision,
+                latency_ms=latency_ms,
+                fill=fill,
+                risk_blocked=risk_blocked,
+                risk_reason=risk_reason,
+                last_cycle_api_cost=self._last_cycle_api_cost,
+                live_result=live_result,
             )
+            self._datastore.queue_decision(row)
 
         self._recent_trades.append(record)
         if len(self._recent_trades) > 50:
@@ -1153,61 +1109,3 @@ class AIDecision:
                 asyncio.get_event_loop().create_task(self.on_trade_callback(record))
             except Exception:
                 logger.debug("on_trade_callback failed", exc_info=True)
-
-    def _queue_decision(
-        self,
-        cycle,
-        snapshot,
-        decision=None,
-        latency_ms=0.0,
-        fill=None,
-        risk_blocked=False,
-        risk_reason="",
-        live_result=None,
-    ) -> None:
-        """Build a DecisionRow and queue it for SQLite analytics."""
-        import json
-
-        from polybot.datastore import DecisionRow
-
-        # Compute indicators for the decision context
-        indicators_dict: dict = {}
-        try:
-            self._feature_config.load()
-            session_ctx = SessionContext(
-                wins=self.session_wins,
-                losses=self.session_losses,
-                candle_open_btc=self._shared.candle_open_btc,
-            )
-            results = compute_indicators(snapshot, self._feature_config, session_ctx)
-            indicators_dict = {r.name: {"value": r.value, "label": r.label} for r in results}
-        except Exception:
-            logger.debug("Indicator computation failed for decision", exc_info=True)
-
-        row = DecisionRow(
-            candle_id=self._datastore.current_candle_id,
-            timestamp=time.time(),
-            cycle=cycle,
-            trigger_type="entry",
-            action=decision.action.value if decision else "HOLD",
-            token_side=decision.token_side.value if decision else "up",
-            confidence=decision.confidence if decision else 0.0,
-            reasoning=decision.reasoning if decision else "",
-            market_view=decision.market_view if decision else "",
-            decision_size=decision.size if decision else 0.0,
-            fill_price=fill.fill_price if fill else None,
-            fill_size=fill.size if fill else None,
-            slippage_bps=fill.slippage_bps if fill else None,
-            fee_amount=fill.fee_amount if fill else 0.0,
-            risk_blocked=risk_blocked,
-            risk_reason=risk_reason,
-            cash=self._portfolio.cash,
-            portfolio_value=self._portfolio.total_value,
-            up_shares=self._portfolio.up_position.shares,
-            down_shares=self._portfolio.down_position.shares,
-            ai_cost=self._last_cycle_api_cost,
-            ai_latency_ms=latency_ms,
-            indicators_json=json.dumps(indicators_dict) if indicators_dict else "{}",
-            live_order_json=json.dumps(live_result.model_dump(exclude={"fill"})) if live_result else "",
-        )
-        self._datastore.queue_decision(row)
