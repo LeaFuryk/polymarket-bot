@@ -1,7 +1,7 @@
 """AI decision engine — structured trading decisions via Claude API."""
 
 from polybot.decision_engine.constants import HOLD_FALLBACK, SCREEN_MAX_TOKENS, SCREEN_TEMPERATURE
-from polybot.decision_engine.engine import DecisionEngine
+from polybot.decision_engine.engine import DecisionEngine, compute_cost, extract_tool_data
 from polybot.decision_engine.prompts import (
     SCREENING_PROMPT,
     SYSTEM_PROMPT,
@@ -12,6 +12,8 @@ from polybot.decision_engine.schemas import SCREENING_DECISION_SCHEMA, TRADING_D
 
 __all__ = [
     "DecisionEngine",
+    "compute_cost",
+    "extract_tool_data",
     "HOLD_FALLBACK",
     "SCREEN_MAX_TOKENS",
     "SCREEN_TEMPERATURE",
