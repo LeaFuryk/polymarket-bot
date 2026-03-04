@@ -15,16 +15,30 @@ from .prompts import SCREENING_PROMPT, SYSTEM_PROMPT, format_feature_vector, for
 from .schemas import SCREENING_DECISION_SCHEMA, TRADING_DECISION_SCHEMA
 
 
+def extract_tool_data(response: anthropic.types.Message) -> dict:
+    """Extract the first tool_use block's input from an API response."""
+    for block in response.content:
+        if block.type == "tool_use":
+            return block.input
+    raise ValueError("No tool_use block in response")
+
+
+def compute_cost(usage: anthropic.types.Usage, input_rate: float, output_rate: float) -> float:
+    """Compute API cost in USD from token usage and per-million-token rates."""
+    return usage.input_tokens * (input_rate / 1_000_000) + usage.output_tokens * (output_rate / 1_000_000)
+
+
 class DecisionEngine:
     """Makes trading decisions via Claude API with structured output."""
 
     def __init__(
         self,
         config: AiConfig,
+        client: anthropic.AsyncAnthropic | None = None,
         logger: logging.Logger | None = None,
     ) -> None:
         self._config = config
-        self._client = anthropic.AsyncAnthropic(api_key=config.api_key)
+        self._client = client or anthropic.AsyncAnthropic(api_key=config.api_key)
         self._log = logger or logging.getLogger(__name__)
         self.session_api_cost: float = 0.0
 
@@ -70,21 +84,14 @@ class DecisionEngine:
             )
 
             latency_ms = (time.monotonic() - start) * 1000
-
-            # Compute API cost
-            input_cost = response.usage.input_tokens * (self._config.input_cost_per_mtok / 1_000_000)
-            output_cost = response.usage.output_tokens * (self._config.output_cost_per_mtok / 1_000_000)
-            api_cost = input_cost + output_cost
+            api_cost = compute_cost(
+                response.usage,
+                self._config.input_cost_per_mtok,
+                self._config.output_cost_per_mtok,
+            )
             self.session_api_cost += api_cost
 
-            # Extract structured data from tool_use block
-            data = None
-            for block in response.content:
-                if block.type == "tool_use":
-                    data = block.input
-                    break
-            if data is None:
-                raise ValueError("No tool_use block in response")
+            data = extract_tool_data(response)
 
             decision = TradingDecision(
                 action=Action(data["action"]),
@@ -149,20 +156,14 @@ class DecisionEngine:
             )
 
             latency_ms = (time.monotonic() - start) * 1000
-
-            # Compute cost using screen model pricing
-            input_cost = response.usage.input_tokens * (self._config.screen_input_cost_per_mtok / 1_000_000)
-            output_cost = response.usage.output_tokens * (self._config.screen_output_cost_per_mtok / 1_000_000)
-            api_cost = input_cost + output_cost
+            api_cost = compute_cost(
+                response.usage,
+                self._config.screen_input_cost_per_mtok,
+                self._config.screen_output_cost_per_mtok,
+            )
             self.session_api_cost += api_cost
 
-            data = None
-            for block in response.content:
-                if block.type == "tool_use":
-                    data = block.input
-                    break
-            if data is None:
-                raise ValueError("No tool_use block in screening response")
+            data = extract_tool_data(response)
 
             should_trade = bool(data.get("should_trade", False))
             reason = data.get("reason", "")
