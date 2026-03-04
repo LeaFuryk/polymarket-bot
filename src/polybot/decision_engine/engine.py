@@ -10,27 +10,22 @@ import anthropic
 from polybot.config import AiConfig
 from polybot.models import Action, FeatureVector, OrderType, TokenSide, TradingDecision
 
+from .constants import HOLD_FALLBACK, SCREEN_MAX_TOKENS, SCREEN_TEMPERATURE
 from .prompts import SCREENING_PROMPT, SYSTEM_PROMPT, format_feature_vector, format_screening_context
 from .schemas import SCREENING_DECISION_SCHEMA, TRADING_DECISION_SCHEMA
-
-logger = logging.getLogger(__name__)
-
-HOLD_FALLBACK = TradingDecision(
-    action=Action.HOLD,
-    order_type=OrderType.MARKET,
-    size=0.0,
-    confidence=0.0,
-    reasoning="Fallback: AI decision unavailable",
-    market_view="neutral — unable to assess",
-)
 
 
 class DecisionEngine:
     """Makes trading decisions via Claude API with structured output."""
 
-    def __init__(self, config: AiConfig) -> None:
+    def __init__(
+        self,
+        config: AiConfig,
+        logger: logging.Logger | None = None,
+    ) -> None:
         self._config = config
         self._client = anthropic.AsyncAnthropic(api_key=config.api_key)
+        self._log = logger or logging.getLogger(__name__)
         self.session_api_cost: float = 0.0
 
     async def decide(
@@ -105,7 +100,7 @@ class DecisionEngine:
                 confidence_drivers=data.get("confidence_drivers", ""),
             )
 
-            logger.info(
+            self._log.info(
                 "AI decision: %s %s %.2f @ confidence=%.2f (%.0fms, cost=$%.4f)",
                 decision.action.value,
                 decision.order_type.value,
@@ -119,7 +114,7 @@ class DecisionEngine:
 
         except Exception:
             latency_ms = (time.monotonic() - start) * 1000
-            logger.exception("AI decision failed, using HOLD fallback")
+            self._log.exception("AI decision failed, using HOLD fallback")
             return HOLD_FALLBACK, latency_ms, 0.0
 
     async def screen(
@@ -139,8 +134,8 @@ class DecisionEngine:
         try:
             response = await self._client.messages.create(
                 model=self._config.screen_model,
-                max_tokens=200,
-                temperature=0.0,
+                max_tokens=SCREEN_MAX_TOKENS,
+                temperature=SCREEN_TEMPERATURE,
                 system=SCREENING_PROMPT,
                 messages=[{"role": "user", "content": prompt}],
                 tools=[
@@ -172,10 +167,10 @@ class DecisionEngine:
             should_trade = bool(data.get("should_trade", False))
             reason = data.get("reason", "")
             if not reason:
-                logger.warning("Haiku returned empty reason — check schema prompt")
+                self._log.warning("Haiku returned empty reason — check schema prompt")
                 reason = "No reason provided by screener"
 
-            logger.info(
+            self._log.info(
                 "Screen: %s — %s (%.0fms, cost=$%.4f)",
                 "TRADE" if should_trade else "HOLD",
                 reason[:80],
@@ -186,5 +181,5 @@ class DecisionEngine:
             return should_trade, reason, api_cost
 
         except Exception:
-            logger.exception("Screening failed, defaulting to full AI call")
+            self._log.exception("Screening failed, defaulting to full AI call")
             return True, "Screening failed", 0.0
