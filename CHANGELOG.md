@@ -18,6 +18,8 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **`config`** — Converted from single `config.py` module to a package (`config/`) with each config class in its own file; extracted all hardcoded defaults into `constants.py`; added `ConfigLoader` class; added field validators for `min_confidence` and risk percentage fields
 
 ### Added
+- **`tests/test_forensics_refactor.py`** — 17 tests covering constants, Investigator protocol, injectable logger, ML scoring, build_report integration, and re-exports
+- **`forensics/README.md`** — Module README documenting the 6-feature investigation pipeline, architecture, and how to add new investigations
 - **`decision_engine/README.md`** — Module README documenting two-stage decision pipeline, architecture, and design decisions
 - **`market_data/protocol.py`** — `MarketDataRepository` protocol defining the external data access contract for all market data sources
 - **`market_data/README.md`** — Module README documenting architecture, data flow, data sources, and key consumers
