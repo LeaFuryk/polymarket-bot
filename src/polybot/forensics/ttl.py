@@ -4,10 +4,9 @@ from __future__ import annotations
 
 import sqlite3
 
+from .constants import DEFAULT_TTL_GRID
 from .db import load_orders, load_snapshots_in_window
 from .types import TTLAggregate, TTLCounterfactual
-
-DEFAULT_GRID = [1, 3, 5, 10, 20, 30, 60]
 
 
 def analyze_ttl(
@@ -20,7 +19,7 @@ def analyze_ttl(
     and checks if any snapshot's ask ≤ limit_price within each grid TTL window.
     """
     if grid is None:
-        grid = list(DEFAULT_GRID)
+        grid = list(DEFAULT_TTL_GRID)
 
     rows = load_orders(conn)
     counterfactuals: list[TTLCounterfactual] = []
