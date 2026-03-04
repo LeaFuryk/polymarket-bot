@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 
+from .constants import BPS_MULTIPLIER
 from .db import load_orders
 from .types import AggregateMetrics, OrderMetrics
 
@@ -49,7 +50,7 @@ def analyze_orders(conn: sqlite3.Connection) -> tuple[list[OrderMetrics], Aggreg
 
         ask_drift_bps = None
         if decision_ask and submit_ask and decision_ask > 0:
-            ask_drift_bps = (submit_ask - decision_ask) / decision_ask * 10000
+            ask_drift_bps = (submit_ask - decision_ask) / decision_ask * BPS_MULTIPLIER
             drifts.append(ask_drift_bps)
 
         fill_ts = lo.get("fill_ts")
