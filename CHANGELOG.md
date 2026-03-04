@@ -8,7 +8,7 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Changed
-- **`forensics`** — Extracted magic numbers to `constants.py` (risk category map, TTL grid, reprice thresholds, BPS multiplier, ML model path); added `Investigator` protocol in `protocols.py`; populated `__init__.py` with re-exports
+- **`forensics`** — Extracted magic numbers to `constants.py`; added `Investigator` protocol in `protocols.py`; populated `__init__.py` with re-exports; made logger injectable across all 6 analysis functions + `db.connect()` + `build_report()`; made ML model path injectable in `analyze_context()`; 17 new tests; README documenting pipeline
 - **`decision_engine`** — Extracted constants to `constants.py`; made logger and AI client injectable in `DecisionEngine`; extracted `extract_tool_data()` and `compute_cost()` helpers; populated `__init__.py` with re-exports; 29 tests at 96% engine coverage
 - **`market_data`** — Extracted all hardcoded values to `constants.py`; populated `__init__.py` with re-exports; made loggers injectable across all 5 modules (`provider`, `client`, `btc_price`, `chainlink_ws`, `discovery`)
 - **`agent`** — Refactored from 1582-LOC monolith (`agent.py`) to a package (`agent/`) with SRP modules: `core.py` (orchestrator), `context.py` (AgentContext dataclass), `dashboard.py` (DashboardAssembler), `rotation.py` (RotationManager), `state.py` (StatePersistence), `helpers.py` (setup_logging, compute_pnl_from_trades); all extracted modules receive `AgentContext` instead of importing `TradingAgent`; 28 agent-specific tests

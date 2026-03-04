@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import sqlite3
 from collections import deque
 
@@ -9,8 +10,13 @@ from .db import load_candles, load_orders, load_snapshots_for_candle
 from .types import RoundTrip
 
 
-def analyze_roundtrips(conn: sqlite3.Connection) -> list[RoundTrip]:
+def analyze_roundtrips(
+    conn: sqlite3.Connection,
+    *,
+    logger: logging.Logger | None = None,
+) -> list[RoundTrip]:
     """FIFO pair BUY entries with SELL exits to form round-trips."""
+    logger = logger or logging.getLogger(__name__)
     rows = load_orders(conn)
 
     # Build candle_id → candle map
