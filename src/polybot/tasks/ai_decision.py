@@ -44,6 +44,17 @@ from polybot.shared_state.stop_loss_record import StopLossRecord
 from polybot.simulator.engine import ExecutionSimulator
 from polybot.simulator.orderbook import SimulatedOrderBook
 from polybot.simulator.portfolio import Portfolio
+from polybot.tasks.decision_guards import (
+    apply_anti_flip,
+    apply_confidence_gate,
+    apply_entry_price_cap,
+    apply_position_sizing,
+    apply_single_entry,
+    clamp_sell_size,
+    compute_position_scale,
+    force_exit_side,
+    override_to_hold,
+)
 from polybot.tasks.prompt_context import (
     compute_btc_trajectory,
     compute_entry_timing_stats,
@@ -807,73 +818,15 @@ class AIDecision:
                     decision.confidence,
                 )
 
-        # Clamp sell size to actual held shares (fixes rounding bug where
-        # position sizing creates fractional shares like 30.6 but the AI
-        # sees "31 shares" due to :.0f formatting and requests sell 31)
-        if decision.action == Action.SELL:
-            held = self._portfolio.get_position(decision.token_side).shares
-            if decision.size > held and held > 0:
-                logger.info(
-                    "Clamping sell size: %.2f → %.2f (held) for %s",
-                    decision.size,
-                    held,
-                    decision.token_side.value,
-                )
-                decision = TradingDecision(
-                    action=decision.action,
-                    order_type=decision.order_type,
-                    size=held,
-                    confidence=decision.confidence,
-                    reasoning=decision.reasoning,
-                    market_view=decision.market_view,
-                    token_side=decision.token_side,
-                    hypothetical_direction=decision.hypothetical_direction,
-                    confidence_drivers=decision.confidence_drivers,
-                )
+        # Clamp sell size to actual held shares
+        held = self._portfolio.get_position(decision.token_side).shares
+        decision = clamp_sell_size(decision, held)
 
-        # Force token_side on exit triggers: don't trust AI's token_side for SELLs
-        # This prevents the anti-flip guard from tracking the wrong side
-        if forced_exit_side and decision.action == Action.SELL:
-            correct_side = TokenSide(forced_exit_side.lower())
-            if decision.token_side != correct_side:
-                logger.warning(
-                    "Forcing exit token_side: AI said %s but exit trigger is %s",
-                    decision.token_side.value,
-                    correct_side.value,
-                )
-                decision = TradingDecision(
-                    action=decision.action,
-                    order_type=decision.order_type,
-                    size=decision.size,
-                    confidence=decision.confidence,
-                    reasoning=decision.reasoning,
-                    market_view=decision.market_view,
-                    token_side=correct_side,
-                    hypothetical_direction=decision.hypothetical_direction,
-                    confidence_drivers=decision.confidence_drivers,
-                )
+        # Force token_side on exit triggers
+        decision = force_exit_side(decision, forced_exit_side)
 
         # Hard confidence gate (BUY only)
-        min_conf = self._config.agent.min_confidence
-        if decision.action == Action.BUY and decision.confidence < min_conf:
-            logger.info(
-                "Overriding %s to HOLD — confidence %.2f < %.2f",
-                decision.action.value,
-                decision.confidence,
-                min_conf,
-            )
-            decision = TradingDecision(
-                action=Action.HOLD,
-                order_type=OrderType.MARKET,
-                size=0.0,
-                confidence=decision.confidence,
-                reasoning=f"Overridden: confidence {decision.confidence:.2f} below {min_conf}. "
-                f"Original: {decision.reasoning[:100]}",
-                market_view=decision.market_view,
-                token_side=decision.token_side,
-                hypothetical_direction=decision.hypothetical_direction,
-                confidence_drivers=decision.confidence_drivers,
-            )
+        decision = apply_confidence_gate(decision, self._config.agent.min_confidence)
 
         # Calibration gate (BUY only)
         if decision.action == Action.BUY:
@@ -884,16 +837,9 @@ class AIDecision:
                     decision.confidence,
                     cal.calibrated_win_rate * 100,
                 )
-                decision = TradingDecision(
-                    action=Action.HOLD,
-                    order_type=OrderType.MARKET,
-                    size=0.0,
-                    confidence=decision.confidence,
-                    reasoning=f"Calibration override: {cal.reason}. Original: {decision.reasoning[:80]}",
-                    market_view=decision.market_view,
-                    token_side=decision.token_side,
-                    hypothetical_direction=decision.hypothetical_direction,
-                    confidence_drivers=decision.confidence_drivers,
+                decision = override_to_hold(
+                    decision,
+                    f"Calibration override: {cal.reason}. Original: {decision.reasoning[:80]}",
                 )
 
         # Anti-hedging guard: don't buy one side while holding the other
@@ -903,243 +849,69 @@ class AIDecision:
                 if self._reversal_flip_side:
                     closed = await self._auto_close_for_flip("up", market, time_remaining, snapshot, cycle)
                     if not closed:
-                        decision = TradingDecision(
-                            action=Action.HOLD,
-                            order_type=OrderType.MARKET,
-                            size=0.0,
-                            confidence=decision.confidence,
-                            reasoning=f"Reversal flip: failed to close UP position. Original: {decision.reasoning[:80]}",
-                            market_view=decision.market_view,
-                            token_side=decision.token_side,
-                            hypothetical_direction=decision.hypothetical_direction,
-                            confidence_drivers=decision.confidence_drivers,
+                        decision = override_to_hold(
+                            decision,
+                            f"Reversal flip: failed to close UP position. Original: {decision.reasoning[:80]}",
                         )
                 else:
                     logger.info(
                         "Anti-hedge block: skipping DOWN buy while holding %.1f UP shares",
                         self._portfolio.up_position.shares,
                     )
-                    decision = TradingDecision(
-                        action=Action.HOLD,
-                        order_type=OrderType.MARKET,
-                        size=0.0,
-                        confidence=decision.confidence,
-                        reasoning=f"Anti-hedge: holding UP shares, blocked DOWN buy. Original: {decision.reasoning[:80]}",
-                        market_view=decision.market_view,
-                        token_side=decision.token_side,
-                        hypothetical_direction=decision.hypothetical_direction,
-                        confidence_drivers=decision.confidence_drivers,
+                    decision = override_to_hold(
+                        decision,
+                        f"Anti-hedge: holding UP shares, blocked DOWN buy. Original: {decision.reasoning[:80]}",
                     )
             elif decision.token_side == TokenSide.UP and self._portfolio.down_position.shares > 0:
                 if self._reversal_flip_side:
                     closed = await self._auto_close_for_flip("down", market, time_remaining, snapshot, cycle)
                     if not closed:
-                        decision = TradingDecision(
-                            action=Action.HOLD,
-                            order_type=OrderType.MARKET,
-                            size=0.0,
-                            confidence=decision.confidence,
-                            reasoning=f"Reversal flip: failed to close DOWN position. Original: {decision.reasoning[:80]}",
-                            market_view=decision.market_view,
-                            token_side=decision.token_side,
-                            hypothetical_direction=decision.hypothetical_direction,
-                            confidence_drivers=decision.confidence_drivers,
+                        decision = override_to_hold(
+                            decision,
+                            f"Reversal flip: failed to close DOWN position. Original: {decision.reasoning[:80]}",
                         )
                 else:
                     logger.info(
                         "Anti-hedge block: skipping UP buy while holding %.1f DOWN shares",
                         self._portfolio.down_position.shares,
                     )
-                    decision = TradingDecision(
-                        action=Action.HOLD,
-                        order_type=OrderType.MARKET,
-                        size=0.0,
-                        confidence=decision.confidence,
-                        reasoning=f"Anti-hedge: holding DOWN shares, blocked UP buy. Original: {decision.reasoning[:80]}",
-                        market_view=decision.market_view,
-                        token_side=decision.token_side,
-                        hypothetical_direction=decision.hypothetical_direction,
-                        confidence_drivers=decision.confidence_drivers,
+                    decision = override_to_hold(
+                        decision,
+                        f"Anti-hedge: holding DOWN shares, blocked UP buy. Original: {decision.reasoning[:80]}",
                     )
 
         # Anti-flip guard: block buying opposite side after selling on same candle
-        # Same-side re-entry (adding back) is still allowed
-        # Bypassed during contrarian flip (post-SL reversal entry)
         if decision.action == Action.BUY and market and not self._contrarian_flip_active:
-            sold = self._sold_sides.get(market.slug, set())
-            opposite = "UP" if decision.token_side == TokenSide.DOWN else "DOWN"
-            if opposite in sold:
-                logger.info(
-                    "Anti-flip block: already sold %s on %s, blocking %s buy",
-                    opposite,
-                    market.slug,
-                    decision.token_side.value,
-                )
-                decision = TradingDecision(
-                    action=Action.HOLD,
-                    order_type=OrderType.MARKET,
-                    size=0.0,
-                    confidence=decision.confidence,
-                    reasoning=f"Anti-flip: sold {opposite} on this candle, blocked {decision.token_side.value} buy. Original: {decision.reasoning[:80]}",
-                    market_view=decision.market_view,
-                    token_side=decision.token_side,
-                    hypothetical_direction=decision.hypothetical_direction,
-                    confidence_drivers=decision.confidence_drivers,
-                )
+            decision = apply_anti_flip(decision, self._sold_sides.get(market.slug, set()), slug=market.slug)
 
-        # Safeguard #2: Single-entry-per-side — block buying same side twice on same candle
+        # Single-entry-per-side: block buying same side twice on same candle
         if decision.action == Action.BUY and market:
-            side_key = decision.token_side.value.upper()
-            if side_key in self._bought_sides.get(market.slug, set()):
-                logger.info(
-                    "Single-entry block: already bought %s on %s, overriding to HOLD",
-                    side_key,
-                    market.slug,
-                )
-                decision = TradingDecision(
-                    action=Action.HOLD,
-                    order_type=OrderType.MARKET,
-                    size=0.0,
-                    confidence=decision.confidence,
-                    reasoning=f"Single-entry: already bought {side_key} on this candle. Original: {decision.reasoning[:80]}",
-                    market_view=decision.market_view,
-                    token_side=decision.token_side,
-                    hypothetical_direction=decision.hypothetical_direction,
-                    confidence_drivers=decision.confidence_drivers,
-                )
+            decision = apply_single_entry(decision, self._bought_sides.get(market.slug, set()), slug=market.slug)
 
-        # Entry price hard cap: block entries at $0.85+ (R/R < 0.18, negative avg PnL)
+        # Entry price hard cap
         if decision.action == Action.BUY:
             cap_ob = down_ob if decision.token_side == TokenSide.DOWN else up_ob
-            cap_price = cap_ob.best_ask or 0.5
-            if cap_price >= 0.85:
-                logger.info(
-                    "Entry price cap: %s ask $%.2f >= $0.85 (R/R=%.2f), overriding to HOLD",
-                    decision.token_side.value,
-                    cap_price,
-                    (1.0 - cap_price) / cap_price,
-                )
-                decision = TradingDecision(
-                    action=Action.HOLD,
-                    order_type=OrderType.MARKET,
-                    size=0.0,
-                    confidence=decision.confidence,
-                    reasoning=f"Entry price cap: ${cap_price:.2f} >= $0.85 (R/R too low). Original: {decision.reasoning[:80]}",
-                    market_view=decision.market_view,
-                    token_side=decision.token_side,
-                    hypothetical_direction=decision.hypothetical_direction,
-                    confidence_drivers=decision.confidence_drivers,
-                )
+            decision = apply_entry_price_cap(decision, cap_ob.best_ask or 0.5)
 
-        # Extended R/R position sizing (no hard block)
+        # Position sizing (R/R, move magnitude, counter-trend)
         if decision.action == Action.BUY:
             target_ob = down_ob if decision.token_side == TokenSide.DOWN else up_ob
             est_fill = target_ob.best_ask or 0.5
-            reward = 1.0 - est_fill
-            risk_val = est_fill
-            rr_ratio = reward / risk_val if risk_val > 0 else 0
+            rr_ratio = (1.0 - est_fill) / est_fill if est_fill > 0 else 0
 
-            # R/R scale — gentle nudge only (0.75-1.0 range)
-            # Data shows cheap entries (high R/R) often lose — they're contrarian traps.
-            # Expensive entries (low R/R) win ~85% because price reflects conviction.
-            # So we don't reward cheap entries with bigger positions.
-            if rr_ratio >= 1.0:
-                rr_scale = 1.0
-            elif rr_ratio >= 0.3:
-                rr_scale = 0.75 + 0.25 * (rr_ratio - 0.3) / 0.7  # 75%-100%
-            else:
-                rr_scale = 0.75  # minimum 75%
-
-            # Move-magnitude scaling (raised floors — small moves still get decent size)
-            move_scale = 1.0
             btc_price_now = snapshot.btc_price.price_usd if snapshot.btc_price else None
             btc_move = 0.0
             if candle_open_btc is not None and btc_price_now is not None:
                 btc_move = abs(btc_price_now - candle_open_btc)
-                if btc_move < 10:
-                    move_scale = 0.80
-                elif btc_move < 30:
-                    move_scale = 0.90
-                elif btc_move < 60:
-                    move_scale = 1.0
 
-            # Counter-trend size scaling (trend-aware position reduction)
             trend_result = next(
                 (r for r in indicator_results if r.name == "Market Trend"),
                 None,
             )
-            trend_scale = 1.0
-            if trend_result is not None:
-                trend_score = trend_result.value
-                is_counter = (decision.token_side == TokenSide.DOWN and trend_score > 0.3) or (
-                    decision.token_side == TokenSide.UP and trend_score < -0.3
-                )
-                if is_counter:
-                    abs_score = abs(trend_score)
-                    trend_scale = 0.50 if abs_score >= 0.7 else 0.70
-                    trend_label = (
-                        "STRONG BULLISH"
-                        if trend_score >= 0.5
-                        else "BULLISH"
-                        if trend_score >= 0.2
-                        else "NEUTRAL"
-                        if trend_score > -0.2
-                        else "BEARISH"
-                        if trend_score > -0.5
-                        else "STRONG BEARISH"
-                    )
-                    logger.info(
-                        "Counter-trend sizing: %s in %s trend (score=%.2f) → %.0f%%",
-                        decision.token_side.value,
-                        trend_label,
-                        trend_score,
-                        trend_scale * 100,
-                    )
+            trend_score = trend_result.value if trend_result is not None else None
 
-            combined_scale = rr_scale * move_scale * trend_scale
-            if combined_scale < 1.0:
-                original_size = decision.size
-                scaled_size = round(decision.size * combined_scale, 1)
-                if scaled_size >= 1.0:
-                    decision = TradingDecision(
-                        action=decision.action,
-                        order_type=decision.order_type,
-                        size=scaled_size,
-                        confidence=decision.confidence,
-                        reasoning=decision.reasoning,
-                        market_view=decision.market_view,
-                        token_side=decision.token_side,
-                        limit_price=decision.limit_price,
-                    )
-                    logger.info(
-                        "Position sizing: %.1f → %.1f (R/R=%.2f×%.0f%%, move=$%.0f×%.0f%%)",
-                        original_size,
-                        scaled_size,
-                        rr_ratio,
-                        rr_scale * 100,
-                        btc_move,
-                        move_scale * 100,
-                    )
-
-            # Enforce minimum position size (lower floor for counter-trend)
-            min_shares = 20 if trend_scale < 1.0 else 40
-            if decision.size < min_shares:
-                logger.info(
-                    "Min size floor: %.1f → %d shares%s",
-                    decision.size,
-                    min_shares,
-                    " (counter-trend)" if trend_scale < 1.0 else "",
-                )
-                decision = TradingDecision(
-                    action=decision.action,
-                    order_type=decision.order_type,
-                    size=min_shares,
-                    confidence=decision.confidence,
-                    reasoning=decision.reasoning,
-                    market_view=decision.market_view,
-                    token_side=decision.token_side,
-                    limit_price=decision.limit_price,
-                )
+            scale, trend_scale = compute_position_scale(rr_ratio, btc_move, trend_score, decision.token_side)
+            decision = apply_position_sizing(decision, scale, trend_scale)
 
         # Shadow predictions for HOLD
         if decision.action == Action.HOLD and decision.hypothetical_direction and market:
