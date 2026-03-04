@@ -2,14 +2,20 @@
 
 from __future__ import annotations
 
+import logging
 import sqlite3
 
 from .db import load_candles, load_orders
 from .types import CostAggregate, CostBreakdown
 
 
-def analyze_costs(conn: sqlite3.Connection) -> tuple[list[CostBreakdown], CostAggregate]:
+def analyze_costs(
+    conn: sqlite3.Connection,
+    *,
+    logger: logging.Logger | None = None,
+) -> tuple[list[CostBreakdown], CostAggregate]:
     """Break down fees, slippage, and decision-drift cost per filled order."""
+    logger = logger or logging.getLogger(__name__)
     rows = load_orders(conn)
 
     # Build candle_id → winner map for outcome grouping

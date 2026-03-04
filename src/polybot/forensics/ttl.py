@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import sqlite3
 
 from .constants import DEFAULT_TTL_GRID
@@ -12,12 +13,15 @@ from .types import TTLAggregate, TTLCounterfactual
 def analyze_ttl(
     conn: sqlite3.Connection,
     grid: list[int] | None = None,
+    *,
+    logger: logging.Logger | None = None,
 ) -> tuple[list[TTLCounterfactual], TTLAggregate]:
     """For timeout orders, test which TTL values would have rescued them.
 
     For each timed-out order (has cancel_ts, no fill_ts), loads snapshot data
     and checks if any snapshot's ask ≤ limit_price within each grid TTL window.
     """
+    logger = logger or logging.getLogger(__name__)
     if grid is None:
         grid = list(DEFAULT_TTL_GRID)
 

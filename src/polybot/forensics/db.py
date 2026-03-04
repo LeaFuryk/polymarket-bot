@@ -3,16 +3,22 @@
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
 import sys
 from pathlib import Path
 
 
-def connect(db_path: str | Path) -> sqlite3.Connection:
+def connect(
+    db_path: str | Path,
+    *,
+    logger: logging.Logger | None = None,
+) -> sqlite3.Connection:
     """Open a read-only connection to the polybot.db SQLite database."""
+    logger = logger or logging.getLogger(__name__)
     p = Path(db_path)
     if not p.exists():
-        print(f"Error: {p} not found. Run the bot first to accumulate data.")
+        logger.error("Database not found: %s. Run the bot first to accumulate data.", p)
         sys.exit(1)
     conn = sqlite3.connect(str(p))
     conn.row_factory = sqlite3.Row
