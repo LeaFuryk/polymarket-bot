@@ -8,7 +8,7 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Changed
-- **`decision_engine`** — Extracted constants (`HOLD_FALLBACK`, `SCREEN_MAX_TOKENS`, `SCREEN_TEMPERATURE`) to `constants.py`; made logger injectable in `DecisionEngine`; populated `__init__.py` with re-exports
+- **`decision_engine`** — Extracted constants to `constants.py`; made logger and AI client injectable in `DecisionEngine`; extracted `extract_tool_data()` and `compute_cost()` helpers; populated `__init__.py` with re-exports; 29 tests at 96% engine coverage
 - **`market_data`** — Extracted all hardcoded values to `constants.py`; populated `__init__.py` with re-exports; made loggers injectable across all 5 modules (`provider`, `client`, `btc_price`, `chainlink_ws`, `discovery`)
 - **`agent`** — Refactored from 1582-LOC monolith (`agent.py`) to a package (`agent/`) with SRP modules: `core.py` (orchestrator), `context.py` (AgentContext dataclass), `dashboard.py` (DashboardAssembler), `rotation.py` (RotationManager), `state.py` (StatePersistence), `helpers.py` (setup_logging, compute_pnl_from_trades); all extracted modules receive `AgentContext` instead of importing `TradingAgent`; 28 agent-specific tests
 - **`resolution`** — Refactored to package separating pure checker logic from async Polymarket verification; extracted price thresholds to constants; 27 tests at 99% coverage
