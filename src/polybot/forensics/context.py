@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
 from pathlib import Path
 
@@ -11,8 +12,14 @@ from .db import load_candles, load_orders, load_snapshots_for_candle
 from .types import DecisionContext
 
 
-def analyze_context(conn: sqlite3.Connection) -> list[DecisionContext]:
+def analyze_context(
+    conn: sqlite3.Connection,
+    *,
+    ml_model_path: str | None = None,
+    logger: logging.Logger | None = None,
+) -> list[DecisionContext]:
     """Extract R/R, indicators, and ML score at each decision point."""
+    logger = logger or logging.getLogger(__name__)
     rows = load_orders(conn)
 
     # Build candle_id → winner map
@@ -20,7 +27,7 @@ def analyze_context(conn: sqlite3.Connection) -> list[DecisionContext]:
     candle_winner: dict[int, str | None] = {c["candle_id"]: c.get("winner") for c in candles}
 
     # Try to load ML model for scoring
-    ml_weights = _load_ml_weights()
+    ml_weights = _load_ml_weights(ml_model_path or ML_MODEL_PATH)
 
     contexts: list[DecisionContext] = []
 
@@ -88,9 +95,9 @@ def analyze_context(conn: sqlite3.Connection) -> list[DecisionContext]:
     return contexts
 
 
-def _load_ml_weights() -> dict | None:
-    """Try to load ML model weights from logs/ml_model.json."""
-    path = Path(ML_MODEL_PATH)
+def _load_ml_weights(model_path: str = ML_MODEL_PATH) -> dict | None:
+    """Try to load ML model weights from *model_path*."""
+    path = Path(model_path)
     if not path.exists():
         return None
     try:
