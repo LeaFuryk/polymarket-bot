@@ -6,6 +6,7 @@ import json
 import sqlite3
 from pathlib import Path
 
+from .constants import ML_MODEL_PATH
 from .db import load_candles, load_orders, load_snapshots_for_candle
 from .types import DecisionContext
 
@@ -44,7 +45,7 @@ def analyze_context(conn: sqlite3.Connection) -> list[DecisionContext]:
                             indicators[name] = float(info["value"])
                         except (ValueError, TypeError):
                             pass
-                    elif isinstance(info, (int, float)):
+                    elif isinstance(info, int | float):
                         indicators[name] = float(info)
             except (json.JSONDecodeError, TypeError):
                 pass
@@ -89,7 +90,7 @@ def analyze_context(conn: sqlite3.Connection) -> list[DecisionContext]:
 
 def _load_ml_weights() -> dict | None:
     """Try to load ML model weights from logs/ml_model.json."""
-    path = Path("logs/ml_model.json")
+    path = Path(ML_MODEL_PATH)
     if not path.exists():
         return None
     try:
@@ -106,6 +107,6 @@ def _compute_ml_score(indicators: dict[str, float], weights: dict) -> float:
     if isinstance(weights, dict):
         for name, value in indicators.items():
             w = weights.get(name, 0.0)
-            if isinstance(w, (int, float)):
+            if isinstance(w, int | float):
                 score += w * value
     return score
