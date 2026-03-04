@@ -44,6 +44,13 @@ from polybot.shared_state.stop_loss_record import StopLossRecord
 from polybot.simulator.engine import ExecutionSimulator
 from polybot.simulator.orderbook import SimulatedOrderBook
 from polybot.simulator.portfolio import Portfolio
+from polybot.tasks.context_builder import (
+    append_section,
+    build_chainlink_warning,
+    build_counter_trend_advisory,
+    build_stop_loss_warning,
+    format_ml_line,
+)
 from polybot.tasks.decision_guards import (
     apply_anti_flip,
     apply_confidence_gate,
@@ -651,90 +658,51 @@ class AIDecision:
         if market:
             self._pending_ml_features[market.slug] = ml_features
 
-        if ml_prediction.model_trained:
-            # Show top 3 feature drivers so the AI knows WHY the ML predicts a direction
-            top_feats = sorted(
-                ml_prediction.feature_contributions.items(),
-                key=lambda x: abs(x[1]),
-                reverse=True,
-            )[:3]
-            drivers = ", ".join(f"{n}: {v:+.2f}" for n, v in top_feats)
-            ml_line = (
-                f"- ML Baseline: {ml_prediction.up_probability:.0%} UP probability "
-                f"({ml_prediction.confidence}) — drivers: {drivers}"
-            )
-        else:
-            ml_line = f"- ML Baseline: {self._ml_scorer.get_summary()}"
+        ml_line = format_ml_line(
+            model_trained=ml_prediction.model_trained,
+            up_probability=ml_prediction.up_probability,
+            confidence=ml_prediction.confidence,
+            feature_contributions=ml_prediction.feature_contributions,
+            scorer_summary=self._ml_scorer.get_summary(),
+        )
         if indicators_text:
             indicators_text += "\n" + ml_line
         else:
             indicators_text = "## Computed Indicators\n" + ml_line
 
-        # Inject adaptive entry reversal context (visible to both Haiku screen and Sonnet)
+        # Inject adaptive entry reversal context
         if self._adaptive_entry is not None:
-            # Compute abs BTC move for UNCERTAIN regime gating
             abs_btc_move = 0.0
             if candle_open_btc is not None and snapshot.btc_price:
                 abs_btc_move = abs(snapshot.btc_price.price_usd - candle_open_btc)
             reversal_ctx = self._adaptive_entry.get_ai_context(abs_btc_move=abs_btc_move)
-            if reversal_ctx:
-                indicators_text = indicators_text + "\n\n" + reversal_ctx if indicators_text else reversal_ctx
+            indicators_text = append_section(indicators_text, reversal_ctx)
 
-        # Inject BTC trajectory (velocity + peak drawback) from prefilter snapshots
-        trajectory_ctx = compute_btc_trajectory(list(self._shared.prefilter_history))
-        if trajectory_ctx:
-            indicators_text = indicators_text + "\n\n" + trajectory_ctx if indicators_text else trajectory_ctx
+        # Inject BTC trajectory, microstructure, and entry timing
+        indicators_text = append_section(indicators_text, compute_btc_trajectory(list(self._shared.prefilter_history)))
+        indicators_text = append_section(indicators_text, format_microstructure(self._shared.microstructure_history))
+        indicators_text = append_section(
+            indicators_text, compute_entry_timing_stats(self._session_trades, self._recent_resolutions)
+        )
 
-        # Cross-candle microstructure memory
-        micro_ctx = format_microstructure(self._shared.microstructure_history)
-        if micro_ctx:
-            indicators_text = indicators_text + "\n\n" + micro_ctx if indicators_text else micro_ctx
-
-        # Entry timing performance (WR by time-remaining bucket)
-        timing_ctx = compute_entry_timing_stats(self._session_trades, self._recent_resolutions)
-        if timing_ctx:
-            indicators_text = indicators_text + "\n\n" + timing_ctx if indicators_text else timing_ctx
-
-        # Safeguard #1: Chainlink divergence warning
+        # Safeguard warnings
         if snapshot.btc_price and snapshot.btc_price.price_divergence is not None:
-            divergence = snapshot.btc_price.price_divergence
-            if abs(divergence) > 100:
-                chainlink_warning = (
-                    f"\n\n## CHAINLINK DIVERGENCE WARNING\n"
-                    f"Chainlink vs Binance divergence: ${divergence:+.0f} — "
-                    f"resolution source may differ significantly.\n"
-                    f"Consider reducing confidence. Trades near candle boundaries are especially risky."
-                )
-                indicators_text = indicators_text + chainlink_warning if indicators_text else chainlink_warning
+            indicators_text = append_section(
+                indicators_text, build_chainlink_warning(snapshot.btc_price.price_divergence)
+            )
 
-        # Safeguard #6: Counter-trend accuracy context
         trend_result = next(
             (r for r in indicator_results if r.name == "Market Trend"),
             None,
         )
-        if trend_result and abs(trend_result.value) >= 0.3:
-            weak_side = "DOWN" if trend_result.value > 0 else "UP"
-            trend_label = "BULLISH" if trend_result.value > 0 else "BEARISH"
-            counter_trend_advisory = (
-                f"\n\n## Counter-Trend Advisory\n"
-                f"Strong {trend_label} trend detected (score={trend_result.value:+.2f}). "
-                f"{weak_side} trades are counter-trend.\n"
-                f"Historical counter-trend accuracy: ~55-60% (vs ~75% trend-aligned).\n"
-                f"If going counter-trend, require higher conviction and use smaller size."
-            )
-            indicators_text = indicators_text + counter_trend_advisory if indicators_text else counter_trend_advisory
+        if trend_result:
+            indicators_text = append_section(indicators_text, build_counter_trend_advisory(trend_result.value))
 
-        # Safeguard #3: Post-stop-loss cooldown warning
         if self._shared.last_stop_loss is not None:
             sl_info = self._shared.last_stop_loss
-            sl_warning = (
-                f"\n\n## POST-STOP-LOSS WARNING\n"
-                f"A stop-loss exit just occurred on this candle "
-                f"({sl_info.token_side.upper()} at {sl_info.pnl_pct:+.1%}).\n"
-                f"Re-entering immediately is high-risk — the price moved against you and may continue.\n"
-                f"If you choose to re-enter, use smaller size and higher conviction threshold."
+            indicators_text = append_section(
+                indicators_text, build_stop_loss_warning(sl_info.token_side, sl_info.pnl_pct)
             )
-            indicators_text = indicators_text + sl_warning if indicators_text else sl_warning
 
         # Two-pass screening (entry only, not exits)
         has_position = self._portfolio.up_position.shares > 0 or self._portfolio.down_position.shares > 0

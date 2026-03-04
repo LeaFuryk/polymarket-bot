@@ -8,7 +8,7 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Changed
-- **`tasks`** — Extracted 4 pure prompt-context helpers from `ai_decision.py` (1779 LOC) into `tasks/prompt_context.py` (25 tests); extracted 10 decision guard functions into `tasks/decision_guards.py` (36 tests); `ai_decision.py` reduced from 1779 to 1251 LOC
+- **`tasks`** — Extracted 4 pure prompt-context helpers from `ai_decision.py` (1779 LOC) into `tasks/prompt_context.py` (25 tests); extracted 10 decision guard functions into `tasks/decision_guards.py` (36 tests); extracted 5 context-building functions into `tasks/context_builder.py` (18 tests); `ai_decision.py` reduced from 1779 to 1219 LOC
 - **`forensics`** — Extracted magic numbers to `constants.py` (risk category map, TTL grid, reprice thresholds, BPS multiplier, ML model path); added `Investigator` protocol in `protocols.py`; populated `__init__.py` with re-exports
 - **`decision_engine`** — Extracted constants to `constants.py`; made logger and AI client injectable in `DecisionEngine`; extracted `extract_tool_data()` and `compute_cost()` helpers; populated `__init__.py` with re-exports; 29 tests at 96% engine coverage
 - **`market_data`** — Extracted all hardcoded values to `constants.py`; populated `__init__.py` with re-exports; made loggers injectable across all 5 modules (`provider`, `client`, `btc_price`, `chainlink_ws`, `discovery`)
