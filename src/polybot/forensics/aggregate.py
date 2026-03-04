@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import sqlite3
 from datetime import UTC, datetime
 
@@ -14,14 +15,20 @@ from .ttl import analyze_ttl
 from .types import ForensicsReport
 
 
-def build_report(conn: sqlite3.Connection, db_path: str) -> ForensicsReport:
+def build_report(
+    conn: sqlite3.Connection,
+    db_path: str,
+    *,
+    logger: logging.Logger | None = None,
+) -> ForensicsReport:
     """Run all 6 feature analyses and return a complete ForensicsReport."""
-    order_metrics, aggregate_metrics = analyze_orders(conn)
-    ttl_cfs, ttl_agg = analyze_ttl(conn)
-    cost_bds, cost_agg = analyze_costs(conn)
-    blocked_orders, blocked_agg = analyze_blocked(conn)
-    round_trips = analyze_roundtrips(conn)
-    decision_contexts = analyze_context(conn)
+    logger = logger or logging.getLogger(__name__)
+    order_metrics, aggregate_metrics = analyze_orders(conn, logger=logger)
+    ttl_cfs, ttl_agg = analyze_ttl(conn, logger=logger)
+    cost_bds, cost_agg = analyze_costs(conn, logger=logger)
+    blocked_orders, blocked_agg = analyze_blocked(conn, logger=logger)
+    round_trips = analyze_roundtrips(conn, logger=logger)
+    decision_contexts = analyze_context(conn, logger=logger)
 
     return ForensicsReport(
         generated_at=datetime.now(UTC).isoformat(),
