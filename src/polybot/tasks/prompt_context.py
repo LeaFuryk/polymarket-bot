@@ -7,7 +7,7 @@ no side effects, making them trivially unit-testable.
 
 from __future__ import annotations
 
-from polybot.models import Action
+from polybot.models import Action, ResolutionRecord
 from polybot.shared_state import PreFilterSnapshot
 
 
@@ -222,7 +222,7 @@ def compute_entry_timing_stats(
     or None if fewer than 3 resolved BUY trades exist.
     """
     # Build resolution lookup by slug
-    res_by_slug: dict[str, object] = {}
+    res_by_slug: dict[str, ResolutionRecord] = {}
     for r in resolutions:
         res_by_slug[r.slug] = r
 
