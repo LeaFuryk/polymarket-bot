@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import sqlite3
 
 from .constants import (
@@ -24,8 +25,13 @@ def _classify(reason: str) -> str:
     return "other"
 
 
-def analyze_blocked(conn: sqlite3.Connection) -> tuple[list[BlockedOrder], BlockedAggregate]:
+def analyze_blocked(
+    conn: sqlite3.Connection,
+    *,
+    logger: logging.Logger | None = None,
+) -> tuple[list[BlockedOrder], BlockedAggregate]:
     """Classify blocked orders and assess recoverability."""
+    logger = logger or logging.getLogger(__name__)
     rows = load_orders(conn)
     blocked: list[BlockedOrder] = []
     by_category: dict[str, int] = {}
