@@ -62,10 +62,7 @@ def fillability_scan(
     use_fixed_price = limit_price > 0
 
     for i, snap in enumerate(snapshots):
-        if use_fixed_price:
-            price = limit_price
-        else:
-            price = snap.get(ask_key)
+        price: float | None = limit_price if use_fixed_price else snap.get(ask_key)
 
         if price is None:
             continue
@@ -79,7 +76,7 @@ def fillability_scan(
         for j in range(i, len(snapshots)):
             if snapshots[j]["timestamp"] - t0 > ttl:
                 break
-            future_ask = snapshots[j].get(ask_key)
+            future_ask: float | None = snapshots[j].get(ask_key)
 
             if future_ask is not None and future_ask <= price:
                 filled = True
@@ -103,7 +100,7 @@ def fillability_scan(
     best_entry = min(entry_prices) if entry_prices else None
     worst_entry = max(entry_prices) if entry_prices else None
 
-    all_asks = [s.get(ask_key) for s in snapshots if s.get(ask_key) is not None]
+    all_asks: list[float] = [v for s in snapshots if (v := s.get(ask_key)) is not None]
     book_best_ask = min(all_asks) if all_asks else None
     book_worst_ask = max(all_asks) if all_asks else None
 
@@ -195,7 +192,7 @@ def post_cancel_recovery(
     if not recovery_window:
         return None
 
-    recovery_asks = [s.get(ask_key) for s in recovery_window if s.get(ask_key) is not None]
+    recovery_asks: list[float] = [v for s in recovery_window if (v := s.get(ask_key)) is not None]
 
     if not recovery_asks:
         return None
@@ -337,7 +334,7 @@ def generate_insights(
             closest = min(snapshots, key=lambda s: abs(s["timestamp"] - missed_ts))
             decision_ask = closest.get(ask_key)
             if decision_ask is not None and window:
-                future_asks = [s.get(ask_key) for s in window if s.get(ask_key) is not None]
+                future_asks: list[float] = [v for s in window if (v := s.get(ask_key)) is not None]
                 if future_asks and min(future_asks) <= decision_ask:
                     insights.append(
                         f"Missed order would have filled with TTL={extra_ttl}s (ask dropped to {min(future_asks):.3f})"
