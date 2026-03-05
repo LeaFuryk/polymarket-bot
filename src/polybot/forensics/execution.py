@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import sqlite3
 
 from .constants import BPS_MULTIPLIER
@@ -19,8 +20,13 @@ def _percentile(values: list[float], pct: float) -> float | None:
     return s[idx]
 
 
-def analyze_orders(conn: sqlite3.Connection) -> tuple[list[OrderMetrics], AggregateMetrics]:
+def analyze_orders(
+    conn: sqlite3.Connection,
+    *,
+    logger: logging.Logger | None = None,
+) -> tuple[list[OrderMetrics], AggregateMetrics]:
     """Extract per-order execution metrics from live_order_json."""
+    logger = logger or logging.getLogger(__name__)
     rows = load_orders(conn)
     metrics: list[OrderMetrics] = []
     latencies: list[float] = []
