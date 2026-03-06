@@ -8,6 +8,7 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Changed
+- **`indicators`** — Converted from single 933-LOC file to package; extracted 50+ threshold constants to `constants.py`; made logger injectable in `FeatureConfig` and `compute_indicators`; populated `__init__.py` with backward-compatible re-exports; 58 new tests covering constants, data types, registry, EMA, config, compute/format, and 10 individual indicators; README documenting architecture and indicator categories
 - **`models`** — Converted from single file to package; extracted default values to `constants.py` (flat threshold, default confidence, TTL, observation expiry); replaced magic numbers in model definitions with named constants; populated `__init__.py` with backward-compatible re-exports; README documenting model domains and computed properties; 40 new tests covering enums, computed properties, validation, edge cases
 - **`ws`** — Extracted server constants to `constants.py` (host, port, ping interval/timeout); made loggers injectable in `DashboardBroadcaster` and `DashboardWSServer`; populated `__init__.py` with re-exports; README documenting message types and connection lifecycle; 13 new tests
 - **`calibration`** — Converted from single file to package; extracted constants to `constants.py` (bin width, min samples, break-even threshold, data file name, confidence precision); made logger injectable in `ConfidenceCalibrator`; populated `__init__.py` with re-exports; README documenting calibration methodology; 41 new tests
