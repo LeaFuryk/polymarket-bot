@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [v0.17.0] — 2026-03-06
 
 ### Changed
 - **`exit_tracker`** — Converted from single file to package; extracted constants to `constants.py` (filename, rounding precisions, outcome values); made logger injectable in `ExitTracker`; populated `__init__.py` with backward-compatible re-exports; 30 new tests covering constants, ExitRecord, register/outcome lifecycle, persistence, historical loading, and summary generation; README documenting what-if analysis pipeline
