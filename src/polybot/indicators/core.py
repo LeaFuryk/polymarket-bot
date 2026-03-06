@@ -10,9 +10,55 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from polybot.indicators.constants import (
+    BTC_VOL_HIGH,
+    BTC_VOL_MODERATE,
+    CALIBRATION_TOLERANCE,
+    CANDLE_BEARISH_RATIO,
+    CANDLE_BULLISH_RATIO,
+    CHAINLINK_HIGH_DIV,
+    CHAINLINK_MINOR_DIV,
+    CHAINLINK_MODERATE_DIV,
+    CROSS_BOOK_BALANCED_THRESHOLD,
+    CROSS_BOOK_HEAVY_THRESHOLD,
+    DEFAULT_FLAT_THRESHOLD,
+    DIVERGENCE_MINOR,
+    DIVERGENCE_SIGNIFICANT,
+    EMA_DIFF_SCALE,
+    ENTRY_SIGNIFICANT_DIFF,
+    ENTRY_SLIGHT_DIFF,
+    IMBALANCE_SLIGHT_BUY,
+    IMBALANCE_SLIGHT_SELL,
+    IMBALANCE_STRONG_BUY,
+    IMBALANCE_STRONG_SELL,
+    MAGNITUDE_EXHAUSTION,
+    MAGNITUDE_MODERATE,
+    MAGNITUDE_STRONG,
+    NEAR_ZERO,
+    PRICE_DIFF_SCALE,
+    SPREAD_NORMAL,
+    SPREAD_VERY_WIDE,
+    SPREAD_WIDE,
+    STREAK_MILD,
+    STREAK_MODERATE,
+    STREAK_STRONG,
+    TOKEN_VOL_HIGH,
+    TOKEN_VOL_MODERATE,
+    TREND_MILD_THRESHOLD,
+    TREND_STRONG_THRESHOLD,
+    VOL30_HIGH,
+    VOL30_LOW,
+    VOL30_MODERATE,
+    VOLUME_DECREASING,
+    VOLUME_INCREASING,
+    VOLUME_SLIGHTLY_DECREASING,
+    VOLUME_SLIGHTLY_INCREASING,
+    Z_OVEREXTENDED,
+    Z_STRETCHED,
+)
 from polybot.models import MarketSnapshot
 
-logger = logging.getLogger(__name__)
+_default_logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -76,9 +122,14 @@ class FeatureConfigEntry:
 class FeatureConfig:
     """Reads data/feature_config.json each cycle; returns enabled indicators."""
 
-    def __init__(self, path: str | Path) -> None:
+    def __init__(
+        self,
+        path: str | Path,
+        logger: logging.Logger | None = None,
+    ) -> None:
         self._path = Path(path)
         self._entries: list[FeatureConfigEntry] = []
+        self._logger = logger or _default_logger
 
     def load(self) -> None:
         """Re-read config from disk. Safe if file is missing or malformed."""
@@ -96,7 +147,7 @@ class FeatureConfig:
                 for item in data.get("indicators", [])
             ]
         except (json.JSONDecodeError, KeyError, TypeError):
-            logger.warning("Could not parse feature config at %s", self._path)
+            self._logger.warning("Could not parse feature config at %s", self._path)
             self._entries = []
 
     def enabled_indicators(self) -> list[tuple[str, dict[str, Any]]]:
@@ -117,20 +168,22 @@ def compute_indicators(
     snapshot: MarketSnapshot,
     config: FeatureConfig,
     session: SessionContext | None = None,
+    logger: logging.Logger | None = None,
 ) -> list[IndicatorResult]:
     """Run all enabled indicators and return results."""
+    log = logger or _default_logger
     results: list[IndicatorResult] = []
     for name, params in config.enabled_indicators():
         fn = _REGISTRY.get(name)
         if fn is None:
-            logger.debug("Indicator %r not found in registry, skipping", name)
+            log.debug("Indicator %r not found in registry, skipping", name)
             continue
         try:
             result = fn(snapshot, params, session)
             if result is not None:
                 results.append(result)
         except Exception:
-            logger.debug("Indicator %r raised, skipping", name, exc_info=True)
+            log.debug("Indicator %r raised, skipping", name, exc_info=True)
     return results
 
 
@@ -183,10 +236,10 @@ def _market_trend(
 
     # Score components (each -1 to +1)
     ema_diff = ema20 - ema50
-    ema_signal = max(-1, min(1, ema_diff / 100))  # $100 = full signal
+    ema_signal = max(-1, min(1, ema_diff / EMA_DIFF_SCALE))
 
     price_diff = price - ema50
-    price_signal = max(-1, min(1, price_diff / 150))
+    price_signal = max(-1, min(1, price_diff / PRICE_DIFF_SCALE))
 
     last_12 = candles[-12:]
     up_ratio = sum(1 for c in last_12 if c.direction == "up") / len(last_12)
@@ -195,13 +248,13 @@ def _market_trend(
     score = 0.4 * ema_signal + 0.35 * price_signal + 0.25 * candle_signal
     score = max(-1, min(1, score))
 
-    if score >= 0.5:
+    if score >= TREND_STRONG_THRESHOLD:
         label_text = "STRONG BULLISH"
-    elif score >= 0.2:
+    elif score >= TREND_MILD_THRESHOLD:
         label_text = "BULLISH"
-    elif score > -0.2:
+    elif score > -TREND_MILD_THRESHOLD:
         label_text = "NEUTRAL"
-    elif score > -0.5:
+    elif score > -TREND_STRONG_THRESHOLD:
         label_text = "BEARISH"
     else:
         label_text = "STRONG BEARISH"
@@ -250,7 +303,7 @@ def _token_volatility(
         return None
     segment = history[-window:]
     vol = statistics.stdev(segment)
-    level = "high" if vol > 0.02 else "moderate" if vol > 0.005 else "low"
+    level = "high" if vol > TOKEN_VOL_HIGH else "moderate" if vol > TOKEN_VOL_MODERATE else "low"
     return IndicatorResult(
         name=f"Token Volatility ({window}pt)",
         value=vol,
@@ -293,12 +346,12 @@ def _token_mean_reversion(
     segment = history[-window:]
     mean = statistics.mean(segment)
     std = statistics.stdev(segment)
-    if std < 1e-9:
+    if std < NEAR_ZERO:
         return None
     z = (history[-1] - mean) / std
-    if abs(z) > 2:
+    if abs(z) > Z_OVEREXTENDED:
         flag = "overextended"
-    elif abs(z) > 1:
+    elif abs(z) > Z_STRETCHED:
         flag = "stretched"
     else:
         flag = "normal"
@@ -322,16 +375,16 @@ def _orderbook_imbalance(
 ) -> IndicatorResult | None:
     bid_d = snap.orderbook.bid_depth
     ask_d = snap.orderbook.ask_depth
-    if ask_d < 1e-9:
+    if ask_d < NEAR_ZERO:
         return None
     ratio = bid_d / ask_d
-    if ratio > 1.5:
+    if ratio > IMBALANCE_STRONG_BUY:
         signal = "strong buy pressure"
-    elif ratio > 1.1:
+    elif ratio > IMBALANCE_SLIGHT_BUY:
         signal = "slight buy pressure"
-    elif ratio < 0.67:
+    elif ratio < IMBALANCE_STRONG_SELL:
         signal = "strong sell pressure"
-    elif ratio < 0.9:
+    elif ratio < IMBALANCE_SLIGHT_SELL:
         signal = "slight sell pressure"
     else:
         signal = "balanced"
@@ -351,11 +404,11 @@ def _spread_trend(
     sp = snap.orderbook.spread_pct
     if sp is None:
         return None
-    if sp > 0.05:
+    if sp > SPREAD_VERY_WIDE:
         level = "very wide"
-    elif sp > 0.02:
+    elif sp > SPREAD_WIDE:
         level = "wide"
-    elif sp > 0.005:
+    elif sp > SPREAD_NORMAL:
         level = "normal"
     else:
         level = "tight"
@@ -375,16 +428,16 @@ def _down_orderbook_imbalance(
     """Bid/ask depth ratio for the DOWN token orderbook."""
     bid_d = snap.down_orderbook.bid_depth
     ask_d = snap.down_orderbook.ask_depth
-    if ask_d < 1e-9:
+    if ask_d < NEAR_ZERO:
         return None
     ratio = bid_d / ask_d
-    if ratio > 1.5:
+    if ratio > IMBALANCE_STRONG_BUY:
         signal = "strong buy pressure on DOWN"
-    elif ratio > 1.1:
+    elif ratio > IMBALANCE_SLIGHT_BUY:
         signal = "slight buy pressure on DOWN"
-    elif ratio < 0.67:
+    elif ratio < IMBALANCE_STRONG_SELL:
         signal = "strong sell pressure on DOWN"
-    elif ratio < 0.9:
+    elif ratio < IMBALANCE_SLIGHT_SELL:
         signal = "slight sell pressure on DOWN"
     else:
         signal = "balanced"
@@ -410,16 +463,16 @@ def _cross_book_flow(
     up_depth = snap.orderbook.bid_depth + snap.orderbook.ask_depth
     down_depth = snap.down_orderbook.bid_depth + snap.down_orderbook.ask_depth
     total = up_depth + down_depth
-    if total < 1e-9:
+    if total < NEAR_ZERO:
         return None
     up_share = up_depth / total
     down_share = down_depth / total
 
-    if up_share > 0.65:
+    if up_share > CROSS_BOOK_HEAVY_THRESHOLD:
         signal = "heavy UP liquidity — possible informed bullish flow"
-    elif down_share > 0.65:
+    elif down_share > CROSS_BOOK_HEAVY_THRESHOLD:
         signal = "heavy DOWN liquidity — possible informed bearish flow"
-    elif abs(up_share - 0.5) < 0.05:
+    elif abs(up_share - 0.5) < CROSS_BOOK_BALANCED_THRESHOLD:
         signal = "balanced liquidity"
     else:
         signal = f"UP={up_share:.0%} DOWN={down_share:.0%}"
@@ -458,9 +511,9 @@ def _best_entry_analysis(
         f"UP ask={up_ask:.3f} (R/R={up_rr:.1f}x)",
         f"DOWN ask={down_ask:.3f} (R/R={down_rr:.1f}x)",
     ]
-    if diff > 0.05:
+    if diff > ENTRY_SIGNIFICANT_DIFF:
         parts.append(f"{cheaper} significantly cheaper")
-    elif diff > 0.02:
+    elif diff > ENTRY_SLIGHT_DIFF:
         parts.append(f"{cheaper} slightly cheaper")
     else:
         parts.append("similar pricing")
@@ -484,9 +537,9 @@ def _token_price_divergence(
         return None
     total = up_mid + down_mid
     deviation = total - 1.0
-    if abs(deviation) > 0.03:
+    if abs(deviation) > DIVERGENCE_SIGNIFICANT:
         flag = "significant divergence"
-    elif abs(deviation) > 0.01:
+    elif abs(deviation) > DIVERGENCE_MINOR:
         flag = "minor divergence"
     else:
         flag = "well-priced"
@@ -534,7 +587,7 @@ def _btc_volatility(
         return None
     segment = history[-window:]
     vol = statistics.stdev(segment)
-    level = "high" if vol > 200 else "moderate" if vol > 50 else "low"
+    level = "high" if vol > BTC_VOL_HIGH else "moderate" if vol > BTC_VOL_MODERATE else "low"
     return IndicatorResult(
         name=f"BTC Volatility ({window}pt)",
         value=vol,
@@ -561,9 +614,9 @@ def _btc_candle_momentum(
     recent = candles[-window:]
     up_count = sum(1 for c in recent if c.direction == "up")
     ratio = up_count / window
-    if ratio >= 0.67:
+    if ratio >= CANDLE_BULLISH_RATIO:
         signal = "bullish momentum"
-    elif ratio <= 0.33:
+    elif ratio <= CANDLE_BEARISH_RATIO:
         signal = "bearish momentum"
     else:
         signal = "mixed"
@@ -632,7 +685,7 @@ def _confidence_calibration(
     if total == 0:
         return None
     diff = session.avg_win_confidence - session.avg_loss_confidence
-    if abs(diff) < 0.01:
+    if abs(diff) < CALIBRATION_TOLERANCE:
         assessment = "well calibrated"
     elif diff > 0:
         assessment = "higher confidence on wins"
@@ -667,11 +720,11 @@ def _consecutive_streak(
             streak += 1
         else:
             break
-    if streak >= 4:
+    if streak >= STREAK_STRONG:
         signal = f"strong {direction} streak — mean reversion likely"
-    elif streak >= 3:
+    elif streak >= STREAK_MODERATE:
         signal = f"moderate {direction} streak — watch for reversal"
-    elif streak >= 2:
+    elif streak >= STREAK_MILD:
         signal = f"mild {direction} continuation"
     else:
         signal = "no streak"
@@ -702,11 +755,11 @@ def _streak_magnitude(
             break
     magnitude = candles[-1].close - candles[streak_start].open
     abs_mag = abs(magnitude)
-    if abs_mag > 200:
+    if abs_mag > MAGNITUDE_EXHAUSTION:
         signal = "exhaustion zone — reversal risk high"
-    elif abs_mag > 100:
+    elif abs_mag > MAGNITUDE_STRONG:
         signal = "strong move — consider fade"
-    elif abs_mag > 50:
+    elif abs_mag > MAGNITUDE_MODERATE:
         signal = "moderate move"
     else:
         signal = "small move"
@@ -777,11 +830,11 @@ def _volatility_30m(
     vol = statistics.stdev(ranges) if len(ranges) >= 2 else 0
     avg_range = statistics.mean(ranges)
 
-    if avg_range > 150:
+    if avg_range > VOL30_HIGH:
         regime = "high volatility — trending market"
-    elif avg_range > 80:
+    elif avg_range > VOL30_MODERATE:
         regime = "moderate volatility"
-    elif avg_range > 30:
+    elif avg_range > VOL30_LOW:
         regime = "low volatility — range-bound"
     else:
         regime = "very low volatility — choppy"
@@ -816,20 +869,20 @@ def _chainlink_divergence(
     pct = divergence / chainlink * 100 if chainlink else 0
 
     # Binance vs Chainlink divergence = resolution risk
-    if abs_div > 50:
+    if abs_div > CHAINLINK_HIGH_DIV:
         signal = "HIGH divergence — resolution risk"
-    elif abs_div > 20:
+    elif abs_div > CHAINLINK_MODERATE_DIV:
         signal = "moderate divergence — monitor"
-    elif abs_div > 5:
+    elif abs_div > CHAINLINK_MINOR_DIV:
         signal = "minor divergence"
     else:
         signal = "aligned"
 
     # If Chainlink is higher, it means the resolution source sees a higher price
     # This matters for "close >= open" comparisons
-    if divergence > 5:
+    if divergence > CHAINLINK_MINOR_DIV:
         note = "Chainlink LOWER → resolution may differ from Binance"
-    elif divergence < -5:
+    elif divergence < -CHAINLINK_MINOR_DIV:
         note = "Chainlink HIGHER → resolution may differ from Binance"
     else:
         note = ""
@@ -862,7 +915,7 @@ def _flat_market_edge(
         return None
 
     # Check recent candles for flat patterns
-    flat_threshold = params.get("flat_threshold", 5.0)  # $ threshold for "flat"
+    flat_threshold = params.get("flat_threshold", DEFAULT_FLAT_THRESHOLD)
     recent = candles[-6:] if len(candles) >= 6 else candles
     flat_count = sum(1 for c in recent if abs(c.close - c.open) < flat_threshold)
     flat_ratio = flat_count / len(recent)
@@ -911,16 +964,16 @@ def _volume_trend(
     prior_3 = candles[-6:-3]
     recent_vol = statistics.mean([c.volume for c in recent_3])
     prior_vol = statistics.mean([c.volume for c in prior_3])
-    if prior_vol < 1e-9:
+    if prior_vol < NEAR_ZERO:
         return None
     ratio = recent_vol / prior_vol
-    if ratio > 1.3:
+    if ratio > VOLUME_INCREASING:
         signal = "increasing — confirms direction"
-    elif ratio > 1.1:
+    elif ratio > VOLUME_SLIGHTLY_INCREASING:
         signal = "slightly increasing"
-    elif ratio < 0.7:
+    elif ratio < VOLUME_DECREASING:
         signal = "decreasing — weakening momentum"
-    elif ratio < 0.9:
+    elif ratio < VOLUME_SLIGHTLY_DECREASING:
         signal = "slightly decreasing"
     else:
         signal = "flat"
