@@ -8,6 +8,7 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Changed
+- **`calibration`** — Converted from single file to package; extracted constants to `constants.py` (bin width, min samples, break-even threshold, data file name, confidence precision); made logger injectable in `ConfidenceCalibrator`; populated `__init__.py` with re-exports; README documenting calibration methodology; 41 new tests
 - **`server`** — Extracted magic numbers to `constants.py` (DB path, env var, SSE interval, host/port defaults, SSE headers); replaced hardcoded values in `app.py` and `run.py` with named constants; added logging to SSE error handler; lazy `app` import in `__init__.py` for optional FastAPI; populated `__init__.py` with re-exports; README documenting endpoints and SSE stream; 12 new tests (6 more when FastAPI installed)
 - **`risk`** — Extracted 5 magic numbers to `constants.py`; made logger injectable in `RiskManager`; populated `__init__.py` with re-exports; 29 new tests at 100% coverage; README documenting all risk checks and thresholds
 - **`logging`** — Extracted file naming constants to `constants.py`; made logger injectable in `TradeLog`; populated `__init__.py` with re-exports; 17 new tests at 100% coverage; README documenting JSONL logging and file rotation
