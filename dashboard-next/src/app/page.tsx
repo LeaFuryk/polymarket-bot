@@ -10,6 +10,13 @@ import { BtcPanel } from "@/components/trading/BtcPanel";
 import { ResolutionTable } from "@/components/trading/ResolutionTable";
 import { RiskBar } from "@/components/trading/RiskBar";
 import { ExecutionQualityBanner } from "@/components/trading/ExecutionQualityBanner";
+import { AdaptiveEntryPanel } from "@/components/trading/AdaptiveEntryPanel";
+import { MLModelPanel } from "@/components/trading/MLModelPanel";
+import { EnsemblePanel } from "@/components/trading/EnsemblePanel";
+import { CalibrationExitPanel } from "@/components/trading/CalibrationExitPanel";
+import { MonitorPanel } from "@/components/trading/MonitorPanel";
+import { ObservationsPanel } from "@/components/trading/ObservationsPanel";
+import { MicrostructurePanel } from "@/components/trading/MicrostructurePanel";
 import { CandleTimeline } from "@/components/candles/CandleTimeline";
 
 export default function TradingPage() {
@@ -17,6 +24,17 @@ export default function TradingPage() {
   const { currentMarket, currentPosition } = useTradingData(ws);
 
   const snapshot = ws.snapshot;
+
+  // Deduplicate resolutions by slug (snapshot refresh can duplicate WS events)
+  const dedupedResolutions = useMemo(() => {
+    const all = [...(snapshot?.resolutions ?? []), ...ws.resolutions];
+    const seen = new Set<string>();
+    return all.filter((r) => {
+      if (!r.slug || seen.has(r.slug)) return false;
+      seen.add(r.slug);
+      return true;
+    });
+  }, [snapshot?.resolutions, ws.resolutions]);
 
   // Compute aggregate open-candle unrealized PnL
   const openPnL = useMemo(() => {
@@ -61,6 +79,26 @@ export default function TradingPage() {
       {/* Execution Quality Banner */}
       <ExecutionQualityBanner trades={[...snapshot.trades, ...ws.trades]} />
 
+      {/* Indicator Panels — 3-col grid */}
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <AdaptiveEntryPanel adaptiveEntry={snapshot.adaptive_entry} />
+        <MLModelPanel mlModel={snapshot.ml_model} />
+        <EnsemblePanel ensemble={snapshot.ensemble} />
+        <CalibrationExitPanel
+          calibration={snapshot.calibration}
+          exitAnalysis={snapshot.exit_analysis}
+        />
+        <MonitorPanel monitor={snapshot.monitor} />
+      </div>
+
+      {/* Full-width panels */}
+      <ObservationsPanel
+        observations={snapshot.observations ?? null}
+        resolutionsSinceReflection={snapshot.resolutions_since_reflection}
+        totalResolutions={snapshot.knowledge_total_resolutions}
+      />
+      <MicrostructurePanel microstructure={snapshot.microstructure ?? null} />
+
       {/* Open candle unrealized PnL */}
       {openPnL !== null && (
         <div className="flex items-center gap-2 rounded-lg border border-white/5 bg-[#131720] px-4 py-2">
@@ -88,9 +126,7 @@ export default function TradingPage() {
         )}
 
       {/* Resolutions */}
-      <ResolutionTable
-        resolutions={[...snapshot.resolutions, ...ws.resolutions]}
-      />
+      <ResolutionTable resolutions={dedupedResolutions} />
     </div>
   );
 }

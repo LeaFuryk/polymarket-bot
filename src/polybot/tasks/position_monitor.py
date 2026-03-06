@@ -360,13 +360,20 @@ class PositionMonitor:
         # Reversal retracement: BTC retraced 80%+ from peak toward open
         # Triggers AI to decide: HOLD (SL stays active) or SELL + flip
         if "reversal" not in self._triggered.get(token_side, ""):
+            # Fail-closed: no entry context yet (race after flip) → skip
+            entry_ctx = self._shared.entry_context.get(token_side)
+            if not entry_ctx:
+                return  # No context — position too new
+
             # Minimum 30s hold time — early BTC noise can cross zero and
             # trigger a premature flip that guarantees a loss on the first leg
-            entry_ctx = self._shared.entry_context.get(token_side)
-            if entry_ctx and (time.time() - entry_ctx.entry_time) < 30:
+            if (time.time() - entry_ctx.entry_time) < 30:
                 return  # Too early — let the position develop
 
-            history = list(self._shared.prefilter_history)
+            # Only use BTC data from AFTER this position was opened —
+            # stale history from a previous position can show an already-
+            # completed retracement and fire immediately after a flip
+            history = [s for s in self._shared.prefilter_history if s.timestamp >= entry_ctx.entry_time]
             if len(history) >= 10:
                 # Compute peak move in the position's favored direction
                 if token_side == "up":

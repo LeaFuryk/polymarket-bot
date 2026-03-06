@@ -10,6 +10,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from polybot.ml_scorer import FEATURE_NAMES
+
 if TYPE_CHECKING:
     from polybot.agent.context import AgentContext
 
@@ -381,6 +383,9 @@ class DashboardAssembler:
                 "realized_pnl": t.realized_pnl,
                 "unrealized_pnl": t.unrealized_pnl,
                 "ai_cost": t.ai_cost,
+                "midpoint_gap": t.extra.get("midpoint_gap"),
+                "up_mid_at_trade": t.extra.get("up_mid"),
+                "down_mid_at_trade": t.extra.get("down_mid"),
                 "screen_passed": t.extra.get("screen_passed"),
                 "screen_input": t.extra.get("screen_input"),
                 "live_order": t.extra.get("live_order"),
@@ -522,6 +527,9 @@ class DashboardAssembler:
             "ml_model": {
                 "training_samples": ctx.ml_scorer._training_samples,
                 "model_trained": ctx.ml_scorer._training_samples >= ctx.ml_scorer._min_samples,
+                "weights": {name: round(w, 4) for name, w in zip(FEATURE_NAMES, ctx.ml_scorer._weights, strict=False)},
+                "bias": round(ctx.ml_scorer._bias, 4),
+                "feature_names": list(FEATURE_NAMES),
             },
             "calibration": {
                 "total_records": ctx.calibrator.total_records,
@@ -589,6 +597,31 @@ class DashboardAssembler:
                 "recovered": ctx.outage_recovered is not None,
                 "last_outage_duration": ctx.last_outage_duration,
             },
+            "observations": [
+                {
+                    "id": obs.id,
+                    "category": obs.category.value if hasattr(obs.category, "value") else obs.category,
+                    "text": obs.text,
+                    "timestamp": obs.timestamp,
+                    "based_on_resolutions": obs.based_on_resolutions,
+                    "expires_after_resolutions": obs.expires_after_resolutions,
+                }
+                for obs in ctx.knowledge_manager.load_active_observations()
+            ],
+            "resolutions_since_reflection": ctx.resolutions_since_reflection,
+            "knowledge_total_resolutions": ctx.knowledge_manager._total_resolutions,
+            "microstructure": [
+                {
+                    "timestamp": ms.timestamp,
+                    "avg_spread_up": round(ms.avg_spread_up, 2),
+                    "avg_spread_down": round(ms.avg_spread_down, 2),
+                    "avg_depth": round(ms.avg_depth, 1),
+                    "avg_imbalance": round(ms.avg_imbalance, 3),
+                    "btc_range": round(ms.btc_range, 1),
+                    "btc_final_move": round(ms.btc_final_move, 1),
+                }
+                for ms in ctx.shared.microstructure_history
+            ],
             "iterations": ctx.iteration_summaries,
             "candle_snapshots": candle_snapshots,
         }
