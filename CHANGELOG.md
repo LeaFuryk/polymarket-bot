@@ -8,6 +8,7 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Changed
+- **`calibration`** — Converted from single file to package; extracted constants to `constants.py` (bin width, min samples, break-even threshold, data file name, confidence precision); made logger injectable in `ConfidenceCalibrator`; populated `__init__.py` with re-exports; README documenting calibration methodology; 41 new tests
 - **`analysis`** — Extracted 6 pure replay functions to `engine.py` (`compute_ob_stats`, `fillability_scan`, `build_decision_timeline`, `post_cancel_recovery`, `live_order_telemetry`, `generate_insights`); extracted 17 constants to `constants.py`; replaced magic numbers in rendering with named constants; populated `__init__.py` with re-exports; `replay.py` reduced from 1107 to 750 LOC; 38 new tests; README documenting architecture
 - **`execution`** — Extracted magic numbers to `constants.py`; extracted 4 pure functions (`snapshot_ob`, `extract_order_fill_info`, `make_fill_from_balance`, `parse_order_response`) to `helpers.py`; populated `__init__.py` with re-exports; README documenting execution pipeline and 3-layer fill detection; 26 new tests
 - **`forensics`** — Extracted magic numbers to `constants.py`; added `Investigator` protocol in `protocols.py`; populated `__init__.py` with re-exports; made logger injectable across all 6 analysis functions + `db.connect()` + `build_report()`; made ML model path injectable in `analyze_context()`; 17 new tests; README documenting pipeline
