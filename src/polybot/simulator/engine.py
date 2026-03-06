@@ -13,15 +13,24 @@ from polybot.models import (
     SimulatedFill,
     TradingDecision,
 )
-
-logger = logging.getLogger(__name__)
+from polybot.simulator.constants import (
+    BPS_DIVISOR,
+    FILL_PRICE_MAX,
+    FILL_PRICE_MIN,
+    THIN_BOOK_PENALTY_FACTOR,
+)
 
 
 class ExecutionSimulator:
     """Simulates trade execution against a live orderbook snapshot."""
 
-    def __init__(self, config: SimulatorConfig) -> None:
+    def __init__(
+        self,
+        config: SimulatorConfig,
+        logger: logging.Logger | None = None,
+    ) -> None:
         self._config = config
+        self._logger = logger or logging.getLogger(__name__)
 
     def calculate_slippage_bps(self, size: float, orderbook: OrderbookSnapshot) -> float:
         """Calculate slippage in basis points based on order size vs liquidity."""
@@ -30,12 +39,11 @@ class ExecutionSimulator:
 
         total_liquidity = orderbook.bid_depth + orderbook.ask_depth
         if total_liquidity <= 0:
-            return self._config.base_slippage_bps * 3  # thin book penalty
+            return self._config.base_slippage_bps * THIN_BOOK_PENALTY_FACTOR
 
         size_ratio = size / total_liquidity
-        # Use higher proportional factor for more realistic slippage modeling
         prop_factor = self._config.proportional_factor
-        return self._config.base_slippage_bps + (size_ratio * prop_factor * 10000)
+        return self._config.base_slippage_bps + (size_ratio * prop_factor * BPS_DIVISOR)
 
     def simulate_market_order(self, decision: TradingDecision, orderbook: OrderbookSnapshot) -> SimulatedFill | None:
         """Simulate a market order fill with slippage and fees."""
@@ -45,14 +53,14 @@ class ExecutionSimulator:
         side = Side.BUY if decision.action == Action.BUY else Side.SELL
 
         if side == Side.BUY and orderbook.best_ask is None:
-            logger.warning("No asks available, cannot fill BUY")
+            self._logger.warning("No asks available, cannot fill BUY")
             return None
         if side == Side.SELL and orderbook.best_bid is None:
-            logger.warning("No bids available, cannot fill SELL")
+            self._logger.warning("No bids available, cannot fill SELL")
             return None
 
         slippage_bps = self.calculate_slippage_bps(decision.size, orderbook)
-        slippage_factor = slippage_bps / 10000
+        slippage_factor = slippage_bps / BPS_DIVISOR
 
         if side == Side.BUY:
             base_price = orderbook.best_ask
@@ -61,11 +69,10 @@ class ExecutionSimulator:
             base_price = orderbook.best_bid
             fill_price = base_price * (1 - slippage_factor)
 
-        # Ensure fill price is in [0, 1] for prediction markets
-        fill_price = max(0.001, min(0.999, fill_price))
+        fill_price = max(FILL_PRICE_MIN, min(FILL_PRICE_MAX, fill_price))
 
         notional = fill_price * decision.size
-        fee_amount = notional * (self._config.fee_bps / 10000)
+        fee_amount = notional * (self._config.fee_bps / BPS_DIVISOR)
 
         if side == Side.BUY:
             total_cost = notional + fee_amount  # cash outflow
