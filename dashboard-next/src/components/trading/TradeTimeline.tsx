@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { formatCurrency, formatTime } from "@/lib/format";
 import type { TradeEntry, TradeEvent } from "@/lib/types";
@@ -16,6 +17,7 @@ function isFull(t: TradeItem): t is TradeEntry {
 }
 
 export function TradeTimeline({ trades, maxItems = 20 }: TradeTimelineProps) {
+  const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
   const displayed = trades.slice(-maxItems).reverse();
 
   if (displayed.length === 0) {
@@ -80,8 +82,24 @@ export function TradeTimeline({ trades, maxItems = 20 }: TradeTimelineProps) {
                 </div>
               </div>
               {t.reasoning && (
-                <div className="mt-2 line-clamp-2 text-[11px] text-zinc-500">
-                  {t.reasoning}
+                <div className="mt-2">
+                  <div
+                    className={`text-[11px] text-zinc-500 ${
+                      expandedIndex === i ? "" : "line-clamp-2"
+                    }`}
+                  >
+                    {t.reasoning}
+                  </div>
+                  {t.reasoning.length > 120 && (
+                    <button
+                      onClick={() =>
+                        setExpandedIndex(expandedIndex === i ? null : i)
+                      }
+                      className="mt-1 text-[10px] text-zinc-600 hover:text-zinc-400"
+                    >
+                      {expandedIndex === i ? "Show less" : "Show more"}
+                    </button>
+                  )}
                 </div>
               )}
             </div>

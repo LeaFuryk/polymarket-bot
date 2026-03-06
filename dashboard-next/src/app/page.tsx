@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import { useWSContext } from "@/components/layout/AppShell";
 import { useTradingData } from "@/hooks/useTradingData";
 import { PnLSummary } from "@/components/trading/PnLSummary";
@@ -15,6 +16,19 @@ export default function TradingPage() {
   const { currentMarket, currentPosition } = useTradingData(ws);
 
   const snapshot = ws.snapshot;
+
+  // Compute aggregate open-candle unrealized PnL
+  const openPnL = useMemo(() => {
+    if (!currentPosition || !currentMarket) return null;
+    const upMid = currentMarket.up_mid;
+    const downMid = currentMarket.down_mid;
+    if (upMid == null || downMid == null) return null;
+    const upUnrealized =
+      currentPosition.up_shares * (upMid - currentPosition.up_avg_entry);
+    const downUnrealized =
+      currentPosition.down_shares * (downMid - currentPosition.down_avg_entry);
+    return upUnrealized + downUnrealized;
+  }, [currentPosition, currentMarket]);
 
   if (!snapshot) {
     return (
@@ -43,10 +57,29 @@ export default function TradingPage() {
       {/* Positions */}
       <PositionPanel position={currentPosition} />
 
+      {/* Open candle unrealized PnL */}
+      {openPnL !== null && (
+        <div className="flex items-center gap-2 rounded-lg border border-white/5 bg-[#131720] px-4 py-2">
+          <span className="text-xs font-semibold tracking-wider text-zinc-500 uppercase">
+            Open Candle PnL
+          </span>
+          <span
+            className={`font-mono text-sm font-semibold ${
+              openPnL >= 0 ? "text-emerald-400" : "text-red-400"
+            }`}
+          >
+            {openPnL >= 0 ? "+" : ""}
+            {openPnL.toFixed(4)}
+          </span>
+        </div>
+      )}
+
       {/* Bottom row: Trades + Resolutions */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <TradeTimeline trades={snapshot.trades} />
-        <ResolutionTable resolutions={snapshot.resolutions} />
+        <TradeTimeline trades={[...snapshot.trades, ...ws.trades]} />
+        <ResolutionTable
+          resolutions={[...snapshot.resolutions, ...ws.resolutions]}
+        />
       </div>
     </div>
   );

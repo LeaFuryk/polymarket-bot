@@ -626,7 +626,11 @@ class DashboardAssembler:
                     self.write_dashboard_json(ctx)
                     # Broadcast snapshot + status to WS clients
                     if ctx.ws_broadcaster and ctx.ws_broadcaster.has_clients:
-                        await ctx.ws_broadcaster.broadcast(ctx.ws_broadcaster.build_snapshot(ctx))
+                        from polybot.ws.protocol import MSG_SNAPSHOT, make_message
+
+                        data = self.assemble_dashboard_data(ctx)
+                        data["ws_clients"] = ctx.ws_broadcaster.client_count
+                        await ctx.ws_broadcaster.broadcast(make_message(MSG_SNAPSHOT, data))
                         await ctx.ws_broadcaster.broadcast(ctx.ws_broadcaster.build_status_update(ctx))
                         ctx.shared.ws_client_count = ctx.ws_broadcaster.client_count
             except Exception:

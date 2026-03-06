@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- **`ws/broadcaster`** — All periodic WS update methods (`build_market_update`, `build_position_update`, `build_status_update`) referenced `TradingAgent` private attributes (`agent._shared`, `agent._config`, etc.) but were called with `AgentContext` which uses public names (`ctx.shared`, `ctx.config`); silent `AttributeError` exceptions killed all real-time broadcasts
+- **`agent/dashboard`** — Removed `build_snapshot` from broadcaster; snapshot now built inline in `dashboard_loop` using `assemble_dashboard_data(ctx)` which already uses correct `AgentContext` attributes
+- **`agent/core`** — Updated initial WS snapshot builder lambda to use `DashboardAssembler.assemble_dashboard_data` instead of removed `build_snapshot`
+- **Dashboard: trades/resolutions** — `page.tsx` now merges real-time WS event arrays (`ws.trades`, `ws.resolutions`) with snapshot data so new trades and resolutions appear immediately without page refresh
+- **Dashboard: hydration warning** — Added `suppressHydrationWarning` to `<html>` and `<body>` in `layout.tsx`
+
+### Added
+- **Dashboard: expandable AI reasoning** — Trade reasoning in `TradeTimeline` can be expanded/collapsed instead of being truncated at 2 lines
+- **Dashboard: open candle PnL** — Aggregate unrealized PnL for the current open candle displayed near the position panel
+
 ## [v0.17.0] — 2026-03-06
 
 ### Changed

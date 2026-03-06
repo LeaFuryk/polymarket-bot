@@ -11,7 +11,6 @@ from polybot.ws.protocol import (
     MSG_MARKET,
     MSG_POSITION,
     MSG_RESOLUTION,
-    MSG_SNAPSHOT,
     MSG_STATUS,
     MSG_TRADE,
     make_message,
@@ -20,7 +19,7 @@ from polybot.ws.protocol import (
 if TYPE_CHECKING:
     from websockets.server import WebSocketServerProtocol
 
-    from polybot.agent import TradingAgent
+    from polybot.agent.context import AgentContext
 
 
 class DashboardBroadcaster:
@@ -63,16 +62,10 @@ class DashboardBroadcaster:
 
     # --- Message builders ---
 
-    def build_snapshot(self, agent: TradingAgent) -> str:
-        """Build a full snapshot message from agent._assemble_dashboard_data()."""
-        data = agent._assemble_dashboard_data()
-        data["ws_clients"] = self.client_count
-        return make_message(MSG_SNAPSHOT, data)
-
-    def build_market_update(self, agent: TradingAgent) -> str:
+    def build_market_update(self, ctx: AgentContext) -> str:
         """Lightweight market price + countdown update (every 1s)."""
-        snapshot = agent._shared.latest_snapshot
-        market = agent._current_market
+        snapshot = ctx.shared.latest_snapshot
+        market = ctx.current_market
 
         data: dict = {"timestamp": time.time()}
 
@@ -91,9 +84,9 @@ class DashboardBroadcaster:
 
         return make_message(MSG_MARKET, data)
 
-    def build_position_update(self, agent: TradingAgent) -> str:
+    def build_position_update(self, ctx: AgentContext) -> str:
         """Position shares + P&L update (every 1s)."""
-        portfolio = agent._portfolio
+        portfolio = ctx.portfolio
         data = {
             "timestamp": time.time(),
             "up_shares": portfolio.up_position.shares,
@@ -101,43 +94,43 @@ class DashboardBroadcaster:
             "down_shares": portfolio.down_position.shares,
             "down_avg_entry": portfolio.down_position.avg_entry_price,
             "cash": portfolio.cash,
-            "position_pnl": dict(agent._shared.position_pnl_pct),
-            "dynamic_sl": dict(agent._shared.dynamic_sl),
-            "dynamic_tp": dict(agent._shared.dynamic_tp),
+            "position_pnl": dict(ctx.shared.position_pnl_pct),
+            "dynamic_sl": dict(ctx.shared.dynamic_sl),
+            "dynamic_tp": dict(ctx.shared.dynamic_tp),
         }
         return make_message(MSG_POSITION, data)
 
-    def build_status_update(self, agent: TradingAgent) -> str:
+    def build_status_update(self, ctx: AgentContext) -> str:
         """Tech metrics: monitor, risk, latencies (every 2s)."""
         data = {
             "timestamp": time.time(),
             "monitor": {
-                "prefilter_snapshots": len(agent._shared.prefilter_history),
+                "prefilter_snapshots": len(ctx.shared.prefilter_history),
                 "ai_cooldown_remaining": max(
                     0,
-                    agent._config.monitor.ai_cooldown_seconds - (time.time() - agent._shared.ai_last_call_time),
+                    ctx.config.monitor.ai_cooldown_seconds - (time.time() - ctx.shared.ai_last_call_time),
                 ),
-                "last_trigger_reason": agent._shared.ai_trigger_reason,
-                "status": agent._shared.monitor_status,
+                "last_trigger_reason": ctx.shared.ai_trigger_reason,
+                "status": ctx.shared.monitor_status,
             },
             "risk": {
-                "daily_pnl": agent._risk.state.daily_pnl,
-                "daily_trades": agent._risk.state.daily_trades,
-                "daily_fees": agent._risk.state.daily_fees,
-                "max_drawdown": agent._risk.state.max_drawdown,
-                "is_halted": agent._risk.state.is_halted,
+                "daily_pnl": ctx.risk.state.daily_pnl,
+                "daily_trades": ctx.risk.state.daily_trades,
+                "daily_fees": ctx.risk.state.daily_fees,
+                "max_drawdown": ctx.risk.state.max_drawdown,
+                "is_halted": ctx.risk.state.is_halted,
             },
-            "api_latencies": agent._shared.api_latencies,
+            "api_latencies": ctx.shared.api_latencies,
             "ws_clients": self.client_count,
-            "sqlite_queue_depth": agent._shared.sqlite_queue_depth,
+            "sqlite_queue_depth": ctx.shared.sqlite_queue_depth,
             "prefilter": {
-                "skip_rate": agent._prefilter.skip_rate,
-                "skipped": agent._prefilter.total_skipped,
-                "checked": agent._prefilter.total_checks,
+                "skip_rate": ctx.prefilter.skip_rate,
+                "skipped": ctx.prefilter.total_skipped,
+                "checked": ctx.prefilter.total_checks,
             },
             "ensemble": {
-                "screen_calls": agent._ai_decision._screen_calls if agent._ai_decision else 0,
-                "screen_passes": agent._ai_decision._screen_passes if agent._ai_decision else 0,
+                "screen_calls": ctx.ai_decision._screen_calls if ctx.ai_decision else 0,
+                "screen_passes": ctx.ai_decision._screen_passes if ctx.ai_decision else 0,
             },
         }
         return make_message(MSG_STATUS, data)
