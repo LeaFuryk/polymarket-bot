@@ -10,11 +10,11 @@ Usage:
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
 from dotenv import load_dotenv
-import os
 
 
 def main() -> None:
@@ -76,7 +76,8 @@ def main() -> None:
             ),
         )
 
-        from py_clob_client.clob_types import BalanceAllowanceParams, AssetType
+        from py_clob_client.clob_types import AssetType, BalanceAllowanceParams
+
         params = BalanceAllowanceParams(asset_type=AssetType.COLLATERAL)
         result = full_client.get_balance_allowance(params)
         balance = float(result.get("balance", 0)) if isinstance(result, dict) else 0.0
