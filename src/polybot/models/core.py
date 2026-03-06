@@ -10,6 +10,13 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from polybot.models.constants import (
+    DEFAULT_CONFIDENCE,
+    DEFAULT_OBSERVATION_EXPIRY,
+    DEFAULT_TTL_SECONDS,
+    FLAT_POSITION_THRESHOLD,
+)
+
 # --- Enums ---
 
 
@@ -166,8 +173,8 @@ class TradingDecision(BaseModel):
     order_type: OrderType = OrderType.MARKET
     size: float = 0.0  # in shares
     limit_price: float | None = None
-    ttl_seconds: int = 300
-    confidence: float = Field(ge=0.0, le=1.0, default=0.5)
+    ttl_seconds: int = DEFAULT_TTL_SECONDS
+    confidence: float = Field(ge=0.0, le=1.0, default=DEFAULT_CONFIDENCE)
     reasoning: str = ""
     market_view: str = ""  # bull/bear/neutral + brief thesis
     token_side: TokenSide = TokenSide.UP  # which token to trade (up or down)
@@ -217,7 +224,7 @@ class PendingLimitOrder(BaseModel):
     size: float
     limit_price: float
     created_at: float = Field(default_factory=time.time)
-    ttl_seconds: int = 300
+    ttl_seconds: int = DEFAULT_TTL_SECONDS
 
     @property
     def expires_at(self) -> float:
@@ -241,7 +248,7 @@ class PositionState(BaseModel):
         return self.shares * self.avg_entry_price  # updated at mark-to-market
 
     def is_flat(self) -> bool:
-        return abs(self.shares) < 1e-9
+        return abs(self.shares) < FLAT_POSITION_THRESHOLD
 
 
 # --- Risk ---
@@ -386,7 +393,7 @@ class Observation(BaseModel):
     text: str
     based_on_resolutions: int  # how many resolutions were in the batch
     resolution_count_at_creation: int  # global resolution counter when created
-    expires_after_resolutions: int = 30  # expire after this many new resolutions
+    expires_after_resolutions: int = DEFAULT_OBSERVATION_EXPIRY
 
 
 class Scorecard(BaseModel):
