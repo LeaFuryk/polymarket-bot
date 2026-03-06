@@ -15,14 +15,14 @@ import math
 from dataclasses import dataclass
 from pathlib import Path
 
-logger = logging.getLogger(__name__)
-
-# Confidence is bucketed into bins of this width
-BIN_WIDTH = 0.10
-# Minimum samples in a bin before we trust the calibration
-MIN_SAMPLES = 10
-# Default break-even threshold (price + fees)
-DEFAULT_BREAK_EVEN = 0.55
+from polybot.calibration.constants import (
+    BIN_WIDTH,
+    CONFIDENCE_PRECISION,
+    DATA_FILE_NAME,
+    DEFAULT_BREAK_EVEN,
+    DEFAULT_CONFIDENCE,
+    MIN_SAMPLES,
+)
 
 
 @dataclass
@@ -68,11 +68,17 @@ class ConfidenceCalibrator:
     Persists data to JSONL for cross-session learning.
     """
 
-    def __init__(self, data_dir: str | Path, break_even: float = DEFAULT_BREAK_EVEN) -> None:
+    def __init__(
+        self,
+        data_dir: str | Path,
+        break_even: float = DEFAULT_BREAK_EVEN,
+        logger: logging.Logger | None = None,
+    ) -> None:
         self._data_dir = Path(data_dir)
         self._data_dir.mkdir(parents=True, exist_ok=True)
-        self._data_path = self._data_dir / "calibration_data.jsonl"
+        self._data_path = self._data_dir / DATA_FILE_NAME
         self._break_even = break_even
+        self._logger = logger or logging.getLogger(__name__)
 
         # Build bins from 0.0 to 1.0
         self._bins: dict[float, CalibrationBin] = {}
@@ -108,7 +114,7 @@ class ConfidenceCalibrator:
                 if not line.strip():
                     continue
                 record = json.loads(line)
-                conf = record.get("confidence", 0.5)
+                conf = record.get("confidence", DEFAULT_CONFIDENCE)
                 won = record.get("won", False)
                 key = self._bin_key(conf)
                 if key in self._bins:
@@ -118,24 +124,24 @@ class ConfidenceCalibrator:
                         self._bins[key].losses += 1
             total = sum(b.total for b in self._bins.values())
             if total > 0:
-                logger.info("Loaded %d calibration records from %s", total, self._data_path)
+                self._logger.info("Loaded %d calibration records from %s", total, self._data_path)
         except Exception:
-            logger.warning("Could not load calibration data", exc_info=True)
+            self._logger.warning("Could not load calibration data", exc_info=True)
 
     def _save_record(self, confidence: float, won: bool, token_side: str, entry_price: float, slug: str) -> None:
         """Append a single calibration record to the JSONL file."""
         try:
             record = {
-                "confidence": round(confidence, 4),
+                "confidence": round(confidence, CONFIDENCE_PRECISION),
                 "won": won,
                 "token_side": token_side,
-                "entry_price": round(entry_price, 4),
+                "entry_price": round(entry_price, CONFIDENCE_PRECISION),
                 "slug": slug,
             }
             with open(self._data_path, "a") as f:
                 f.write(json.dumps(record) + "\n")
         except Exception:
-            logger.warning("Could not save calibration record", exc_info=True)
+            self._logger.warning("Could not save calibration record", exc_info=True)
 
     def register_trade(self, slug: str, confidence: float, token_side: str, entry_price: float) -> None:
         """Register a new trade for calibration tracking.
@@ -176,7 +182,7 @@ class ConfidenceCalibrator:
             # Persist
             self._save_record(confidence, won, token_side, entry_price, slug)
 
-            logger.info(
+            self._logger.info(
                 "Calibration: conf=%.2f side=%s winner=%s → %s (bin %s: %d/%d = %.0f%%)",
                 confidence,
                 token_side,
@@ -195,7 +201,7 @@ class ConfidenceCalibrator:
             shadow_correct = shadow_dir == winner
             if shadow_correct:
                 self._shadow_correct += 1
-            logger.info(
+            self._logger.info(
                 "Shadow prediction: predicted=%s winner=%s → %s (accuracy: %d/%d = %.0f%%)",
                 shadow_dir,
                 winner,
