@@ -50,6 +50,7 @@ def build_trade_record(
     pos = portfolio.position
     mid = ob.midpoint
     down_mid = snapshot.down_orderbook.midpoint
+    midpoint_gap = round((mid or 0.5) + (down_mid or 0.5) - 1.0, 4)
 
     record = TradeRecord(
         cycle_number=cycle,
@@ -79,6 +80,9 @@ def build_trade_record(
         record.candle_slug = market.slug
         record.extra["time_remaining"] = market.time_remaining()
 
+    record.extra["midpoint_gap"] = midpoint_gap
+    record.extra["up_mid"] = round(mid or 0.5, 4)
+    record.extra["down_mid"] = round(down_mid or 0.5, 4)
     record.extra["screen_passed"] = screen_passed
     if screen_input:
         record.extra["screen_input"] = screen_input

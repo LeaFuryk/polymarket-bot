@@ -7,7 +7,11 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+- **`agent/rotation`** — RotationManager uses predictive candle boundary alignment instead of fixed 5s polling — data capture starts within ~5s of candle open and continues until candle end (defers rotation when API returns next market early)
+
 ### Fixed
+- **`tasks/position_monitor`** — Reversal retracement detector fired on stale BTC history after a flip, causing immediate SELL of the new position; now only uses post-entry snapshots and fails closed when entry context is missing (race condition guard)
 - **`ws/broadcaster`** — All periodic WS update methods (`build_market_update`, `build_position_update`, `build_status_update`) referenced `TradingAgent` private attributes (`agent._shared`, `agent._config`, etc.) but were called with `AgentContext` which uses public names (`ctx.shared`, `ctx.config`); silent `AttributeError` exceptions killed all real-time broadcasts
 - **`agent/dashboard`** — Removed `build_snapshot` from broadcaster; snapshot now built inline in `dashboard_loop` using `assemble_dashboard_data(ctx)` which already uses correct `AgentContext` attributes
 - **`agent/core`** — Updated initial WS snapshot builder lambda to use `DashboardAssembler.assemble_dashboard_data` instead of removed `build_snapshot`
@@ -15,6 +19,8 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Dashboard: hydration warning** — Added `suppressHydrationWarning` to `<html>` and `<body>` in `layout.tsx`
 
 ### Added
+- **Dashboard: indicator panels** — All indicator panels on Trading page — Adaptive Entry, ML Model, Ensemble, Calibration, Exit Analysis, Knowledge Observations, Microstructure, Monitor/Prefilter — receiving live data via WebSocket
+- **Midpoint gap metric** — Captures UP+DOWN midpoint sum deviation from 1.0 at trade time; displayed in trade timeline (amber highlight when gap > 3%)
 - **Execution quality monitoring** — Real-time fill rate banner on trading page and per-iteration historical metrics on history page; backend computes fill rate, timeout count, fill source breakdown, avg matched size from `live_order` data
 - **Trade markers on candle charts** — BUY/SELL markers rendered on `CandlePriceChart` SVG at correct time positions; green triangle up (BUY), red triangle down (SELL), amber X overlay for unfilled; click marker to highlight trade in detail list
 - **Trade-to-candle linking** — `TradeTimeline` shows candle slug and FILLED/TIMEOUT badges per trade; execution details row (fill source, size matched, limit price, TTL) shown for live orders; `CandleCard` shows trade count badge; `CandleDetail` shows per-candle trade list with fill status

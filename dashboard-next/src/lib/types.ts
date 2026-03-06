@@ -101,6 +101,11 @@ export interface AdaptiveEntry {
   history_count: number;
   market_trend?: number;
   market_trend_label?: string;
+  using_fakeout?: boolean;
+  fakeout_p75?: number;
+  fakeout_max?: number;
+  fakeout_median?: number;
+  adaptive_cap?: number;
 }
 
 export interface OutageInfo {
@@ -163,6 +168,9 @@ export interface TradeEntry {
   realized_pnl: number;
   unrealized_pnl: number;
   ai_cost: number;
+  midpoint_gap?: number;
+  up_mid_at_trade?: number;
+  down_mid_at_trade?: number;
   screen_passed?: boolean;
   screen_input?: string;
   live_order?: LiveOrderInfo;
@@ -281,6 +289,55 @@ export interface IterationSummary {
   execution_quality?: IterationExecutionQuality;
 }
 
+export interface MLModelData {
+  training_samples: number;
+  model_trained: boolean;
+  weights?: Record<string, number>;
+  bias?: number;
+  feature_names?: string[];
+}
+
+export interface CalibrationData {
+  total_records: number;
+  shadow_correct?: number;
+  shadow_total?: number;
+  shadow_accuracy: number | null;
+  bins: Array<{
+    range: string;
+    wins: number;
+    losses: number;
+    win_rate: number;
+    reliable: boolean;
+  }>;
+}
+
+export interface ExitAnalysisData {
+  total_exits: number;
+  good_exits: number;
+  good_exit_rate: number;
+  total_saved: number;
+  total_missed: number;
+}
+
+export interface ObservationEntry {
+  id: string;
+  category: string;
+  text: string;
+  timestamp: string;
+  based_on_resolutions: number;
+  expires_after_resolutions: number;
+}
+
+export interface MicrostructureEntry {
+  timestamp: number;
+  avg_spread_up: number;
+  avg_spread_down: number;
+  avg_depth: number;
+  avg_imbalance: number;
+  btc_range: number;
+  btc_final_move: number;
+}
+
 export interface EnsembleStats {
   screen_calls: number;
   screen_passes: number;
@@ -308,11 +365,18 @@ export interface SnapshotData {
   monitor: MonitorState;
   adaptive_entry: AdaptiveEntry;
   ensemble: EnsembleStats;
+  ml_model: MLModelData;
+  calibration: CalibrationData;
+  exit_analysis: ExitAnalysisData;
   outage: OutageInfo;
   iterations: IterationSummary[];
   live_trading?: LiveTradingInfo;
   ws_clients?: number;
   candle_snapshots?: CandleSnapshots;
+  observations?: ObservationEntry[];
+  resolutions_since_reflection?: number;
+  knowledge_total_resolutions?: number;
+  microstructure?: MicrostructureEntry[];
 }
 
 // --- Candle Snapshots ---
@@ -405,6 +469,9 @@ export interface TradeEvent {
   portfolio_value: number;
   fee: number;
   ai_cost: number;
+  midpoint_gap?: number;
+  up_mid_at_trade?: number;
+  down_mid_at_trade?: number;
   live_order?: LiveOrderInfo;
 }
 
