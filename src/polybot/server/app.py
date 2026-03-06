@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 from pathlib import Path
 
@@ -15,6 +16,14 @@ from polybot.forensics.db import connect
 from polybot.forensics.execution import analyze_orders
 from polybot.forensics.roundtrips import analyze_roundtrips
 from polybot.forensics.ttl import analyze_ttl
+from polybot.server.constants import (
+    APP_TITLE,
+    DB_ENV_VAR,
+    DEFAULT_DB_PATH,
+    SSE_HEADERS,
+    SSE_MEDIA_TYPE,
+    SSE_POLL_INTERVAL_SECONDS,
+)
 
 try:
     from fastapi import FastAPI
@@ -23,9 +32,9 @@ try:
 except ImportError as err:
     raise ImportError("FastAPI not installed. Install with: uv pip install -e '.[server]'") from err
 
-DB_PATH: str = os.environ.get("POLYBOT_DB", "logs/polybot.db")
+_logger = logging.getLogger(__name__)
 
-app = FastAPI(title="Polybot Forensics API")
+app = FastAPI(title=APP_TITLE)
 
 app.add_middleware(
     CORSMiddleware,
@@ -36,7 +45,7 @@ app.add_middleware(
 
 
 def _get_db_path() -> str:
-    return DB_PATH
+    return os.environ.get(DB_ENV_VAR, DEFAULT_DB_PATH)
 
 
 def _serialize(obj: object) -> str:
@@ -156,17 +165,14 @@ async def sse_stream():
                         yield f"data: {data}\n\n"
                     finally:
                         conn.close()
-            except Exception as e:
-                yield f"data: {json.dumps({'error': str(e)})}\n\n"
+            except Exception:
+                _logger.exception("SSE stream error")
+                yield f"data: {json.dumps({'error': 'internal error'})}\n\n"
 
-            await asyncio.sleep(2)
+            await asyncio.sleep(SSE_POLL_INTERVAL_SECONDS)
 
     return StreamingResponse(
         event_generator(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-        },
+        media_type=SSE_MEDIA_TYPE,
+        headers=SSE_HEADERS,
     )
