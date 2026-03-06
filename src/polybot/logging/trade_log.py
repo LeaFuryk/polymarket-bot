@@ -7,16 +7,25 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from polybot.config import LoggingConfig
+from polybot.logging.constants import (
+    DATE_FORMAT,
+    LOG_FILE_EXTENSION,
+    RESOLUTION_LOG_PREFIX,
+    TRADE_LOG_PREFIX,
+)
 from polybot.models import ResolutionRecord, TradeRecord
-
-logger = logging.getLogger(__name__)
 
 
 class TradeLog:
     """Writes one TradeRecord per line to a JSONL file."""
 
-    def __init__(self, config: LoggingConfig) -> None:
+    def __init__(
+        self,
+        config: LoggingConfig,
+        logger: logging.Logger | None = None,
+    ) -> None:
         self._config = config
+        self._logger = logger or logging.getLogger(__name__)
         self._log_dir = Path(config.log_dir)
         self._log_dir.mkdir(parents=True, exist_ok=True)
         self._file = None
@@ -24,14 +33,14 @@ class TradeLog:
 
     def _ensure_file(self) -> None:
         """Open/rotate log file based on current UTC date."""
-        today = datetime.now(UTC).strftime("%Y%m%d")
+        today = datetime.now(UTC).strftime(DATE_FORMAT)
         if today != self._current_date:
             if self._file:
                 self._file.close()
-            path = self._log_dir / f"trades_{today}.jsonl"
+            path = self._log_dir / f"{TRADE_LOG_PREFIX}{today}{LOG_FILE_EXTENSION}"
             self._file = open(path, "a")  # noqa: SIM115
             self._current_date = today
-            logger.info("Logging trades to %s", path)
+            self._logger.info("Logging trades to %s", path)
 
     def write(self, record: TradeRecord) -> None:
         """Append a trade record to the JSONL log."""
@@ -46,11 +55,11 @@ class TradeLog:
         """Append a resolution record to a separate JSONL log."""
         if not self._config.jsonl_enabled:
             return
-        today = datetime.now(UTC).strftime("%Y%m%d")
-        path = self._log_dir / f"resolutions_{today}.jsonl"
+        today = datetime.now(UTC).strftime(DATE_FORMAT)
+        path = self._log_dir / f"{RESOLUTION_LOG_PREFIX}{today}{LOG_FILE_EXTENSION}"
         with open(path, "a") as f:
             f.write(record.model_dump_json() + "\n")
-        logger.info(
+        self._logger.info(
             "Resolution logged: %s winner=%s pnl=%.4f",
             record.slug,
             record.winner,
