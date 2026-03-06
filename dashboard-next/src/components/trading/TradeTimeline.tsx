@@ -39,7 +39,7 @@ export function TradeTimeline({ trades, maxItems = 20 }: TradeTimelineProps) {
   return (
     <div className="rounded-lg border border-white/5 bg-[#131720] p-4">
       <h3 className="mb-3 text-xs font-semibold tracking-wider text-zinc-500 uppercase">
-        Trades ({trades.length})
+        Trades ({trades.filter((t) => t.action !== "HOLD").length})
       </h3>
       <div className="max-h-[400px] space-y-2 overflow-y-auto pr-1">
         {displayed.map((t, i) => {
@@ -79,7 +79,7 @@ export function TradeTimeline({ trades, maxItems = 20 }: TradeTimelineProps) {
                   </span>
                 </div>
               </div>
-              <div className="mt-2 grid grid-cols-3 gap-2 text-xs">
+              <div className="mt-2 grid grid-cols-4 gap-2 text-xs">
                 <div>
                   <span className="text-zinc-500">Price: </span>
                   <span className="font-mono text-zinc-300">
@@ -98,6 +98,21 @@ export function TradeTimeline({ trades, maxItems = 20 }: TradeTimelineProps) {
                     {(t.confidence * 100).toFixed(0)}%
                   </span>
                 </div>
+                {isFull(t) && t.midpoint_gap != null && (
+                  <div>
+                    <span className="text-zinc-500">Gap: </span>
+                    <span
+                      className={`font-mono ${
+                        Math.abs(t.midpoint_gap) > 0.03
+                          ? "text-amber-400"
+                          : "text-zinc-300"
+                      }`}
+                    >
+                      {t.midpoint_gap > 0 ? "+" : ""}
+                      {(t.midpoint_gap * 100).toFixed(1)}%
+                    </span>
+                  </div>
+                )}
               </div>
               {t.live_order && (
                 <div className="mt-1.5 grid grid-cols-4 gap-2 border-t border-white/5 pt-1.5 text-xs">

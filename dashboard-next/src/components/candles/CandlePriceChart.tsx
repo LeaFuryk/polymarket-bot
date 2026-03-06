@@ -10,10 +10,11 @@ interface CandlePriceChartProps {
 }
 
 const W = 600;
-const H = 200;
-const PAD = { top: 16, right: 16, bottom: 24, left: 16 };
+const H = 220;
+const PAD = { top: 16, right: 36, bottom: 40, left: 36 };
 const PLOT_W = W - PAD.left - PAD.right;
 const PLOT_H = H - PAD.top - PAD.bottom;
+const CANDLE_DURATION = 300; // 5 minutes in seconds
 
 export function CandlePriceChart({
   points,
@@ -23,51 +24,68 @@ export function CandlePriceChart({
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
 
-  // Points already ordered chronologically (high tr → low tr = start → end)
   const data = points;
+
+  // X axis always represents the full 300s candle
+  // elapsed = CANDLE_DURATION - tr (tr=300 → elapsed=0, tr=0 → elapsed=300)
+  const elapsedToX = (elapsed: number) =>
+    PAD.left + (elapsed / CANDLE_DURATION) * PLOT_W;
+
+  const trToX = (tr: number) => elapsedToX(CANDLE_DURATION - tr);
 
   const handleMouseMove = useCallback(
     (e: React.MouseEvent<SVGSVGElement>) => {
-      if (!svgRef.current) return;
+      if (!svgRef.current || data.length === 0) return;
       const rect = svgRef.current.getBoundingClientRect();
       const relX = ((e.clientX - rect.left) / rect.width) * W;
-      const idx = Math.round(((relX - PAD.left) / PLOT_W) * (data.length - 1));
-      setHoverIdx(Math.max(0, Math.min(data.length - 1, idx)));
+      // Convert pixel X to elapsed time, then find closest data point
+      const elapsed = ((relX - PAD.left) / PLOT_W) * CANDLE_DURATION;
+      const targetTr = CANDLE_DURATION - elapsed;
+      // Binary-ish search: data is sorted high-tr → low-tr
+      let closest = 0;
+      let minDist = Infinity;
+      for (let i = 0; i < data.length; i++) {
+        const dist = Math.abs(data[i].tr - targetTr);
+        if (dist < minDist) {
+          minDist = dist;
+          closest = i;
+        }
+      }
+      setHoverIdx(closest);
     },
-    [data.length],
+    [data],
   );
 
   const handleMouseLeave = useCallback(() => setHoverIdx(null), []);
 
-  // Collect all values for Y scaling
-  const allVals: number[] = [];
-  for (const p of data) {
-    if (p.up != null) allVals.push(p.up);
-    if (p.dn != null) allVals.push(p.dn);
-  }
-  if (data.length < 2 || allVals.length === 0) {
+  if (data.length < 2) {
     return (
-      <div className="flex h-[200px] items-center justify-center text-xs text-zinc-500">
+      <div className="flex h-[220px] items-center justify-center text-xs text-zinc-500">
         Not enough data
       </div>
     );
   }
 
-  const minVal = Math.min(...allVals);
-  const maxVal = Math.max(...allVals);
-  const range = maxVal - minVal || 0.01;
+  // Fixed Y axis: 0 at bottom, 1 at top
+  const toY = (v: number) => PAD.top + (1 - v) * PLOT_H;
 
-  const toX = (i: number) => PAD.left + (i / (data.length - 1)) * PLOT_W;
-  const toY = (v: number) => PAD.top + (1 - (v - minVal) / range) * PLOT_H;
+  // Current prices (last data point with valid values)
+  let currentUp: number | null = null;
+  let currentDn: number | null = null;
+  for (let i = data.length - 1; i >= 0; i--) {
+    if (currentUp == null && data[i].up != null) currentUp = data[i].up;
+    if (currentDn == null && data[i].dn != null) currentDn = data[i].dn;
+    if (currentUp != null && currentDn != null) break;
+  }
 
-  // Build line paths
+  // Build line paths — X positioned by time remaining
   const upLine: string[] = [];
   const dnLine: string[] = [];
   const upFill: string[] = [];
   const dnFill: string[] = [];
 
   for (let i = 0; i < data.length; i++) {
-    const x = toX(i);
+    const x = trToX(data[i].tr);
     if (data[i].up != null) {
       const y = toY(data[i].up!);
       upLine.push(`${x},${y}`);
@@ -80,41 +98,55 @@ export function CandlePriceChart({
     }
   }
 
-  // Fill polygons (close to bottom of plot)
+  // Fill polygons — close to bottom at the last data point's X (not full width)
   const bottomY = PAD.top + PLOT_H;
+  const lastX = trToX(data[data.length - 1].tr);
+  const firstX = trToX(data[0].tr);
   const upFillPoly =
     upFill.length > 1
-      ? `${upFill.join(" ")} ${toX(data.length - 1)},${bottomY} ${PAD.left},${bottomY}`
+      ? `${upFill.join(" ")} ${lastX},${bottomY} ${firstX},${bottomY}`
       : "";
   const dnFillPoly =
     dnFill.length > 1
-      ? `${dnFill.join(" ")} ${toX(data.length - 1)},${bottomY} ${PAD.left},${bottomY}`
+      ? `${dnFill.join(" ")} ${lastX},${bottomY} ${firstX},${bottomY}`
       : "";
 
-  // 0.50 baseline
-  const baselineY = 0.5 >= minVal && 0.5 <= maxVal ? toY(0.5) : null;
+  // Y-axis ticks
+  const yTicks = [0, 0.25, 0.5, 0.75, 1.0];
 
   const hoverPoint = hoverIdx != null ? data[hoverIdx] : null;
+  const hoverX = hoverIdx != null ? trToX(data[hoverIdx].tr) : 0;
 
-  // Map trades to chart coordinates
-  const trMin = data[0].tr;
-  const trMax = data[data.length - 1].tr;
-  const trSpan = trMax - trMin || 1;
+  // Time axis ticks — always full 5 minutes (0:00 → 5:00)
+  const timeTicks: { x: number; label: string }[] = [];
+  for (let elapsed = 0; elapsed <= CANDLE_DURATION; elapsed += 60) {
+    const x = elapsedToX(elapsed);
+    const m = Math.floor(elapsed / 60);
+    timeTicks.push({ x, label: `${m}:00` });
+  }
 
+  // Trade markers — position by time_remaining_at_trade
   const tradeMarkers =
     trades && trades.length > 0
       ? trades
           .filter((t) => !t.risk_blocked)
           .map((t) => {
-            const tr = t.time_remaining_at_trade;
-            const frac = (tr - trMin) / trSpan;
-            const x = PAD.left + frac * PLOT_W;
+            const x = trToX(t.time_remaining_at_trade);
             let y: number;
             if (t.fill_price != null) {
               y = toY(t.fill_price);
             } else {
-              const idx = Math.round(frac * (data.length - 1));
-              const pt = data[Math.max(0, Math.min(data.length - 1, idx))];
+              // HOLDs: find closest data point for midpoint
+              let closest = 0;
+              let minDist = Infinity;
+              for (let i = 0; i < data.length; i++) {
+                const d = Math.abs(data[i].tr - t.time_remaining_at_trade);
+                if (d < minDist) {
+                  minDist = d;
+                  closest = i;
+                }
+              }
+              const pt = data[closest];
               const mid =
                 pt.up != null && pt.dn != null
                   ? (pt.up + pt.dn) / 2
@@ -131,11 +163,42 @@ export function CandlePriceChart({
       <svg
         ref={svgRef}
         viewBox={`0 0 ${W} ${H}`}
-        className="h-[200px] w-full"
+        className="h-[220px] w-full"
         preserveAspectRatio="none"
         onMouseMove={handleMouseMove}
         onMouseLeave={handleMouseLeave}
       >
+        {/* Y-axis grid lines and labels */}
+        {yTicks.map((v) => {
+          const y = toY(v);
+          const isBound = v === 0 || v === 1;
+          return (
+            <g key={`y-${v}`}>
+              <line
+                x1={PAD.left}
+                y1={y}
+                x2={W - PAD.right}
+                y2={y}
+                stroke={
+                  isBound ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.05)"
+                }
+                strokeWidth={isBound ? "1" : "0.5"}
+                strokeDasharray={isBound ? undefined : "4,4"}
+              />
+              <text
+                x={PAD.left - 4}
+                y={y + 3}
+                textAnchor="end"
+                fill="rgba(255,255,255,0.3)"
+                fontSize="8"
+                fontFamily="monospace"
+              >
+                {v.toFixed(2)}
+              </text>
+            </g>
+          );
+        })}
+
         {/* Fill areas */}
         {upFillPoly && (
           <polygon points={upFillPoly} fill="#22c55e" opacity="0.1" />
@@ -144,17 +207,56 @@ export function CandlePriceChart({
           <polygon points={dnFillPoly} fill="#ef4444" opacity="0.1" />
         )}
 
-        {/* Baseline at 0.50 */}
-        {baselineY != null && (
-          <line
-            x1={PAD.left}
-            y1={baselineY}
-            x2={W - PAD.right}
-            y2={baselineY}
-            stroke="rgba(255,255,255,0.06)"
-            strokeWidth="0.5"
-            strokeDasharray="4,4"
-          />
+        {/* Current UP price line */}
+        {currentUp != null && (
+          <>
+            <line
+              x1={PAD.left}
+              y1={toY(currentUp)}
+              x2={W - PAD.right}
+              y2={toY(currentUp)}
+              stroke="#22c55e"
+              strokeWidth="0.75"
+              strokeDasharray="6,3"
+              opacity={0.5}
+            />
+            <text
+              x={W - PAD.right + 2}
+              y={toY(currentUp) + 3}
+              fill="#22c55e"
+              fontSize="8"
+              fontFamily="monospace"
+              opacity={0.7}
+            >
+              {currentUp.toFixed(2)}
+            </text>
+          </>
+        )}
+
+        {/* Current DOWN price line */}
+        {currentDn != null && (
+          <>
+            <line
+              x1={PAD.left}
+              y1={toY(currentDn)}
+              x2={W - PAD.right}
+              y2={toY(currentDn)}
+              stroke="#ef4444"
+              strokeWidth="0.75"
+              strokeDasharray="6,3"
+              opacity={0.5}
+            />
+            <text
+              x={W - PAD.right + 2}
+              y={toY(currentDn) + 3}
+              fill="#ef4444"
+              fontSize="8"
+              fontFamily="monospace"
+              opacity={0.7}
+            >
+              {currentDn.toFixed(2)}
+            </text>
+          </>
         )}
 
         {/* UP line */}
@@ -182,9 +284,9 @@ export function CandlePriceChart({
         {/* Hover crosshair */}
         {hoverIdx != null && (
           <line
-            x1={toX(hoverIdx)}
+            x1={hoverX}
             y1={PAD.top}
-            x2={toX(hoverIdx)}
+            x2={hoverX}
             y2={bottomY}
             stroke="rgba(255,255,255,0.2)"
             strokeWidth="1"
@@ -261,6 +363,30 @@ export function CandlePriceChart({
             </g>
           );
         })}
+
+        {/* Time axis — always full 0:00 → 5:00 */}
+        {timeTicks.map((tick, ti) => (
+          <g key={ti}>
+            <line
+              x1={tick.x}
+              y1={bottomY}
+              x2={tick.x}
+              y2={bottomY + 4}
+              stroke="rgba(255,255,255,0.15)"
+              strokeWidth="1"
+            />
+            <text
+              x={tick.x}
+              y={bottomY + 16}
+              textAnchor="middle"
+              fill="rgba(255,255,255,0.3)"
+              fontSize="9"
+              fontFamily="monospace"
+            >
+              {tick.label}
+            </text>
+          </g>
+        ))}
       </svg>
 
       {/* Tooltip */}
@@ -268,11 +394,8 @@ export function CandlePriceChart({
         <div
           className="pointer-events-none absolute top-0 z-10 rounded border border-white/10 bg-[#0d1117] px-2.5 py-1.5 text-[11px] leading-relaxed shadow-lg"
           style={{
-            left: `${(toX(hoverIdx) / W) * 100}%`,
-            transform:
-              hoverIdx > data.length / 2
-                ? "translateX(-110%)"
-                : "translateX(10%)",
+            left: `${(hoverX / W) * 100}%`,
+            transform: hoverX > W / 2 ? "translateX(-110%)" : "translateX(10%)",
           }}
         >
           <div className="text-zinc-400">
