@@ -59,3 +59,26 @@ export function pnlBgColor(value: number): string {
   if (value < -0.001) return "bg-red-500/10";
   return "bg-zinc-500/10";
 }
+
+export function formatCandleSlug(slug: string): string {
+  return slug.replace(/^btc-updown-5m-/, "");
+}
+
+export function formatFillSource(source: string): string {
+  if (!source) return "Timeout";
+  const map: Record<string, string> = {
+    status_poll: "Status Poll",
+    event_stream: "Event Stream",
+    ws_fill: "WS Fill",
+    immediate: "Immediate",
+  };
+  return (
+    map[source] ??
+    source.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
+  );
+}
+
+export function formatLatency(ms: number): string {
+  if (ms >= 1000) return `${(ms / 1000).toFixed(1)}s`;
+  return `${Math.round(ms)}ms`;
+}

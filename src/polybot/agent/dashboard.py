@@ -67,6 +67,24 @@ def enrich_iteration_summary(summary: dict, dd: dict, archive_dir: Path | None =
         "hold_rate": round(len(holds) / len(trades), 3) if trades else 0,
     }
 
+    # Execution quality (live-order fill analysis)
+    live_orders = [t.get("live_order") for t in trades if t.get("live_order")]
+    if live_orders:
+        filled = [lo for lo in live_orders if lo.get("fill_source")]
+        by_source: dict[str, int] = {}
+        for lo in filled:
+            src = lo.get("fill_source", "")
+            by_source[src] = by_source.get(src, 0) + 1
+        matched_sizes = [lo.get("size_matched", 0) for lo in filled if lo.get("size_matched")]
+        summary["execution_quality"] = {
+            "total_orders": len(live_orders),
+            "filled_count": len(filled),
+            "fill_rate": round(len(filled) / len(live_orders), 3) if live_orders else 0,
+            "timeout_count": len(live_orders) - len(filled),
+            "by_fill_source": by_source,
+            "avg_size_matched": round(sum(matched_sizes) / len(matched_sizes), 4) if matched_sizes else 0,
+        }
+
     # Resolution analysis
     ress = dd.get("resolutions", [])
     btc_moves = [abs(r.get("btc_move", 0)) for r in ress]

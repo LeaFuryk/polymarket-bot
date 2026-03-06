@@ -4,7 +4,12 @@ import { useEffect, useState } from "react";
 import { useWSContext } from "@/components/layout/AppShell";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { MetricCard } from "@/components/shared/MetricCard";
-import { formatCurrency, formatUsd, pnlColor } from "@/lib/format";
+import {
+  formatCurrency,
+  formatUsd,
+  formatFillSource,
+  pnlColor,
+} from "@/lib/format";
 import type { IterationSummary } from "@/lib/types";
 
 const MODE_BADGE: Record<
@@ -169,6 +174,70 @@ function IterationCard({
                 <MetricCard
                   label="Wallet Balance"
                   value={formatUsd(iter.live_trading.wallet_balance, 2)}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Execution Quality */}
+          {iter.execution_quality && (
+            <div>
+              <h4 className="mb-2 text-[11px] font-semibold tracking-wider text-zinc-500 uppercase">
+                Execution Quality
+              </h4>
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <MetricCard
+                  label="Fill Rate"
+                  value={
+                    <span
+                      className={
+                        iter.execution_quality.fill_rate >= 0.7
+                          ? "text-green-400"
+                          : iter.execution_quality.fill_rate >= 0.4
+                            ? "text-amber-400"
+                            : "text-red-400"
+                      }
+                    >
+                      {(iter.execution_quality.fill_rate * 100).toFixed(0)}%
+                    </span>
+                  }
+                  subText={`${iter.execution_quality.filled_count}/${iter.execution_quality.total_orders} filled`}
+                />
+                <MetricCard
+                  label="Timeouts"
+                  value={
+                    <span
+                      className={
+                        iter.execution_quality.timeout_count > 0
+                          ? "text-amber-400"
+                          : "text-zinc-400"
+                      }
+                    >
+                      {iter.execution_quality.timeout_count}
+                    </span>
+                  }
+                />
+                <MetricCard
+                  label="Avg Matched"
+                  value={`$${iter.execution_quality.avg_size_matched.toFixed(2)}`}
+                />
+                <MetricCard
+                  label="Fill Sources"
+                  value={
+                    <div className="flex flex-col gap-0.5 text-sm">
+                      {Object.entries(
+                        iter.execution_quality.by_fill_source,
+                      ).map(([src, count]) => (
+                        <span key={src} className="text-zinc-300">
+                          {formatFillSource(src)}: {count}
+                        </span>
+                      ))}
+                      {Object.keys(iter.execution_quality.by_fill_source)
+                        .length === 0 && (
+                        <span className="text-zinc-500">---</span>
+                      )}
+                    </div>
+                  }
                 />
               </div>
             </div>

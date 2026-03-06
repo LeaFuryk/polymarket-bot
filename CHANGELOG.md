@@ -15,6 +15,10 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Dashboard: hydration warning** — Added `suppressHydrationWarning` to `<html>` and `<body>` in `layout.tsx`
 
 ### Added
+- **Execution quality monitoring** — Real-time fill rate banner on trading page and per-iteration historical metrics on history page; backend computes fill rate, timeout count, fill source breakdown, avg matched size from `live_order` data
+- **Trade markers on candle charts** — BUY/SELL markers rendered on `CandlePriceChart` SVG at correct time positions; green triangle up (BUY), red triangle down (SELL), amber X overlay for unfilled; click marker to highlight trade in detail list
+- **Trade-to-candle linking** — `TradeTimeline` shows candle slug and FILLED/TIMEOUT badges per trade; execution details row (fill source, size matched, limit price, TTL) shown for live orders; `CandleCard` shows trade count badge; `CandleDetail` shows per-candle trade list with fill status
+- **Dashboard: candle timeline** — Interactive visualization of per-candle UP/DOWN price evolution with mini sparklines, detail view with hover crosshair chart and metrics grid
 - **Dashboard: expandable AI reasoning** — Trade reasoning in `TradeTimeline` can be expanded/collapsed instead of being truncated at 2 lines
 - **Dashboard: open candle PnL** — Aggregate unrealized PnL for the current open candle displayed near the position panel
 
