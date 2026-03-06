@@ -22,24 +22,23 @@ if TYPE_CHECKING:
 
     from polybot.agent import TradingAgent
 
-logger = logging.getLogger(__name__)
-
 
 class DashboardBroadcaster:
     """Manages connected WS clients and builds typed messages from agent state."""
 
-    def __init__(self) -> None:
+    def __init__(self, logger: logging.Logger | None = None) -> None:
         self._clients: set[WebSocketServerProtocol] = set()
+        self._logger = logger or logging.getLogger(__name__)
 
     # --- Client management ---
 
     def add_client(self, ws: WebSocketServerProtocol) -> None:
         self._clients.add(ws)
-        logger.info("WS client connected (%d total)", len(self._clients))
+        self._logger.info("WS client connected (%d total)", len(self._clients))
 
     def remove_client(self, ws: WebSocketServerProtocol) -> None:
         self._clients.discard(ws)
-        logger.info("WS client disconnected (%d total)", len(self._clients))
+        self._logger.info("WS client disconnected (%d total)", len(self._clients))
 
     @property
     def has_clients(self) -> bool:
