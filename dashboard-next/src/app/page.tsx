@@ -7,9 +7,10 @@ import { PnLSummary } from "@/components/trading/PnLSummary";
 import { MarketInfo } from "@/components/trading/MarketInfo";
 import { PositionPanel } from "@/components/trading/PositionPanel";
 import { BtcPanel } from "@/components/trading/BtcPanel";
-import { TradeTimeline } from "@/components/trading/TradeTimeline";
 import { ResolutionTable } from "@/components/trading/ResolutionTable";
 import { RiskBar } from "@/components/trading/RiskBar";
+import { ExecutionQualityBanner } from "@/components/trading/ExecutionQualityBanner";
+import { CandleTimeline } from "@/components/candles/CandleTimeline";
 
 export default function TradingPage() {
   const ws = useWSContext();
@@ -57,6 +58,9 @@ export default function TradingPage() {
       {/* Positions */}
       <PositionPanel position={currentPosition} />
 
+      {/* Execution Quality Banner */}
+      <ExecutionQualityBanner trades={[...snapshot.trades, ...ws.trades]} />
+
       {/* Open candle unrealized PnL */}
       {openPnL !== null && (
         <div className="flex items-center gap-2 rounded-lg border border-white/5 bg-[#131720] px-4 py-2">
@@ -74,13 +78,19 @@ export default function TradingPage() {
         </div>
       )}
 
-      {/* Bottom row: Trades + Resolutions */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <TradeTimeline trades={[...snapshot.trades, ...ws.trades]} />
-        <ResolutionTable
-          resolutions={[...snapshot.resolutions, ...ws.resolutions]}
-        />
-      </div>
+      {/* Candle Timeline */}
+      {snapshot.candle_snapshots &&
+        Object.keys(snapshot.candle_snapshots).length > 0 && (
+          <CandleTimeline
+            snapshots={snapshot.candle_snapshots}
+            trades={[...snapshot.trades, ...ws.trades]}
+          />
+        )}
+
+      {/* Resolutions */}
+      <ResolutionTable
+        resolutions={[...snapshot.resolutions, ...ws.resolutions]}
+      />
     </div>
   );
 }
