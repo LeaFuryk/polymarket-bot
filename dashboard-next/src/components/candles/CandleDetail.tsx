@@ -11,6 +11,7 @@ import {
 } from "@/lib/format";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { CandlePriceChart } from "./CandlePriceChart";
+import { BtcMoveChart } from "./BtcMoveChart";
 
 interface CandleDetailProps {
   slug: string;
@@ -104,6 +105,9 @@ export function CandleDetail({ slug, candle, trades }: CandleDetailProps) {
         trades={trades}
         onTradeClick={handleTradeClick}
       />
+
+      {/* BTC Move chart */}
+      <BtcMoveChart points={pts} />
 
       {/* Metrics grid */}
       <div className="mt-4 grid grid-cols-3 gap-x-6 gap-y-3 sm:grid-cols-4 lg:grid-cols-6">

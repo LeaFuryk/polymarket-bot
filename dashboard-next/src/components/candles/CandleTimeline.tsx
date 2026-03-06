@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { CandleSnapshots, TradeEntry, TradeEvent } from "@/lib/types";
 import { CandleCard } from "./CandleCard";
 import { CandleDetail } from "./CandleDetail";
@@ -18,11 +18,31 @@ interface CandleTimelineProps {
 
 export function CandleTimeline({ snapshots, trades }: CandleTimelineProps) {
   const slugs = useMemo(() => Object.keys(snapshots), [snapshots]);
+  const prevCountRef = useRef(slugs.length);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   // Auto-select the most recent candle (last key)
   const [selectedSlug, setSelectedSlug] = useState<string | null>(
     slugs.length > 0 ? slugs[slugs.length - 1] : null,
   );
+
+  // Auto-select latest candle when a new one appears
+  useEffect(() => {
+    if (slugs.length > prevCountRef.current) {
+      const latest = slugs[slugs.length - 1];
+      setSelectedSlug(latest);
+      // Scroll the card row to the right end
+      requestAnimationFrame(() => {
+        if (scrollContainerRef.current) {
+          scrollContainerRef.current.scrollTo({
+            left: scrollContainerRef.current.scrollWidth,
+            behavior: "smooth",
+          });
+        }
+      });
+    }
+    prevCountRef.current = slugs.length;
+  }, [slugs]);
 
   // If the previously selected slug is gone, fall back to most recent
   const activeSlug =
@@ -32,8 +52,8 @@ export function CandleTimeline({ snapshots, trades }: CandleTimelineProps) {
         ? slugs[slugs.length - 1]
         : null;
 
-  // Compute trade counts per candle (only full TradeEntry items have position data)
-  const tradesBySlug = useMemo(() => {
+  // All entries per candle (including HOLDs — for chart markers and detail list)
+  const allBySlug = useMemo(() => {
     if (!trades) return {};
     const map: Record<string, TradeEntry[]> = {};
     for (const t of trades) {
@@ -44,7 +64,17 @@ export function CandleTimeline({ snapshots, trades }: CandleTimelineProps) {
     return map;
   }, [trades]);
 
-  const activeTrades = activeSlug ? (tradesBySlug[activeSlug] ?? []) : [];
+  // Trade counts exclude HOLDs (for badge display)
+  const tradeCountBySlug = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const [slug, entries] of Object.entries(allBySlug)) {
+      const count = entries.filter((t) => t.action !== "HOLD").length;
+      if (count > 0) map[slug] = count;
+    }
+    return map;
+  }, [allBySlug]);
+
+  const activeTrades = activeSlug ? (allBySlug[activeSlug] ?? []) : [];
 
   if (slugs.length === 0) return null;
 
@@ -56,7 +86,7 @@ export function CandleTimeline({ snapshots, trades }: CandleTimelineProps) {
       </h2>
 
       {/* Horizontal scroll row of cards */}
-      <div className="flex gap-3 overflow-x-auto pb-1">
+      <div ref={scrollContainerRef} className="flex gap-3 overflow-x-auto pb-1">
         {slugs.map((slug) => (
           <CandleCard
             key={slug}
@@ -64,7 +94,7 @@ export function CandleTimeline({ snapshots, trades }: CandleTimelineProps) {
             candle={snapshots[slug]}
             selected={slug === activeSlug}
             onClick={() => setSelectedSlug(slug)}
-            tradeCount={tradesBySlug[slug]?.length}
+            tradeCount={tradeCountBySlug[slug]}
           />
         ))}
       </div>
