@@ -5,6 +5,8 @@ from __future__ import annotations
 import argparse
 import os
 
+from polybot.server.constants import DB_ENV_VAR, DEFAULT_DB_PATH, DEFAULT_HOST, DEFAULT_PORT
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(
@@ -14,25 +16,25 @@ def main() -> None:
     parser.add_argument(
         "--db",
         type=str,
-        default="logs/polybot.db",
-        help="Path to polybot.db (default: logs/polybot.db)",
+        default=DEFAULT_DB_PATH,
+        help=f"Path to polybot.db (default: {DEFAULT_DB_PATH})",
     )
     parser.add_argument(
         "--host",
         type=str,
-        default="0.0.0.0",
-        help="Bind host (default: 0.0.0.0)",
+        default=DEFAULT_HOST,
+        help=f"Bind host (default: {DEFAULT_HOST})",
     )
     parser.add_argument(
         "--port",
         type=int,
-        default=8888,
-        help="Bind port (default: 8888)",
+        default=DEFAULT_PORT,
+        help=f"Bind port (default: {DEFAULT_PORT})",
     )
     args = parser.parse_args()
 
     # Set DB path for the app module to pick up
-    os.environ["POLYBOT_DB"] = args.db
+    os.environ[DB_ENV_VAR] = args.db
 
     try:
         import uvicorn
