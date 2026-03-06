@@ -2,7 +2,12 @@
 
 import { useState } from "react";
 import { StatusBadge } from "@/components/shared/StatusBadge";
-import { formatCurrency, formatTime } from "@/lib/format";
+import {
+  formatCurrency,
+  formatTime,
+  formatCandleSlug,
+  formatFillSource,
+} from "@/lib/format";
 import type { TradeEntry, TradeEvent } from "@/lib/types";
 
 type TradeItem = TradeEntry | TradeEvent;
@@ -50,16 +55,29 @@ export function TradeTimeline({ trades, maxItems = 20 }: TradeTimelineProps) {
               }`}
             >
               <div className="mb-1 flex items-center justify-between">
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <StatusBadge label={t.action} variant={actionColor} />
                   <StatusBadge label={t.token_side} variant={sideColor} />
                   {t.risk_blocked && (
                     <StatusBadge label="BLOCKED" variant="red" />
                   )}
+                  {t.live_order && (
+                    <StatusBadge
+                      label={t.live_order.fill_source ? "FILLED" : "TIMEOUT"}
+                      variant={t.live_order.fill_source ? "green" : "amber"}
+                    />
+                  )}
                 </div>
-                <span className="font-mono text-[11px] text-zinc-500">
-                  {formatTime(t.timestamp)}
-                </span>
+                <div className="flex items-center gap-2">
+                  {t.candle_slug && (
+                    <span className="font-mono text-[10px] text-cyan-400/70">
+                      {formatCandleSlug(t.candle_slug)}
+                    </span>
+                  )}
+                  <span className="font-mono text-[11px] text-zinc-500">
+                    {formatTime(t.timestamp)}
+                  </span>
+                </div>
               </div>
               <div className="mt-2 grid grid-cols-3 gap-2 text-xs">
                 <div>
@@ -81,6 +99,36 @@ export function TradeTimeline({ trades, maxItems = 20 }: TradeTimelineProps) {
                   </span>
                 </div>
               </div>
+              {t.live_order && (
+                <div className="mt-1.5 grid grid-cols-4 gap-2 border-t border-white/5 pt-1.5 text-xs">
+                  <div>
+                    <span className="text-zinc-500">Source: </span>
+                    <span className="font-mono text-zinc-300">
+                      {formatFillSource(t.live_order.fill_source)}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-zinc-500">Matched: </span>
+                    <span className="font-mono text-zinc-300">
+                      {t.live_order.size_matched?.toFixed(2) ?? "---"}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-zinc-500">Limit: </span>
+                    <span className="font-mono text-zinc-300">
+                      ${t.live_order.limit_price?.toFixed(4) ?? "---"}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-zinc-500">TTL: </span>
+                    <span className="font-mono text-zinc-300">
+                      {t.live_order.ttl_used
+                        ? `${t.live_order.ttl_used.toFixed(1)}s`
+                        : "---"}
+                    </span>
+                  </div>
+                </div>
+              )}
               {t.reasoning && (
                 <div className="mt-2">
                   <div
