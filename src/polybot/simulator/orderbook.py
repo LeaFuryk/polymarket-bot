@@ -15,15 +15,19 @@ from polybot.models import (
     SimulatedFill,
     TradingDecision,
 )
-
-logger = logging.getLogger(__name__)
+from polybot.simulator.constants import BPS_DIVISOR
 
 
 class SimulatedOrderBook:
     """Manages pending limit orders and checks for fills against market data."""
 
-    def __init__(self, config: SimulatorConfig) -> None:
+    def __init__(
+        self,
+        config: SimulatorConfig,
+        logger: logging.Logger | None = None,
+    ) -> None:
         self._config = config
+        self._logger = logger or logging.getLogger(__name__)
         self._orders: list[PendingLimitOrder] = []
 
     @property
@@ -44,7 +48,7 @@ class SimulatedOrderBook:
             ttl_seconds=decision.ttl_seconds or self._config.limit_order_ttl,
         )
         self._orders.append(order)
-        logger.info(
+        self._logger.info(
             "Limit order added: %s %.2f @ %.4f (TTL %ds)",
             order.side.value,
             order.size,
@@ -62,13 +66,13 @@ class SimulatedOrderBook:
         for order in self._orders:
             # Expire old orders
             if order.is_expired(now):
-                logger.info("Limit order expired: %s", order.order_id)
+                self._logger.info("Limit order expired: %s", order.order_id)
                 continue
 
             fill = self._try_fill(order, orderbook)
             if fill:
                 fills.append(fill)
-                logger.info(
+                self._logger.info(
                     "Limit order filled: %s %.2f @ %.4f",
                     order.side.value,
                     fill.size,
@@ -99,7 +103,7 @@ class SimulatedOrderBook:
 
         notional = fill_price * order.size
         # Limit orders typically have lower fees, but use same model for simplicity
-        fee_amount = notional * (self._config.fee_bps / 10000)
+        fee_amount = notional * (self._config.fee_bps / BPS_DIVISOR)
 
         if order.side == Side.BUY:
             total_cost = notional + fee_amount
