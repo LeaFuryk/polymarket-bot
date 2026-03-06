@@ -11,6 +11,28 @@ from pathlib import Path
 import anthropic
 
 from polybot.config import AiConfig
+from polybot.knowledge.constants import (
+    BASE_KNOWLEDGE_FILES,
+    CACHE_TTL_SECONDS,
+    CHEAP_SIDE_THRESHOLD,
+    DEFAULT_OBSERVATION_EXPIRY,
+    DRAWDOWN_ALERT_THRESHOLD,
+    EXPENSIVE_SIDE_THRESHOLD,
+    FEATURE_CONFIG_FILENAME,
+    LOSING_STREAK_THRESHOLD,
+    MAX_NEW_OBSERVATIONS,
+    MIN_EXPENSIVE_SIDE_TRADES,
+    MIN_SIDE_SAMPLES,
+    MIN_TRAILING_TRADES,
+    OBSERVATIONS_FILENAME,
+    RECENT_RESOLUTIONS_WINDOW,
+    REFLECTION_MAX_TOKENS,
+    REFLECTION_TEMPERATURE,
+    SESSION_HISTORY_FILENAME,
+    SESSION_HISTORY_MAX_ROWS,
+    SIDE_ACCURACY_WARNING,
+)
+from polybot.knowledge.scorecard import compute_scorecard, format_scorecard
 from polybot.models import (
     Observation,
     ObservationCategory,
@@ -20,7 +42,7 @@ from polybot.models import (
     TradeRecord,
 )
 
-logger = logging.getLogger(__name__)
+_default_logger = logging.getLogger(__name__)
 
 REFLECTION_PROMPT = """\
 You are reviewing recent trading outcomes for a Polymarket BTC 5-minute candle bot.
@@ -81,99 +103,28 @@ Return ONLY the JSON object, no other text.
 """
 
 
-def compute_scorecard(
-    resolutions: list[ResolutionRecord],
-    trades: list[TradeRecord],
-) -> Scorecard:
-    """Compute quantitative metrics from a batch of resolutions and trades."""
-    if not resolutions:
-        return Scorecard()
-
-    # Count trades that had actual fills (not HOLDs)
-    traded = [t for t in trades if t.fill_price is not None and t.action.value != "HOLD"]
-
-    # Win/loss from resolutions (only those with positions)
-    wins = [r for r in resolutions if r.total_pnl > 0.001]
-    losses = [r for r in resolutions if r.total_pnl < -0.001]
-    total_with_position = len(wins) + len(losses)
-
-    win_rate = len(wins) / total_with_position if total_with_position > 0 else 0.0
-
-    # PnL stats
-    win_pnls = [r.total_pnl for r in wins]
-    loss_pnls = [r.total_pnl for r in losses]
-    all_pnls = [r.total_pnl for r in resolutions if abs(r.total_pnl) > 0.001]
-
-    avg_pnl = sum(all_pnls) / len(all_pnls) if all_pnls else 0.0
-    avg_win = sum(win_pnls) / len(win_pnls) if win_pnls else 0.0
-    avg_loss = sum(loss_pnls) / len(loss_pnls) if loss_pnls else 0.0
-
-    # Hold rate: fraction of resolutions where we had no position
-    flat_count = len(resolutions) - total_with_position
-    hold_rate = flat_count / len(resolutions) if resolutions else 0.0
-
-    return Scorecard(
-        resolutions=len(resolutions),
-        trades_taken=len(traded),
-        win_rate=win_rate,
-        avg_pnl_per_trade=avg_pnl,
-        avg_win_size=avg_win,
-        avg_loss_size=avg_loss,
-        hold_rate=hold_rate,
-    )
-
-
-def format_scorecard(delta: ScorecardDelta) -> str:
-    """Format scorecard with optional delta comparison."""
-    c = delta.current
-    lines = [
-        "### Current Batch",
-        f"- Resolutions: {c.resolutions}",
-        f"- Trades taken: {c.trades_taken}",
-        f"- Win rate: {c.win_rate:.0%}",
-        f"- Avg PnL per traded resolution: ${c.avg_pnl_per_trade:+.4f}",
-        f"- Avg win size: ${c.avg_win_size:+.4f}",
-        f"- Avg loss size: ${c.avg_loss_size:+.4f}",
-        f"- Hold rate: {c.hold_rate:.0%}",
-    ]
-
-    p = delta.previous
-    if p is not None and p.resolutions > 0:
-        lines.append("")
-        lines.append("### Previous Batch (for comparison)")
-        wr_delta = c.win_rate - p.win_rate
-        pnl_delta = c.avg_pnl_per_trade - p.avg_pnl_per_trade
-        lines.append(f"- Win rate: {p.win_rate:.0%} -> {c.win_rate:.0%} ({wr_delta:+.0%})")
-        lines.append(
-            f"- Avg PnL: ${p.avg_pnl_per_trade:+.4f} -> ${c.avg_pnl_per_trade:+.4f} (delta: ${pnl_delta:+.4f})"
-        )
-        lines.append(f"- Trades taken: {p.trades_taken} -> {c.trades_taken}")
-        hr_delta = c.hold_rate - p.hold_rate
-        lines.append(f"- Hold rate: {p.hold_rate:.0%} -> {c.hold_rate:.0%} ({hr_delta:+.0%})")
-    else:
-        lines.append("")
-        lines.append("### Previous Batch")
-        lines.append("(no previous batch — this is the first reflection)")
-
-    return "\n".join(lines)
-
-
 class KnowledgeManager:
     """Loads knowledge files and runs periodic Claude reflection with structured observations."""
 
-    def __init__(self, knowledge_dir: str, ai_config: AiConfig) -> None:
+    def __init__(
+        self,
+        knowledge_dir: str,
+        ai_config: AiConfig,
+        logger: logging.Logger | None = None,
+    ) -> None:
         self._dir = Path(knowledge_dir)
         self._dir.mkdir(parents=True, exist_ok=True)
         self._ai_config = ai_config
         self._client = anthropic.AsyncAnthropic(api_key=ai_config.api_key)
-        self._feature_config_path = self._dir.parent / "feature_config.json"
-        self._observations_path = self._dir / "observations.jsonl"
-        self._session_history_path = self._dir / "session_history.md"
+        self._logger = logger or _default_logger
+        self._feature_config_path = self._dir.parent / FEATURE_CONFIG_FILENAME
+        self._observations_path = self._dir / OBSERVATIONS_FILENAME
+        self._session_history_path = self._dir / SESSION_HISTORY_FILENAME
 
         # Cache for base knowledge (read-only .md files)
         self._cache: str | None = None
         self._cache_time: float = 0.0
-        self._cache_ttl: float = 60.0
+        self._cache_ttl: float = CACHE_TTL_SECONDS
 
         # State persisted across sessions via agent_state.json
         self._previous_scorecard: Scorecard | None = None
@@ -198,7 +149,7 @@ class KnowledgeManager:
         sc_data = data.get("previous_scorecard")
         if sc_data:
             self._previous_scorecard = Scorecard(**sc_data)
-        logger.info(
+        self._logger.info(
             "Knowledge state loaded: total_resolutions=%d, has_previous_scorecard=%s",
             self._total_resolutions,
             self._previous_scorecard is not None,
@@ -212,16 +163,15 @@ class KnowledgeManager:
         if self._cache is not None and (now - self._cache_time) < self._cache_ttl:
             return self._cache
 
-        base_files = ["trading_patterns.md", "self_assessment.md"]
         parts: list[str] = []
-        for name in base_files:
+        for name in BASE_KNOWLEDGE_FILES:
             path = self._dir / name
             try:
                 content = path.read_text().strip()
                 if content:
                     parts.append(content)
             except OSError:
-                logger.debug("Could not read base knowledge file: %s", path)
+                self._logger.debug("Could not read base knowledge file: %s", path)
 
         self._cache = "\n\n---\n\n".join(parts) if parts else ""
         self._cache_time = now
@@ -249,7 +199,7 @@ class KnowledgeManager:
                 if age < obs.expires_after_resolutions:
                     active.append(obs)
         except Exception:
-            logger.warning("Could not load observations", exc_info=True)
+            self._logger.warning("Could not load observations", exc_info=True)
 
         return active
 
@@ -259,7 +209,7 @@ class KnowledgeManager:
             with self._observations_path.open("a") as f:
                 f.write(obs.model_dump_json() + "\n")
         except OSError:
-            logger.warning("Could not append observation")
+            self._logger.warning("Could not append observation")
 
     def _expire_observations(self, ids: list[str]) -> None:
         """Remove specific observation IDs from the file."""
@@ -278,9 +228,9 @@ class KnowledgeManager:
                 if data.get("id") not in id_set:
                     kept.append(line)
             self._observations_path.write_text("\n".join(kept) + "\n" if kept else "")
-            logger.info("Expired %d observations by ID", len(id_set) - len(kept) + len(lines) - len(kept))
+            self._logger.info("Expired %d observations by ID", len(id_set) - len(kept) + len(lines) - len(kept))
         except Exception:
-            logger.warning("Could not expire observations", exc_info=True)
+            self._logger.warning("Could not expire observations", exc_info=True)
 
     def _compact_observations(self) -> None:
         """Remove naturally expired observations from the file."""
@@ -297,20 +247,20 @@ class KnowledgeManager:
                     continue
                 data = json.loads(line)
                 age = self._total_resolutions - data.get("resolution_count_at_creation", 0)
-                if age < data.get("expires_after_resolutions", 30):
+                if age < data.get("expires_after_resolutions", DEFAULT_OBSERVATION_EXPIRY):
                     kept.append(line)
                 else:
                     removed += 1
             if removed > 0:
                 self._observations_path.write_text("\n".join(kept) + "\n" if kept else "")
-                logger.info("Compacted %d expired observations", removed)
+                self._logger.info("Compacted %d expired observations", removed)
         except Exception:
-            logger.warning("Could not compact observations", exc_info=True)
+            self._logger.warning("Could not compact observations", exc_info=True)
 
     # --- Session History ---
 
     def _append_session_history(self, entry: str) -> None:
-        """Append one row to session_history.md, keep last 20."""
+        """Append one row to session_history.md, keep last N rows."""
         try:
             header = "# Session History\n\n| Date | Summary |\n|------|---------|"
 
@@ -329,13 +279,13 @@ class KnowledgeManager:
             new_row = f"| {date_str} | {entry} |"
             existing_rows.append(new_row)
 
-            # Keep last 20
-            existing_rows = existing_rows[-20:]
+            # Keep last N
+            existing_rows = existing_rows[-SESSION_HISTORY_MAX_ROWS:]
 
             content = header + "\n" + "\n".join(existing_rows) + "\n"
             self._session_history_path.write_text(content)
         except Exception:
-            logger.warning("Could not append session history", exc_info=True)
+            self._logger.warning("Could not append session history", exc_info=True)
 
     # --- Feedback Context (injected into decision prompt) ---
 
@@ -363,9 +313,9 @@ class KnowledgeManager:
 
         # Safeguard #5: Drawdown awareness — rolling drawdown from recent resolutions
         if resolutions:
-            recent_10 = resolutions[-10:]
+            recent_10 = resolutions[-RECENT_RESOLUTIONS_WINDOW:]
             rolling_pnl = sum(r.total_pnl for r in recent_10)
-            if rolling_pnl < -5.0:
+            if rolling_pnl < DRAWDOWN_ALERT_THRESHOLD:
                 lines.append(
                     f"## SESSION DRAWDOWN ALERT\n"
                     f"Last {len(recent_10)} resolutions: ${rolling_pnl:+.2f} net.\n"
@@ -382,7 +332,7 @@ class KnowledgeManager:
             filled_trades = [t for t in recent_trades if t.action.value in ("BUY", "SELL") and t.fill_price]
             if filled_trades:
                 # Show last 10 trade decisions with outcomes
-                recent_filled = filled_trades[-10:]
+                recent_filled = filled_trades[-RECENT_RESOLUTIONS_WINDOW:]
 
                 # Resolved BUY trades (used for trailing records + losing streak)
                 resolved_buys = [t for t in filled_trades if t.action.value == "BUY" and res_by_slug.get(t.candle_slug)]
@@ -390,22 +340,23 @@ class KnowledgeManager:
                 down_resolved = [t for t in resolved_buys if t.token_side.value == "down"]
 
                 # Trailing window: show recent performance first to prevent anchoring on stale cumulative stats
-                if len(resolved_buys) >= 5:
-                    trailing = resolved_buys[-5:]
+                if len(resolved_buys) >= MIN_TRAILING_TRADES:
+                    trailing = resolved_buys[-MIN_TRAILING_TRADES:]
                     t_wins = sum(1 for t in trailing if t.token_side.value == res_by_slug[t.candle_slug].winner)
                     t_losses = len(trailing) - t_wins
                     cum_wins = sum(1 for t in resolved_buys if t.token_side.value == res_by_slug[t.candle_slug].winner)
                     cum_losses = len(resolved_buys) - cum_wins
                     cum_wr = cum_wins / len(resolved_buys) * 100
                     lines.append(
-                        f"Recent 5 trades: {t_wins}W/{t_losses}L ({t_wins / 5 * 100:.0f}%) "
+                        f"Recent {MIN_TRAILING_TRADES} trades: {t_wins}W/{t_losses}L "
+                        f"({t_wins / MIN_TRAILING_TRADES * 100:.0f}%) "
                         f"| Session: {cum_wins}W/{cum_losses}L ({cum_wr:.0f}%)"
                     )
                     # Per-side trailing (last 5 resolved per side)
                     side_parts = []
                     for label, side_list in [("UP", up_resolved), ("DOWN", down_resolved)]:
                         if side_list:
-                            st = side_list[-5:]
+                            st = side_list[-MIN_TRAILING_TRADES:]
                             sw = sum(1 for t in st if t.token_side.value == res_by_slug[t.candle_slug].winner)
                             sl = len(st) - sw
                             side_parts.append(f"{label} recent {len(st)}: {sw}W/{sl}L ({sw / len(st):.0%})")
@@ -433,15 +384,15 @@ class KnowledgeManager:
                 # Per-side accuracy context (learning, not avoidance)
                 # Use trailing WR (last 5 per side) when ≥3 samples, else cumulative
                 for label, side_list in [("UP", up_resolved), ("DOWN", down_resolved)]:
-                    if len(side_list) >= 3:
-                        st = side_list[-5:]
+                    if len(side_list) >= MIN_SIDE_SAMPLES:
+                        st = side_list[-MIN_TRAILING_TRADES:]
                         sw = sum(1 for t in st if t.token_side.value == res_by_slug[t.candle_slug].winner)
                         wr = sw / len(st)
                     else:
                         wr = None
-                    if wr is not None and wr < 0.50:
+                    if wr is not None and wr < SIDE_ACCURACY_WARNING:
                         lines.append(
-                            f"  Note: {label} accuracy is {wr:.0%} (recent {len(side_list[-5:])}) — review the trades below "
+                            f"  Note: {label} accuracy is {wr:.0%} (recent {len(side_list[-MIN_TRAILING_TRADES:])}) — review the trades below "
                             f"to find patterns (entry too late? wrong signal?). Do NOT avoid {label} trades entirely; "
                             f"fix the entry criteria instead."
                         )
@@ -453,7 +404,7 @@ class KnowledgeManager:
                             streak += 1
                         else:
                             break
-                    if streak >= 3:
+                    if streak >= LOSING_STREAK_THRESHOLD:
                         lines.append(
                             f"  Note: {streak}-trade losing streak. Review WHY these lost (bad timing? wrong side? weak signal?) "
                             f"and adjust entry criteria. A streak does NOT mean you should stop trading — it means something about your entries needs fixing."
@@ -475,35 +426,37 @@ class KnowledgeManager:
                     opp = t.extra.get("opposite_ask")
                     opp_str = f"${opp:.2f}" if opp is not None else "—"
                     sig = t.extra.get("signal_type", "—")
+                    fp = t.fill_price or 0.0
                     lines.append(
-                        f"| {t.action.value} {t.token_side.value.upper()} | {t.fill_price:.4f} "
+                        f"| {t.action.value} {t.token_side.value.upper()} | {fp:.4f} "
                         f"| {opp_str} | {sig} | {res.winner if res else '?'} | {result} |"
                     )
                     # Track expensive-side pattern in uncertain/contrarian markets
                     if (
                         t.action.value == "BUY"
-                        and t.fill_price > 0.55
+                        and t.fill_price is not None
+                        and t.fill_price > EXPENSIVE_SIDE_THRESHOLD
                         and opp is not None
-                        and opp < 0.40
+                        and opp < CHEAP_SIDE_THRESHOLD
                         and sig in ("UNCERTAIN", "CONTRARIAN")
                         and res
                     ):
                         expensive_side_total += 1
                         if not won:
                             expensive_side_losses += 1
-                lines.append("")
+                    lines.append("")
                 # Pattern warning: expensive-side buying in uncertain markets
-                if expensive_side_total >= 2:
+                if expensive_side_total >= MIN_EXPENSIVE_SIDE_TRADES:
                     lines.append(
                         f"  !! Pattern: {expensive_side_losses}/{expensive_side_total} losses from buying "
-                        f"expensive side (>$0.55) when cheap side was <$0.40 in uncertain markets. "
+                        f"expensive side (>${EXPENSIVE_SIDE_THRESHOLD}) when cheap side was <${CHEAP_SIDE_THRESHOLD} in uncertain markets. "
                         f"The cheap side had better EV."
                     )
                     lines.append("")
 
         # Last 10 resolutions as compact table
         if resolutions:
-            recent = resolutions[-10:]
+            recent = resolutions[-RECENT_RESOLUTIONS_WINDOW:]
             lines.append("Recent resolutions:")
             lines.append("| Slug | Winner | BTC Move | PnL |")
             lines.append("|------|--------|----------|-----|")
@@ -551,7 +504,7 @@ class KnowledgeManager:
         if not resolutions:
             return
 
-        logger.info("Running reflection on %d resolutions, %d trades", len(resolutions), len(trades))
+        self._logger.info("Running reflection on %d resolutions, %d trades", len(resolutions), len(trades))
 
         # Update resolution counter
         self._total_resolutions += len(resolutions)
@@ -598,7 +551,11 @@ class KnowledgeManager:
             rev = t.extra.get("reversal_rate")
             if opp is None or sig is None:
                 continue
-            if t.fill_price > 0.55 and opp < 0.40 and sig in ("UNCERTAIN", "CONTRARIAN"):
+            if (
+                t.fill_price > EXPENSIVE_SIDE_THRESHOLD
+                and opp < CHEAP_SIDE_THRESHOLD
+                and sig in ("UNCERTAIN", "CONTRARIAN")
+            ):
                 res = res_by_slug_refl.get(t.candle_slug)
                 outcome = "?"
                 if res:
@@ -612,7 +569,8 @@ class KnowledgeManager:
         if side_flags:
             side_selection_analysis = (
                 "## Side Selection Analysis\n"
-                "Trades that bought the expensive side (>$0.55) when the opposite was cheap (<$0.40) "
+                f"Trades that bought the expensive side (>${EXPENSIVE_SIDE_THRESHOLD}) "
+                f"when the opposite was cheap (<${CHEAP_SIDE_THRESHOLD}) "
                 "in uncertain/contrarian markets:\n" + "\n".join(side_flags)
             )
         else:
@@ -655,8 +613,8 @@ class KnowledgeManager:
         try:
             response = await self._client.messages.create(
                 model=self._ai_config.model,
-                max_tokens=4096,
-                temperature=0.2,
+                max_tokens=REFLECTION_MAX_TOKENS,
+                temperature=REFLECTION_TEMPERATURE,
                 messages=[{"role": "user", "content": prompt}],
             )
 
@@ -665,7 +623,7 @@ class KnowledgeManager:
             output_cost = response.usage.output_tokens * (self._ai_config.output_cost_per_mtok / 1_000_000)
             self.last_reflection_cost = input_cost + output_cost
             self.total_api_cost += self.last_reflection_cost
-            logger.info(
+            self._logger.info(
                 "Reflection API cost: $%.4f (total: $%.4f) | tokens: %d in / %d out | stop_reason: %s",
                 self.last_reflection_cost,
                 self.total_api_cost,
@@ -675,15 +633,15 @@ class KnowledgeManager:
             )
 
             if response.stop_reason == "max_tokens":
-                logger.warning("Reflection output was truncated (hit max_tokens). Skipping parse.")
+                self._logger.warning("Reflection output was truncated (hit max_tokens). Skipping parse.")
                 return
 
             if not response.content:
-                logger.warning("Reflection returned empty content")
+                self._logger.warning("Reflection returned empty content")
                 return
 
             text = response.content[0].text
-            logger.debug("Reflection raw response (first 500 chars): %s", text[:500])
+            self._logger.debug("Reflection raw response (first 500 chars): %s", text[:500])
 
             # Strip markdown code fences
             stripped = text.strip()
@@ -698,7 +656,7 @@ class KnowledgeManager:
                 stripped = stripped[json_start:]
 
             if not stripped:
-                logger.warning("Reflection response was empty after stripping")
+                self._logger.warning("Reflection response was empty after stripping")
                 return
 
             data = json.loads(stripped)
@@ -706,7 +664,7 @@ class KnowledgeManager:
             # Process observations
             new_obs_data = data.get("observations", [])
             added = 0
-            for obs_data in new_obs_data[:5]:  # Cap at 5
+            for obs_data in new_obs_data[:MAX_NEW_OBSERVATIONS]:
                 try:
                     cat = obs_data.get("category", "pattern")
                     # Validate category
@@ -717,13 +675,13 @@ class KnowledgeManager:
                         text=obs_data.get("text", ""),
                         based_on_resolutions=len(resolutions),
                         resolution_count_at_creation=self._total_resolutions,
-                        expires_after_resolutions=obs_data.get("expires_after_resolutions", 30),
+                        expires_after_resolutions=obs_data.get("expires_after_resolutions", DEFAULT_OBSERVATION_EXPIRY),
                     )
                     if obs.text:
                         self._append_observation(obs)
                         added += 1
                 except Exception:
-                    logger.debug("Skipping invalid observation", exc_info=True)
+                    self._logger.debug("Skipping invalid observation", exc_info=True)
 
             # Expire old observations
             expire_ids = data.get("expire_ids", [])
@@ -740,9 +698,9 @@ class KnowledgeManager:
             if fc and isinstance(fc, dict):
                 try:
                     self._feature_config_path.write_text(json.dumps(fc, indent=2) + "\n")
-                    logger.info("Updated feature config from reflection")
+                    self._logger.info("Updated feature config from reflection")
                 except OSError:
-                    logger.warning("Could not write feature config")
+                    self._logger.warning("Could not write feature config")
 
             # Save current scorecard as previous for next reflection
             self._previous_scorecard = current_scorecard
@@ -750,7 +708,7 @@ class KnowledgeManager:
             # Invalidate cache
             self._cache = None
 
-            logger.info(
+            self._logger.info(
                 "Reflection complete — added %d observations, expired %d, session_entry=%s",
                 added,
                 len(expire_ids),
@@ -758,10 +716,10 @@ class KnowledgeManager:
             )
 
         except json.JSONDecodeError as e:
-            logger.error("Reflection returned invalid JSON: %s", e)
-            logger.debug("Raw text (first 1000 chars): %s", stripped[:1000] if stripped else "(empty)")
+            self._logger.error("Reflection returned invalid JSON: %s", e)
+            self._logger.debug("Raw text (first 1000 chars): %s", stripped[:1000] if stripped else "(empty)")
             # Still save scorecard so next reflection has a comparison
             self._previous_scorecard = current_scorecard
         except Exception:
-            logger.exception("Reflection failed")
+            self._logger.exception("Reflection failed")
             self._previous_scorecard = current_scorecard
