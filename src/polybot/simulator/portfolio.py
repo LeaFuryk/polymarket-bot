@@ -5,14 +5,22 @@ from __future__ import annotations
 import logging
 
 from polybot.models import PositionState, Side, SimulatedFill, TokenSide
-
-logger = logging.getLogger(__name__)
+from polybot.simulator.constants import (
+    DOWN_PRICE_FLOOR,
+    OVERSELL_TOLERANCE,
+    WINNING_TOKEN_PAYOUT,
+)
 
 
 class Portfolio:
     """Tracks Up/Down positions, cash, and realized/unrealized PnL."""
 
-    def __init__(self, initial_cash: float) -> None:
+    def __init__(
+        self,
+        initial_cash: float,
+        logger: logging.Logger | None = None,
+    ) -> None:
+        self._logger = logger or logging.getLogger(__name__)
         self.cash = initial_cash
         self.initial_cash = initial_cash
         self.up_position = PositionState()
@@ -62,7 +70,7 @@ class Portfolio:
     def mark_to_market(self, up_price: float, down_price: float | None = None) -> None:
         """Update unrealized PnL based on current market prices."""
         if down_price is None:
-            down_price = max(0.01, 1.0 - up_price)
+            down_price = max(DOWN_PRICE_FLOOR, 1.0 - up_price)
 
         if self.up_position.shares > 0:
             self.up_position.unrealized_pnl = (up_price - self.up_position.avg_entry_price) * self.up_position.shares
@@ -79,7 +87,7 @@ class Portfolio:
     def total_value_at_market(self, up_price: float, down_price: float | None = None) -> float:
         """Portfolio value using current market prices for positions."""
         if down_price is None:
-            down_price = max(0.01, 1.0 - up_price)
+            down_price = max(DOWN_PRICE_FLOOR, 1.0 - up_price)
         return self.cash + self.up_position.shares * up_price + self.down_position.shares * down_price
 
     def apply_fill(self, fill: SimulatedFill, token_side: TokenSide = TokenSide.UP) -> None:
@@ -104,7 +112,7 @@ class Portfolio:
         pos.shares = total_shares
         self.cash -= fill.total_cost
 
-        logger.info(
+        self._logger.info(
             "BUY %s %.2f shares @ %.4f | cash=%.2f | shares=%.2f",
             token_side.value,
             fill.size,
@@ -115,8 +123,8 @@ class Portfolio:
 
     def _apply_sell(self, fill: SimulatedFill, pos: PositionState, token_side: TokenSide) -> None:
         """Sell shares: decrease position, increase cash."""
-        if fill.size > pos.shares + 1e-9:
-            logger.warning("Attempted to sell more %s shares than held, clamping", token_side.value)
+        if fill.size > pos.shares + OVERSELL_TOLERANCE:
+            self._logger.warning("Attempted to sell more %s shares than held, clamping", token_side.value)
             fill.size = pos.shares
 
         pnl = (fill.fill_price - pos.avg_entry_price) * fill.size
@@ -130,7 +138,7 @@ class Portfolio:
             pos.shares = 0.0
             pos.avg_entry_price = 0.0
 
-        logger.info(
+        self._logger.info(
             "SELL %s %.2f shares @ %.4f | pnl=%.4f | cash=%.2f | shares=%.2f",
             token_side.value,
             fill.size,
@@ -149,35 +157,24 @@ class Portfolio:
         resolution_pnl = self._market_trading_pnl
 
         if winner == "up":
-            # Up token pays $1
-            if self.up_position.shares > 0:
-                payout = self.up_position.shares * 1.0
-                cost_basis = self.up_position.shares * self.up_position.avg_entry_price
-                pnl = payout - cost_basis
-                self.up_position.realized_pnl += pnl
-                self.cash += payout
-                resolution_pnl += pnl
-            # Down token pays $0
-            if self.down_position.shares > 0:
-                cost_basis = self.down_position.shares * self.down_position.avg_entry_price
-                self.down_position.realized_pnl -= cost_basis
-                resolution_pnl -= cost_basis
+            winning, losing = self.up_position, self.down_position
         else:
-            # Down token pays $1
-            if self.down_position.shares > 0:
-                payout = self.down_position.shares * 1.0
-                cost_basis = self.down_position.shares * self.down_position.avg_entry_price
-                pnl = payout - cost_basis
-                self.down_position.realized_pnl += pnl
-                self.cash += payout
-                resolution_pnl += pnl
-            # Up token pays $0
-            if self.up_position.shares > 0:
-                cost_basis = self.up_position.shares * self.up_position.avg_entry_price
-                self.up_position.realized_pnl -= cost_basis
-                resolution_pnl -= cost_basis
+            winning, losing = self.down_position, self.up_position
 
-        logger.info(
+        if winning.shares > 0:
+            payout = winning.shares * WINNING_TOKEN_PAYOUT
+            cost_basis = winning.shares * winning.avg_entry_price
+            pnl = payout - cost_basis
+            winning.realized_pnl += pnl
+            self.cash += payout
+            resolution_pnl += pnl
+
+        if losing.shares > 0:
+            cost_basis = losing.shares * losing.avg_entry_price
+            losing.realized_pnl -= cost_basis
+            resolution_pnl -= cost_basis
+
+        self._logger.info(
             "Market resolved: winner=%s, resolution_pnl=%.4f (trading=%.4f, settlement=%.4f)",
             winner,
             resolution_pnl,
