@@ -38,7 +38,7 @@ from polybot.models import (
     TradeRecord,
 )
 from polybot.prefilter import PreFilter
-from polybot.resolution import ResolutionTracker
+from polybot.resolution import MarketDataResolutionRepo, ResolutionTracker
 from polybot.risk.manager import RiskManager
 from polybot.shared_state import SharedState
 from polybot.simulator.engine import ExecutionSimulator
@@ -83,8 +83,7 @@ class TradingAgent:
 
         # Resolution tracking
         self._resolution_tracker = ResolutionTracker(
-            self._market_data.btc_feed,
-            rest_client=self._market_data._rest,
+            MarketDataResolutionRepo(self._market_data._btc, self._market_data._rest),
         )
 
         # Rules-based pre-filter (checks 1-5 only, no R/R gate)
