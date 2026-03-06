@@ -13,12 +13,26 @@ import asyncio
 import logging
 import time
 from functools import partial
-from typing import Any
 
 from py_clob_client.client import ClobClient
 from py_clob_client.clob_types import ApiCreds, OrderArgs, OrderType
 
 from polybot.config import ApiConfig, TradingConfig
+from polybot.execution.constants import (
+    FEE_RATE_BPS,
+    ORDER_EXPIRATION,
+    POLL_INTERVAL_SECONDS,
+    POST_CANCEL_WAIT_SECONDS,
+    SIGNATURE_TYPE,
+    STEALTH_FILL_TOLERANCE,
+    USDC_DECIMALS,
+)
+from polybot.execution.helpers import (
+    extract_order_fill_info,
+    make_fill_from_balance,
+    parse_order_response,
+    snapshot_ob,
+)
 from polybot.models import (
     Action,
     LiveOrderResult,
@@ -65,7 +79,7 @@ class LiveExecutionEngine:
             chain_id=trading_config.chain_id,
             key=trading_config.private_key,
             creds=creds,
-            signature_type=2,  # POLY_GNOSIS_SAFE (Polymarket browser wallet proxy)
+            signature_type=SIGNATURE_TYPE,
             funder=funder,  # proxy wallet address from polymarket.com/settings
         )
 
@@ -109,12 +123,11 @@ class LiveExecutionEngine:
 
             params = BalanceAllowanceParams(
                 asset_type=AssetType.COLLATERAL,
-                signature_type=2,
+                signature_type=SIGNATURE_TYPE,
             )
             result = await loop.run_in_executor(None, partial(self._client.get_balance_allowance, params))
-            # Balance is in raw USDC units (6 decimals)
             raw = float(result.get("balance", 0)) if isinstance(result, dict) else 0.0
-            balance = raw / 1e6
+            balance = raw / USDC_DECIMALS
             self._wallet_balance = balance
             self._last_balance_sync = time.time()
             return balance
@@ -148,19 +161,6 @@ class LiveExecutionEngine:
         except Exception:
             logger.exception("Failed to cancel CLOB orders")
             return 0
-
-    @staticmethod
-    def _snapshot_ob(ob: OrderbookSnapshot | None) -> dict[str, Any]:
-        """Convert OrderbookSnapshot to compact telemetry dict."""
-        if ob is None:
-            return {}
-        return {
-            "best_bid": ob.best_bid,
-            "best_ask": ob.best_ask,
-            "bid_depth": round(ob.bid_depth, 2),
-            "ask_depth": round(ob.ask_depth, 2),
-            "spread_pct": round(ob.spread_pct, 4) if ob.spread_pct is not None else None,
-        }
 
     async def execute(
         self,
@@ -342,15 +342,15 @@ class LiveExecutionEngine:
 
         # Snapshot orderbook at submit time
         fresh_ob = await self._refetch_orderbook(token_id)
-        result.ob_at_submit = self._snapshot_ob(fresh_ob)
+        result.ob_at_submit = snapshot_ob(fresh_ob)
 
         order_args = OrderArgs(
             token_id=token_id,
             price=limit_price,
             size=size,
             side=clob_side,
-            fee_rate_bps=0,
-            expiration=0,
+            fee_rate_bps=FEE_RATE_BPS,
+            expiration=ORDER_EXPIRATION,
         )
 
         # Create the signed order
@@ -381,7 +381,7 @@ class LiveExecutionEngine:
         if not order_id:
             logger.warning("GTC order posted but no order_id in response: %s", response)
             # Try to parse as immediate fill
-            fill = self._parse_order_response(response, side, size, limit_price)
+            fill = parse_order_response(response, side, size, limit_price)
             if fill:
                 result.fill = fill
                 result.fill_ts = time.time()
@@ -401,11 +401,11 @@ class LiveExecutionEngine:
 
         # Poll for fill — check both status AND size_matched
         for i in range(ttl):
-            await asyncio.sleep(1.0)
+            await asyncio.sleep(POLL_INTERVAL_SECONDS)
             try:
                 order_status = await loop.run_in_executor(None, partial(self._client.get_order, order_id))
 
-                status, sm = self._extract_order_fill_info(order_status)
+                status, sm = extract_order_fill_info(order_status)
                 result.polls.append({"ts": time.time(), "status": status, "size_matched": sm})
 
                 if status in ("MATCHED", "FILLED") or sm > 0:
@@ -423,7 +423,7 @@ class LiveExecutionEngine:
                     except Exception:
                         pass  # Already filled, cancel may fail — that's fine
 
-                    fill = self._parse_order_response(order_status, side, size, limit_price)
+                    fill = parse_order_response(order_status, side, size, limit_price)
                     result.fill = fill
                     result.fill_ts = time.time()
                     result.fill_source = fill_source
@@ -432,7 +432,7 @@ class LiveExecutionEngine:
 
                     # Snapshot orderbook at fill
                     end_ob = await self._refetch_orderbook(token_id)
-                    result.ob_at_end = self._snapshot_ob(end_ob)
+                    result.ob_at_end = snapshot_ob(end_ob)
 
                     # Post-fill balance
                     result.post_balance = await self._get_conditional_balance(token_id)
@@ -443,7 +443,7 @@ class LiveExecutionEngine:
                     result.final_order_status = status
                     result.cancel_ts = time.time()
                     end_ob = await self._refetch_orderbook(token_id)
-                    result.ob_at_end = self._snapshot_ob(end_ob)
+                    result.ob_at_end = snapshot_ob(end_ob)
                     return result
 
             except Exception:
@@ -460,20 +460,20 @@ class LiveExecutionEngine:
 
         # Snapshot orderbook at timeout
         end_ob = await self._refetch_orderbook(token_id)
-        result.ob_at_end = self._snapshot_ob(end_ob)
+        result.ob_at_end = snapshot_ob(end_ob)
 
         # Post-cancel verification: the CLOB API status update is async and
         # can lag 1-3s behind the matching engine.  Wait briefly, then check
         # both the order status and the on-chain balance.
-        await asyncio.sleep(1.0)
+        await asyncio.sleep(POST_CANCEL_WAIT_SECONDS)
 
         # Snapshot orderbook post-cancel (did price come back?)
         post_cancel_ob = await self._refetch_orderbook(token_id)
-        result.ob_post_cancel = self._snapshot_ob(post_cancel_ob)
+        result.ob_post_cancel = snapshot_ob(post_cancel_ob)
 
         try:
             final_status = await loop.run_in_executor(None, partial(self._client.get_order, order_id))
-            status, sm = self._extract_order_fill_info(final_status)
+            status, sm = extract_order_fill_info(final_status)
             result.final_order_status = status
             result.size_matched = sm
 
@@ -485,7 +485,7 @@ class LiveExecutionEngine:
                     status,
                     sm,
                 )
-                fill = self._parse_order_response(final_status, side, size, limit_price)
+                fill = parse_order_response(final_status, side, size, limit_price)
                 result.fill = fill
                 result.fill_ts = time.time()
                 result.fill_source = "post_cancel"
@@ -511,26 +511,6 @@ class LiveExecutionEngine:
             result.fill_source = "stealth_balance"
 
         return result
-
-    @staticmethod
-    def _extract_order_fill_info(order_status) -> tuple[str, float]:
-        """Extract status and size_matched from a get_order response.
-
-        The CLOB API may update ``size_matched`` before the ``status``
-        field transitions to MATCHED, so we always check both.
-        """
-        if isinstance(order_status, dict):
-            status = order_status.get("status", "").upper()
-            # size_matched comes as a string decimal from the CLOB API
-            raw_sm = order_status.get("size_matched", order_status.get("sizeMatched", "0"))
-        else:
-            status = getattr(order_status, "status", "").upper()
-            raw_sm = getattr(order_status, "size_matched", getattr(order_status, "sizeMatched", "0"))
-        try:
-            size_matched = float(raw_sm) if raw_sm else 0.0
-        except (ValueError, TypeError):
-            size_matched = 0.0
-        return status, size_matched
 
     async def _detect_stealth_fill(
         self,
@@ -559,7 +539,7 @@ class LiveExecutionEngine:
         if side == Side.BUY:
             # BUY: we should have MORE conditional tokens
             delta = post_balance - pre_balance
-            if delta >= size * 0.9:  # allow 10% tolerance for rounding
+            if delta >= size * STEALTH_FILL_TOLERANCE:
                 logger.warning(
                     "STEALTH FILL detected via balance check (order_id=%s): "
                     "pre=%.4f post=%.4f delta=%.4f (expected ~%.4f)",
@@ -569,11 +549,11 @@ class LiveExecutionEngine:
                     delta,
                     size,
                 )
-                return self._make_fill_from_balance(side, delta, limit_price), post_balance
+                return make_fill_from_balance(side, delta, limit_price), post_balance
         else:
             # SELL: we should have FEWER conditional tokens
             delta = pre_balance - post_balance
-            if delta >= size * 0.9:
+            if delta >= size * STEALTH_FILL_TOLERANCE:
                 logger.warning(
                     "STEALTH FILL detected via balance check (order_id=%s): "
                     "pre=%.4f post=%.4f delta=%.4f (expected ~%.4f)",
@@ -583,32 +563,9 @@ class LiveExecutionEngine:
                     delta,
                     size,
                 )
-                return self._make_fill_from_balance(side, delta, limit_price), post_balance
+                return make_fill_from_balance(side, delta, limit_price), post_balance
 
         return None, post_balance
-
-    def _make_fill_from_balance(
-        self,
-        side: Side,
-        fill_size: float,
-        limit_price: float,
-    ) -> SimulatedFill:
-        """Construct a SimulatedFill from a balance-detected fill."""
-        notional = limit_price * fill_size
-        fee_bps = 20
-        fee_amount = notional * (fee_bps / 10000)
-        if side == Side.BUY:
-            total_cost = notional + fee_amount
-        else:
-            total_cost = -(notional - fee_amount)
-        return SimulatedFill(
-            side=side,
-            size=fill_size,
-            fill_price=limit_price,
-            slippage_bps=0.0,
-            fee_amount=fee_amount,
-            total_cost=total_cost,
-        )
 
     async def _simulate_limit_order(
         self,
@@ -637,16 +594,16 @@ class LiveExecutionEngine:
 
         # Snapshot initial orderbook
         first_ob = await self._refetch_orderbook(token_id)
-        result.ob_at_submit = self._snapshot_ob(first_ob)
+        result.ob_at_submit = snapshot_ob(first_ob)
 
         for i in range(ttl):
             fresh_ob = await self._refetch_orderbook(token_id)
             if fresh_ob is None:
                 result.polls.append({"ts": time.time(), "status": "NO_OB", "size_matched": 0})
-                await asyncio.sleep(1.0)
+                await asyncio.sleep(POLL_INTERVAL_SECONDS)
                 continue
 
-            ob_snap = self._snapshot_ob(fresh_ob)
+            ob_snap = snapshot_ob(fresh_ob)
             result.polls.append(
                 {
                     "ts": time.time(),
@@ -671,34 +628,20 @@ class LiveExecutionEngine:
                     i,
                     limit_price,
                 )
-                fee_bps = 20  # Polymarket taker fee
-                notional = limit_price * size
-                fee_amount = notional * (fee_bps / 10000)
-                if side == Side.BUY:
-                    total_cost = notional + fee_amount
-                else:
-                    total_cost = -(notional - fee_amount)
-                result.fill = SimulatedFill(
-                    side=side,
-                    size=size,
-                    fill_price=limit_price,
-                    slippage_bps=0.0,
-                    fee_amount=fee_amount,
-                    total_cost=total_cost,
-                )
+                result.fill = make_fill_from_balance(side, size, limit_price)
                 result.fill_ts = time.time()
                 result.fill_source = "dry_run"
                 result.ob_at_end = ob_snap
                 return result
 
             if i < ttl - 1:
-                await asyncio.sleep(1.0)
+                await asyncio.sleep(POLL_INTERVAL_SECONDS)
 
         logger.info("DRY RUN: limit order timeout after %ds (limit=%.4f)", ttl, limit_price)
         result.cancel_ts = time.time()
         # Snapshot final orderbook
         end_ob = await self._refetch_orderbook(token_id)
-        result.ob_at_end = self._snapshot_ob(end_ob)
+        result.ob_at_end = snapshot_ob(end_ob)
         return result
 
     async def _get_conditional_balance(self, token_id: str) -> float | None:
@@ -710,12 +653,11 @@ class LiveExecutionEngine:
             params = BalanceAllowanceParams(
                 asset_type=AssetType.CONDITIONAL,
                 token_id=token_id,
-                signature_type=2,
+                signature_type=SIGNATURE_TYPE,
             )
             result = await loop.run_in_executor(None, partial(self._client.get_balance_allowance, params))
             raw = float(result.get("balance", 0)) if isinstance(result, dict) else 0.0
-            # Conditional token balance is in 6-decimal units (like USDC)
-            balance = raw / 1e6
+            balance = raw / USDC_DECIMALS
             logger.debug("Conditional balance for %s: %.4f (raw=%s)", token_id[:8], balance, raw)
             return balance
         except Exception:
@@ -760,12 +702,12 @@ class LiveExecutionEngine:
                 params = BalanceAllowanceParams(
                     asset_type=AssetType.CONDITIONAL,
                     token_id=token_id,
-                    signature_type=2,
+                    signature_type=SIGNATURE_TYPE,
                 )
             else:
                 params = BalanceAllowanceParams(
                     asset_type=AssetType.COLLATERAL,
-                    signature_type=2,
+                    signature_type=SIGNATURE_TYPE,
                 )
             await loop.run_in_executor(None, partial(self._client.update_balance_allowance, params))
             logger.info(
@@ -775,64 +717,3 @@ class LiveExecutionEngine:
             )
         except Exception:
             logger.warning("Failed to refresh allowance after %s fill", side.value, exc_info=True)
-
-    def _parse_order_response(
-        self,
-        response,
-        side: Side,
-        requested_size: float,
-        requested_price: float,
-    ) -> SimulatedFill | None:
-        """Parse CLOB order response into a SimulatedFill."""
-        if response is None:
-            logger.warning("CLOB order returned None response")
-            return None
-
-        # Response may be a dict or object
-        if isinstance(response, dict):
-            success = response.get("success", False)
-            status = response.get("status", "")
-        else:
-            success = getattr(response, "success", False)
-            status = getattr(response, "status", "")
-
-        if not success and status.upper() not in ("MATCHED", "FILLED"):
-            logger.warning("CLOB order not filled: %s", response)
-            return None
-
-        # Extract fill details from response
-        # The response structure varies — extract what we can
-        fill_price = requested_price  # Use requested if not in response
-        fill_size = requested_size
-
-        if isinstance(response, dict):
-            # Try to get actual fill data
-            if "averagePrice" in response:
-                fill_price = float(response["averagePrice"])
-            if "filledAmount" in response:
-                fill_size = float(response["filledAmount"])
-        else:
-            if hasattr(response, "averagePrice"):
-                fill_price = float(response.averagePrice)
-            if hasattr(response, "filledAmount"):
-                fill_size = float(response.filledAmount)
-
-        # Compute costs
-        slippage_bps = abs(fill_price - requested_price) / requested_price * 10000 if requested_price > 0 else 0
-        notional = fill_price * fill_size
-        fee_bps = 20  # Polymarket taker fee
-        fee_amount = notional * (fee_bps / 10000)
-
-        if side == Side.BUY:
-            total_cost = notional + fee_amount
-        else:
-            total_cost = -(notional - fee_amount)
-
-        return SimulatedFill(
-            side=side,
-            size=fill_size,
-            fill_price=fill_price,
-            slippage_bps=slippage_bps,
-            fee_amount=fee_amount,
-            total_cost=total_cost,
-        )
