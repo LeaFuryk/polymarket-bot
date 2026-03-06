@@ -34,26 +34,23 @@ jobs:
           PROJ_VER=$(grep '^version = ' pyproject.toml | sed 's/version = "\(.*\)"/\1/')
           echo "proj_ver=$PROJ_VER" >> "$GITHUB_OUTPUT"
 
-          # Extract version from CHANGELOG.md
-          CL_VER=$(grep -m1 '^## \[v' CHANGELOG.md | sed 's/## \[v\([^]]*\)\].*/\1/')
-          echo "cl_ver=$CL_VER" >> "$GITHUB_OUTPUT"
-
           TAG="v${PROJ_VER}"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
-          # Validate versions match
-          if [ "$PROJ_VER" != "$CL_VER" ]; then
-            echo "::error::Version mismatch — pyproject.toml has $PROJ_VER but CHANGELOG.md has $CL_VER"
-            exit 1
-          fi
-
           # Check tag doesn't already exist
           if git rev-parse "$TAG" >/dev/null 2>&1; then
-            echo "::error::Tag $TAG already exists. Bump the version in pyproject.toml and CHANGELOG.md first."
+            echo "::error::Tag $TAG already exists. Bump the version in pyproject.toml first."
             exit 1
           fi
 
-          echo "✓ Version $PROJ_VER is consistent and tag $TAG does not exist yet"
+          # Check that [Unreleased] section exists and has content
+          UNRELEASED_CONTENT=$(awk '/^## \[Unreleased\]/{found=1; next} /^## /{if(found) exit} found' CHANGELOG.md)
+          if [ -z "$(echo "$UNRELEASED_CONTENT" | tr -d '[:space:]')" ]; then
+            echo "::error::No content under [Unreleased] in CHANGELOG.md. Add release notes before releasing."
+            exit 1
+          fi
+
+          echo "✓ Version $PROJ_VER — tag $TAG does not exist, [Unreleased] has content"
 
       - name: Extract release notes from [Unreleased]
         run: |
@@ -149,6 +146,9 @@ jobs:
           NEXT="${{ steps.next.outputs.next_ver }}"
           BRANCH="chore/bump-v${NEXT}"
 
+          # Delete stale remote branch from prior partial runs
+          git push origin --delete "$BRANCH" 2>/dev/null || true
+
           git checkout -b "$BRANCH"
 
           # Bump pyproject.toml
@@ -175,16 +175,14 @@ jobs:
 
           TAG="${{ steps.versions.outputs.tag }}"
 
-          BODY="Automated version bump after releasing ${TAG}.
-
-          Bumps \`pyproject.toml\` and \`CHANGELOG.md\` to \`v${NEXT}\` for the next development cycle.
-
-          Created by the **Release - Tag & Bump** workflow."
-
           gh pr create \
             --base main \
             --head "$BRANCH" \
             --title "chore: bump version to v${NEXT}" \
-            --body "$BODY"
+            --body "Automated version bump after releasing ${TAG}.
+
+          Bumps \`pyproject.toml\` and \`CHANGELOG.md\` to \`v${NEXT}\` for the next development cycle.
+
+          Created by the **Release - Tag & Bump** workflow."
 
           echo "✓ Created bump PR for v${NEXT}"
