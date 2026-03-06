@@ -123,6 +123,25 @@ export interface LiveTradingInfo {
   execution_cost: number;
 }
 
+export interface LiveOrderInfo {
+  order_id: string;
+  limit_price: number;
+  submit_ts: number;
+  fill_ts: number | null;
+  cancel_ts: number | null;
+  fill_source: string;
+  ttl_used: number;
+  polls: number;
+  final_order_status: string;
+  size_matched: number;
+  decision_ob_ask: number;
+  decision_ob_bid: number;
+  ob_at_submit: Record<string, number>;
+  ob_at_end: Record<string, number>;
+  pre_balance: number;
+  post_balance: number;
+}
+
 export interface TradeEntry {
   timestamp: string;
   cycle: number;
@@ -146,7 +165,7 @@ export interface TradeEntry {
   ai_cost: number;
   screen_passed?: boolean;
   screen_input?: string;
-  live_order?: Record<string, unknown>;
+  live_order?: LiveOrderInfo;
 }
 
 export interface ResolutionEntry {
@@ -210,6 +229,15 @@ export interface IterationExitAnalysis {
   total_missed: number;
 }
 
+export interface IterationExecutionQuality {
+  total_orders: number;
+  filled_count: number;
+  fill_rate: number;
+  timeout_count: number;
+  by_fill_source: Record<string, number>;
+  avg_size_matched: number;
+}
+
 export interface IterationLiveTrading {
   mode: string;
   dry_run: boolean;
@@ -250,6 +278,7 @@ export interface IterationSummary {
   observations?: Array<{ category: string; text: string; timestamp: string }>;
   session_history?: string;
   live_trading?: IterationLiveTrading;
+  execution_quality?: IterationExecutionQuality;
 }
 
 export interface EnsembleStats {
@@ -283,7 +312,39 @@ export interface SnapshotData {
   iterations: IterationSummary[];
   live_trading?: LiveTradingInfo;
   ws_clients?: number;
+  candle_snapshots?: CandleSnapshots;
 }
+
+// --- Candle Snapshots ---
+
+export interface CandleSnapshotPoint {
+  tr: number;
+  up: number | null;
+  dn: number | null;
+  btc_mv: number | null;
+  pf: boolean;
+  pfr: string | null;
+  ind: string | null;
+  u_sp: number | null;
+  d_sp: number | null;
+  u_dep: number | null;
+  d_dep: number | null;
+  btc: number | null;
+  u_ask: number | null;
+  d_ask: number | null;
+  rr_u: number | null;
+  rr_d: number | null;
+  stk: number | null;
+  stk_d: string | null;
+}
+
+export interface CandleSnapshot {
+  winner: string | null;
+  btc_open: number;
+  points: CandleSnapshotPoint[];
+}
+
+export type CandleSnapshots = Record<string, CandleSnapshot>;
 
 // --- Lightweight update messages ---
 
@@ -344,7 +405,7 @@ export interface TradeEvent {
   portfolio_value: number;
   fee: number;
   ai_cost: number;
-  live_order?: Record<string, unknown>;
+  live_order?: LiveOrderInfo;
 }
 
 export interface ResolutionEvent {
