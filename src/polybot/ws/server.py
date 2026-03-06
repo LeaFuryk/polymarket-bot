@@ -8,11 +8,10 @@ from typing import TYPE_CHECKING
 import websockets
 
 from polybot.ws.broadcaster import DashboardBroadcaster
+from polybot.ws.constants import DEFAULT_WS_HOST, DEFAULT_WS_PORT, PING_INTERVAL_SECONDS, PING_TIMEOUT_SECONDS
 
 if TYPE_CHECKING:
     from websockets.server import WebSocketServerProtocol
-
-logger = logging.getLogger(__name__)
 
 
 class DashboardWSServer:
@@ -21,12 +20,14 @@ class DashboardWSServer:
     def __init__(
         self,
         broadcaster: DashboardBroadcaster,
-        host: str = "0.0.0.0",
-        port: int = 8765,
+        host: str = DEFAULT_WS_HOST,
+        port: int = DEFAULT_WS_PORT,
+        logger: logging.Logger | None = None,
     ) -> None:
         self._broadcaster = broadcaster
         self._host = host
         self._port = port
+        self._logger = logger or logging.getLogger(__name__)
         self._server: websockets.WebSocketServer | None = None
         self._initial_snapshot_builder = None  # set by agent
 
@@ -36,17 +37,17 @@ class DashboardWSServer:
             self._handler,
             self._host,
             self._port,
-            ping_interval=20,
-            ping_timeout=20,
+            ping_interval=PING_INTERVAL_SECONDS,
+            ping_timeout=PING_TIMEOUT_SECONDS,
         )
-        logger.info("WS server started on port %d", self._port)
+        self._logger.info("WS server started on port %d", self._port)
 
     async def stop(self) -> None:
         """Gracefully shut down the server."""
         if self._server is not None:
             self._server.close()
             await self._server.wait_closed()
-            logger.info("WS server stopped")
+            self._logger.info("WS server stopped")
 
     async def _handler(self, ws: WebSocketServerProtocol, path: str = "") -> None:
         """Handle a single WebSocket client connection."""
@@ -58,7 +59,7 @@ class DashboardWSServer:
                     snapshot_msg = self._initial_snapshot_builder()
                     await ws.send(snapshot_msg)
                 except Exception:
-                    logger.debug("Failed to send initial snapshot", exc_info=True)
+                    self._logger.debug("Failed to send initial snapshot", exc_info=True)
 
             # Keep connection alive — listen for client messages (unused for now)
             async for _msg in ws:
@@ -66,6 +67,6 @@ class DashboardWSServer:
         except websockets.ConnectionClosed:
             pass
         except Exception:
-            logger.debug("WS handler error", exc_info=True)
+            self._logger.debug("WS handler error", exc_info=True)
         finally:
             self._broadcaster.remove_client(ws)

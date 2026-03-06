@@ -4,12 +4,20 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from polybot.ws.broadcaster import DashboardBroadcaster
+from polybot.ws.constants import (
+    DEFAULT_WS_HOST,
+    DEFAULT_WS_PORT,
+    PING_INTERVAL_SECONDS,
+    PING_TIMEOUT_SECONDS,
+)
 from polybot.ws.protocol import (
+    ALL_TYPES,
     MSG_MARKET,
     MSG_POSITION,
     MSG_RESOLUTION,
@@ -19,6 +27,52 @@ from polybot.ws.protocol import (
     make_message,
 )
 from polybot.ws.server import DashboardWSServer
+
+# --- Constants tests ---
+
+
+class TestConstants:
+    def test_default_host(self):
+        assert DEFAULT_WS_HOST == "0.0.0.0"
+
+    def test_default_port(self):
+        assert DEFAULT_WS_PORT == 8765
+
+    def test_ping_interval(self):
+        assert PING_INTERVAL_SECONDS == 20
+
+    def test_ping_timeout(self):
+        assert PING_TIMEOUT_SECONDS == 20
+
+    def test_all_types_frozenset(self):
+        assert len(ALL_TYPES) == 6
+        assert MSG_SNAPSHOT in ALL_TYPES
+
+
+# --- Injectable logger tests ---
+
+
+class TestInjectableLoggers:
+    def test_broadcaster_default_logger(self):
+        b = DashboardBroadcaster()
+        assert b._logger.name == "polybot.ws.broadcaster"
+
+    def test_broadcaster_custom_logger(self):
+        custom = logging.getLogger("test.broadcaster")
+        b = DashboardBroadcaster(logger=custom)
+        assert b._logger is custom
+
+    def test_server_default_logger(self):
+        b = DashboardBroadcaster()
+        s = DashboardWSServer(b)
+        assert s._logger.name == "polybot.ws.server"
+
+    def test_server_custom_logger(self):
+        custom = logging.getLogger("test.server")
+        b = DashboardBroadcaster()
+        s = DashboardWSServer(b, logger=custom)
+        assert s._logger is custom
+
 
 # --- Protocol tests ---
 
@@ -270,3 +324,29 @@ class TestServer:
                 assert parsed["data"]["price"] == 85000
         finally:
             await server.stop()
+
+
+# --- Re-export tests ---
+
+
+class TestReExports:
+    def test_broadcaster_reexported(self):
+        from polybot.ws import DashboardBroadcaster
+
+        assert DashboardBroadcaster is not None
+
+    def test_server_reexported(self):
+        from polybot.ws import DashboardWSServer
+
+        assert DashboardWSServer is not None
+
+    def test_make_message_reexported(self):
+        from polybot.ws import make_message
+
+        assert callable(make_message)
+
+    def test_constants_reexported(self):
+        from polybot.ws import DEFAULT_WS_HOST, DEFAULT_WS_PORT
+
+        assert DEFAULT_WS_HOST == "0.0.0.0"
+        assert DEFAULT_WS_PORT == 8765
