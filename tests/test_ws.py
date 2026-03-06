@@ -190,24 +190,12 @@ class TestBroadcaster:
         assert parsed["data"]["btc_move"] == pytest.approx(100.0)
         assert parsed["data"]["pnl"] == 5.50
 
-    def test_build_snapshot_calls_assemble(self):
-        b = DashboardBroadcaster()
-        agent = MagicMock()
-        agent._assemble_dashboard_data.return_value = {"test": True}
-
-        msg = b.build_snapshot(agent)
-        parsed = json.loads(msg)
-        assert parsed["type"] == "snapshot"
-        assert parsed["data"]["test"] is True
-        assert "ws_clients" in parsed["data"]
-        agent._assemble_dashboard_data.assert_called_once()
-
     def test_build_market_update(self):
         b = DashboardBroadcaster()
-        agent = MagicMock()
-        agent._current_market = MagicMock()
-        agent._current_market.time_remaining.return_value = 120.0
-        agent._current_market.slug = "btc-updown-5m-123"
+        ctx = MagicMock()
+        ctx.current_market = MagicMock()
+        ctx.current_market.time_remaining.return_value = 120.0
+        ctx.current_market.slug = "btc-updown-5m-123"
 
         snapshot = MagicMock()
         snapshot.orderbook.midpoint = 0.45
@@ -215,9 +203,9 @@ class TestBroadcaster:
         snapshot.btc_price.price_usd = 85000.0
         snapshot.btc_price.chainlink_price = 85001.0
         snapshot.btc_price.price_source = "chainlink_ws"
-        agent._shared.latest_snapshot = snapshot
+        ctx.shared.latest_snapshot = snapshot
 
-        msg = b.build_market_update(agent)
+        msg = b.build_market_update(ctx)
         parsed = json.loads(msg)
         assert parsed["type"] == "market"
         assert parsed["data"]["time_remaining"] == 120.0
@@ -225,17 +213,17 @@ class TestBroadcaster:
 
     def test_build_position_update(self):
         b = DashboardBroadcaster()
-        agent = MagicMock()
-        agent._portfolio.up_position.shares = 10.0
-        agent._portfolio.up_position.avg_entry_price = 0.45
-        agent._portfolio.down_position.shares = 0.0
-        agent._portfolio.down_position.avg_entry_price = 0.0
-        agent._portfolio.cash = 955.0
-        agent._shared.position_pnl_pct = {"up": 0.05}
-        agent._shared.dynamic_sl = {"up": -0.25}
-        agent._shared.dynamic_tp = {"up": 0.50}
+        ctx = MagicMock()
+        ctx.portfolio.up_position.shares = 10.0
+        ctx.portfolio.up_position.avg_entry_price = 0.45
+        ctx.portfolio.down_position.shares = 0.0
+        ctx.portfolio.down_position.avg_entry_price = 0.0
+        ctx.portfolio.cash = 955.0
+        ctx.shared.position_pnl_pct = {"up": 0.05}
+        ctx.shared.dynamic_sl = {"up": -0.25}
+        ctx.shared.dynamic_tp = {"up": 0.50}
 
-        msg = b.build_position_update(agent)
+        msg = b.build_position_update(ctx)
         parsed = json.loads(msg)
         assert parsed["type"] == "position"
         assert parsed["data"]["up_shares"] == 10.0
@@ -243,27 +231,27 @@ class TestBroadcaster:
 
     def test_build_status_update(self):
         b = DashboardBroadcaster()
-        agent = MagicMock()
-        agent._shared.prefilter_history = [1] * 50
-        agent._config.monitor.ai_cooldown_seconds = 60.0
-        agent._shared.ai_last_call_time = 0.0
-        agent._shared.ai_trigger_reason = "R/R threshold"
-        agent._shared.monitor_status = {"gate": "open"}
-        agent._risk.state.daily_pnl = -5.0
-        agent._risk.state.daily_trades = 3
-        agent._risk.state.daily_fees = 0.30
-        agent._risk.state.max_drawdown = -8.0
-        agent._risk.state.is_halted = False
-        agent._shared.api_latencies = {"clob": 150}
-        agent._shared.sqlite_queue_depth = 0
-        agent._prefilter.skip_rate = 0.65
-        agent._prefilter.total_skipped = 65
-        agent._prefilter.total_checks = 100
-        agent._ai_decision = MagicMock()
-        agent._ai_decision._screen_calls = 10
-        agent._ai_decision._screen_passes = 5
+        ctx = MagicMock()
+        ctx.shared.prefilter_history = [1] * 50
+        ctx.config.monitor.ai_cooldown_seconds = 60.0
+        ctx.shared.ai_last_call_time = 0.0
+        ctx.shared.ai_trigger_reason = "R/R threshold"
+        ctx.shared.monitor_status = {"gate": "open"}
+        ctx.risk.state.daily_pnl = -5.0
+        ctx.risk.state.daily_trades = 3
+        ctx.risk.state.daily_fees = 0.30
+        ctx.risk.state.max_drawdown = -8.0
+        ctx.risk.state.is_halted = False
+        ctx.shared.api_latencies = {"clob": 150}
+        ctx.shared.sqlite_queue_depth = 0
+        ctx.prefilter.skip_rate = 0.65
+        ctx.prefilter.total_skipped = 65
+        ctx.prefilter.total_checks = 100
+        ctx.ai_decision = MagicMock()
+        ctx.ai_decision._screen_calls = 10
+        ctx.ai_decision._screen_passes = 5
 
-        msg = b.build_status_update(agent)
+        msg = b.build_status_update(ctx)
         parsed = json.loads(msg)
         assert parsed["type"] == "status"
         assert parsed["data"]["risk"]["daily_pnl"] == -5.0

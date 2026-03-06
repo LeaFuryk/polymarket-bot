@@ -132,7 +132,15 @@ class TradingAgent:
             broadcaster=self._ws_broadcaster,
             port=config.logging.ws_port,
         )
-        self._ws_server._initial_snapshot_builder = lambda: self._ws_broadcaster.build_snapshot(self)
+
+        def _build_initial_snapshot() -> str:
+            from polybot.ws.protocol import MSG_SNAPSHOT, make_message
+
+            data = self._dashboard_assembler.assemble_dashboard_data(self._ctx)
+            data["ws_clients"] = self._ws_broadcaster.client_count
+            return make_message(MSG_SNAPSHOT, data)
+
+        self._ws_server._initial_snapshot_builder = _build_initial_snapshot
 
         # ML features for training after resolution
         self._pending_ml_features: dict[str, dict[str, float]] = {}

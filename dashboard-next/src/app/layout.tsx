@@ -28,8 +28,14 @@ export default function RootLayout({
     <html
       lang="en"
       className={`dark ${jetbrainsMono.variable} ${spaceGrotesk.variable}`}
+      suppressHydrationWarning
     >
-      <body className="bg-[#080a0e] text-zinc-200 antialiased">{children}</body>
+      <body
+        className="bg-[#080a0e] text-zinc-200 antialiased"
+        suppressHydrationWarning
+      >
+        {children}
+      </body>
     </html>
   );
 }
