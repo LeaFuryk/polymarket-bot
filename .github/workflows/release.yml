@@ -106,6 +106,9 @@ jobs:
           git add CHANGELOG.md
           git commit -m "chore: release ${TAG} — update CHANGELOG heading"
 
+          # Push the CHANGELOG commit so the release target exists on the remote
+          git push origin HEAD:main
+
           echo "✓ Renamed [Unreleased] to [${TAG}] — ${TODAY}"
 
       - name: Create tag & release
@@ -118,7 +121,7 @@ jobs:
           cat /tmp/release-notes.md /tmp/pr-list.md > /tmp/release-body.md
 
           gh release create "$TAG" \
-            --target "$(git rev-parse HEAD)" \
+            --target main \
             --title "$TAG" \
             --notes-file /tmp/release-body.md
 
