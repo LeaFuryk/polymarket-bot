@@ -15,28 +15,39 @@ from polybot.models import (
     TokenSide,
     TradingDecision,
 )
-
-logger = logging.getLogger(__name__)
+from polybot.risk.constants import (
+    CASH_BUFFER_FACTOR,
+    DATE_FORMAT,
+    DEFAULT_FILL_PRICE,
+    DEPTH_RATIO_LIMIT,
+    SHORT_SELL_TOLERANCE,
+)
 
 
 class RiskManager:
     """Two-stage risk management: pre-trade (saves API cost) and post-trade."""
 
-    def __init__(self, config: RiskConfig, initial_cash: float) -> None:
+    def __init__(
+        self,
+        config: RiskConfig,
+        initial_cash: float,
+        logger: logging.Logger | None = None,
+    ) -> None:
         self._config = config
         self._initial_cash = initial_cash
+        self._logger = logger or logging.getLogger(__name__)
         self.state = RiskState(peak_portfolio_value=initial_cash)
         self._day_start: str = self._today()
 
     @staticmethod
     def _today() -> str:
-        return datetime.now(UTC).strftime("%Y-%m-%d")
+        return datetime.now(UTC).strftime(DATE_FORMAT)
 
     def _maybe_reset_daily(self) -> None:
         """Reset daily counters if a new UTC day has started."""
         today = self._today()
         if today != self._day_start:
-            logger.info("New trading day, resetting daily counters")
+            self._logger.info("New trading day, resetting daily counters")
             self.state.daily_pnl = 0.0
             self.state.daily_trades = 0
             self.state.daily_fees = 0.0
@@ -141,7 +152,7 @@ class RiskManager:
 
         # Max position size
         if decision.action == Action.BUY:
-            fill_price = ob.best_ask or 0.5
+            fill_price = ob.best_ask or DEFAULT_FILL_PRICE
             notional_cost = decision.size * fill_price
             position_value = position.shares * position.avg_entry_price + notional_cost
             max_position = portfolio_value * self._config.max_position_pct
@@ -156,7 +167,7 @@ class RiskManager:
 
         # Concentration limit (combined across both tokens)
         if decision.action == Action.BUY:
-            fill_price = ob.best_ask or 0.5
+            fill_price = ob.best_ask or DEFAULT_FILL_PRICE
             new_position_value = (position.shares + decision.size) * fill_price
             max_concentration = portfolio_value * self._config.max_concentration_pct
             if new_position_value > max_concentration:
@@ -170,8 +181,8 @@ class RiskManager:
 
         # Cash sufficiency
         if decision.action == Action.BUY:
-            fill_price = ob.best_ask or 0.5
-            required_cash = decision.size * fill_price * 1.005
+            fill_price = ob.best_ask or DEFAULT_FILL_PRICE
+            required_cash = decision.size * fill_price * CASH_BUFFER_FACTOR
             if required_cash > cash:
                 results.append(
                     RiskCheckResult(
@@ -183,7 +194,7 @@ class RiskManager:
 
         # Short-sell prevention
         if decision.action == Action.SELL:
-            if decision.size > position.shares + 1e-9:
+            if decision.size > position.shares + SHORT_SELL_TOLERANCE:
                 results.append(
                     RiskCheckResult(
                         passed=False,
@@ -194,25 +205,25 @@ class RiskManager:
 
         # Order size vs depth check
         if decision.action == Action.BUY and ob.ask_depth > 0:
-            fill_price = ob.best_ask or 0.5
+            fill_price = ob.best_ask or DEFAULT_FILL_PRICE
             order_notional = decision.size * fill_price
-            if order_notional > ob.ask_depth * 0.5:
+            if order_notional > ob.ask_depth * DEPTH_RATIO_LIMIT:
                 results.append(
                     RiskCheckResult(
                         passed=False,
                         check_name="order_vs_depth",
-                        reason=f"Order {order_notional:.2f} > 50% of ask depth {ob.ask_depth:.2f}",
+                        reason=f"Order {order_notional:.2f} > {DEPTH_RATIO_LIMIT:.0%} of ask depth {ob.ask_depth:.2f}",
                     )
                 )
         elif decision.action == Action.SELL and ob.bid_depth > 0:
-            fill_price = ob.best_bid or 0.5
+            fill_price = ob.best_bid or DEFAULT_FILL_PRICE
             order_notional = decision.size * fill_price
-            if order_notional > ob.bid_depth * 0.5:
+            if order_notional > ob.bid_depth * DEPTH_RATIO_LIMIT:
                 results.append(
                     RiskCheckResult(
                         passed=False,
                         check_name="order_vs_depth",
-                        reason=f"Order {order_notional:.2f} > 50% of bid depth {ob.bid_depth:.2f}",
+                        reason=f"Order {order_notional:.2f} > {DEPTH_RATIO_LIMIT:.0%} of bid depth {ob.bid_depth:.2f}",
                     )
                 )
 
