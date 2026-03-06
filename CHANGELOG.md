@@ -7,6 +7,9 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Refactored
+- **`adaptive_entry`** — Converted from single 735-LOC file to a package: `reversal_detector` (retracement detection), `threshold_calculator` (fakeout-based thresholds), `ai_context` (prompt generation), `tracker` (orchestrator). Dashboard uses public `window_size`/`history_count` properties instead of private attrs. Added 59 tests.
+
 ### Changed
 - **`agent/rotation`** — RotationManager uses predictive candle boundary alignment instead of fixed 5s polling — data capture starts within ~5s of candle open and continues until candle end (defers rotation when API returns next market early)
 
