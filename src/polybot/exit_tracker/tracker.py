@@ -1,4 +1,4 @@
-"""Quantitative exit strategy tracker — logs exits and measures what-if outcomes.
+"""ExitTracker — logs exits and measures what-if outcomes for strategy optimization.
 
 For every SELL (exit), records:
 - The exit price and time remaining
@@ -18,7 +18,16 @@ import logging
 from dataclasses import dataclass
 from pathlib import Path
 
-logger = logging.getLogger(__name__)
+from polybot.exit_tracker.constants import (
+    EXIT_ANALYSIS_FILENAME,
+    LOST_VALUE,
+    PRICE_PRECISION,
+    SIZE_PRECISION,
+    TIME_PRECISION,
+    WON_VALUE,
+)
+
+_default_logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -41,10 +50,15 @@ class ExitRecord:
 class ExitTracker:
     """Tracks exits and computes what-if outcomes for strategy optimization."""
 
-    def __init__(self, data_dir: str | Path) -> None:
+    def __init__(
+        self,
+        data_dir: str | Path,
+        logger: logging.Logger | None = None,
+    ) -> None:
         self._data_dir = Path(data_dir)
         self._data_dir.mkdir(parents=True, exist_ok=True)
-        self._data_path = self._data_dir / "exit_analysis.jsonl"
+        self._data_path = self._data_dir / EXIT_ANALYSIS_FILENAME
+        self._logger = logger or _default_logger
 
         # Pending exits awaiting resolution
         self._pending: dict[str, list[ExitRecord]] = {}  # slug -> exits
@@ -76,7 +90,7 @@ class ExitTracker:
                     else:
                         self._total_missed += missed
             if self._total_exits > 0:
-                logger.info(
+                self._logger.info(
                     "Loaded %d exit records: %d better than hold (%.0f%%), saved $%.2f, missed $%.2f",
                     self._total_exits,
                     self._exits_better_than_hold,
@@ -85,7 +99,7 @@ class ExitTracker:
                     self._total_missed,
                 )
         except Exception:
-            logger.warning("Could not load exit analysis data", exc_info=True)
+            self._logger.warning("Could not load exit analysis data", exc_info=True)
 
     def _save_record(self, record: ExitRecord) -> None:
         """Append an exit record to JSONL."""
@@ -96,20 +110,20 @@ class ExitTracker:
                         {
                             "slug": record.slug,
                             "token_side": record.token_side,
-                            "entry_price": round(record.entry_price, 4),
-                            "exit_price": round(record.exit_price, 4),
-                            "exit_size": round(record.exit_size, 2),
-                            "time_remaining": round(record.time_remaining, 1),
+                            "entry_price": round(record.entry_price, PRICE_PRECISION),
+                            "exit_price": round(record.exit_price, PRICE_PRECISION),
+                            "exit_size": round(record.exit_size, SIZE_PRECISION),
+                            "time_remaining": round(record.time_remaining, TIME_PRECISION),
                             "winner": record.winner,
-                            "held_value": round(record.held_value, 4),
-                            "actual_pnl": round(record.actual_pnl, 4),
-                            "missed_pnl": round(record.missed_pnl, 4),
+                            "held_value": round(record.held_value, PRICE_PRECISION),
+                            "actual_pnl": round(record.actual_pnl, PRICE_PRECISION),
+                            "missed_pnl": round(record.missed_pnl, PRICE_PRECISION),
                         }
                     )
                     + "\n"
                 )
         except Exception:
-            logger.warning("Could not save exit record", exc_info=True)
+            self._logger.warning("Could not save exit record", exc_info=True)
 
     def register_exit(
         self,
@@ -138,7 +152,7 @@ class ExitTracker:
             record.winner = winner
             # What would the position be worth at resolution?
             won = record.token_side == winner
-            record.held_value = 1.0 if won else 0.0
+            record.held_value = WON_VALUE if won else LOST_VALUE
 
             # Actual PnL from the exit
             record.actual_pnl = (record.exit_price - record.entry_price) * record.exit_size
@@ -158,7 +172,7 @@ class ExitTracker:
 
             self._save_record(record)
 
-            logger.info(
+            self._logger.info(
                 "Exit analysis: %s %s — exit@%.3f, %s won, held_value=%.2f, actual_pnl=$%.2f, missed_pnl=$%.2f (%s)",
                 slug,
                 record.token_side,
