@@ -7,6 +7,9 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Refactored
+- **`ml_scorer`** — Converted from single 332-LOC file to a package with separated concerns: `FeatureExtractor` (stateless feature engineering), `MLScorer` (model training/inference), `ModelState` (public diagnostic snapshot replacing private attribute access in dashboard). Added 51 tests at 97% coverage.
+
 ### Changed
 - **`agent/rotation`** — RotationManager uses predictive candle boundary alignment instead of fixed 5s polling — data capture starts within ~5s of candle open and continues until candle end (defers rotation when API returns next market early)
 
