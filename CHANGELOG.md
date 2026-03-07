@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [v0.18.0] — 2026-03-07
 
 ### Refactored
 - **`adaptive_entry`** — Converted from single 735-LOC file to a package: `reversal_detector` (retracement detection), `threshold_calculator` (fakeout-based thresholds), `ai_context` (prompt generation), `tracker` (orchestrator). Dashboard uses public `window_size`/`history_count` properties instead of private attrs. Added 59 tests.
