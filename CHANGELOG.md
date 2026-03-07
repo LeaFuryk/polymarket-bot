@@ -15,6 +15,7 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **`agent/rotation`** — RotationManager uses predictive candle boundary alignment instead of fixed 5s polling — data capture starts within ~5s of candle open and continues until candle end (defers rotation when API returns next market early)
 
 ### Fixed
+- **`agent/dashboard`** — `enrich_iteration_summary()` now recomputes `model_trained` from `MIN_TRAINING_SAMPLES` threshold instead of reading cached value from dashboard data; iteration summaries now include weights and bias; `_ml_model_dict()` exposes `min_samples` so frontend uses data-driven threshold
 - **`tasks/position_monitor`** — Reversal retracement detector fired on stale BTC history after a flip, causing immediate SELL of the new position; now only uses post-entry snapshots and fails closed when entry context is missing (race condition guard)
 - **`ws/broadcaster`** — All periodic WS update methods (`build_market_update`, `build_position_update`, `build_status_update`) referenced `TradingAgent` private attributes (`agent._shared`, `agent._config`, etc.) but were called with `AgentContext` which uses public names (`ctx.shared`, `ctx.config`); silent `AttributeError` exceptions killed all real-time broadcasts
 - **`agent/dashboard`** — Removed `build_snapshot` from broadcaster; snapshot now built inline in `dashboard_loop` using `assemble_dashboard_data(ctx)` which already uses correct `AgentContext` attributes

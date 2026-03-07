@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from polybot.ml_scorer import FEATURE_NAMES  # noqa: F401 — used by enrich_iteration_summary
+from polybot.ml_scorer.constants import MIN_TRAINING_SAMPLES
 
 if TYPE_CHECKING:
     from polybot.agent.context import AgentContext
@@ -39,11 +40,14 @@ def enrich_iteration_summary(summary: dict, dd: dict, archive_dir: Path | None =
         "total_missed": ex.get("total_missed", 0),
     }
 
-    # ML model
+    # ML model — recompute model_trained from threshold; preserve weights/bias
     ml = dd.get("ml_model", {})
+    samples = ml.get("training_samples", 0)
     summary["ml_model"] = {
-        "training_samples": ml.get("training_samples", 0),
-        "model_trained": ml.get("model_trained", False),
+        "training_samples": samples,
+        "model_trained": samples >= MIN_TRAINING_SAMPLES,
+        "weights": ml.get("weights"),
+        "bias": ml.get("bias"),
     }
 
     # Trade analysis
@@ -252,6 +256,7 @@ def _ml_model_dict(ctx: AgentContext) -> dict:
         "weights": state.weights,
         "bias": state.bias,
         "feature_names": state.feature_names,
+        "min_samples": MIN_TRAINING_SAMPLES,
     }
 
 
