@@ -7,6 +7,13 @@ pipeline and the dashboard iteration history view.
 
 from __future__ import annotations
 
+from polybot.analysis.constants import (
+    DEEP_ENTRY_EXPENSIVE_THRESHOLD,
+    DEEP_FLIP_WARN,
+    DEEP_MISSED_HIGH_MOVE_THRESHOLD,
+    DEEP_SIDE_ACCURACY_WARN,
+)
+
 # ---------------------------------------------------------------------------
 # Entry quality
 # ---------------------------------------------------------------------------
@@ -171,3 +178,344 @@ def analyze_missed_opportunities(
         "biggest_missed_move": round(max((m["abs_move"] for m in missed), default=0.0), 1),
         "missed_details": missed,
     }
+
+
+# ---------------------------------------------------------------------------
+# Loss deep-dive
+# ---------------------------------------------------------------------------
+
+_REASONING_EXCERPT_LEN = 200
+_PREDICTABLE_MOVE_THRESHOLD = 50.0  # $50 BTC move in opposite direction
+
+
+def analyze_losses(
+    trades: list[dict],
+    resolutions: list[dict],
+) -> list[dict]:
+    """Deep-dive into losing trades with context.
+
+    For each loss, captures entry side, fill price, reasoning excerpt,
+    BTC move, and whether the loss was predictable (large BTC move in
+    the opposite direction of the entry).
+
+    Args:
+        trades: Trade dicts with ``action``, ``token_side``, ``fill_price``,
+            ``reasoning``, ``candle_slug``, ``risk_blocked``.
+        resolutions: Resolution dicts with ``slug``, ``winner``, ``pnl``,
+            ``btc_move``.
+
+    Returns:
+        List of loss detail dicts, one per losing candle.
+    """
+    res_by_slug: dict[str, dict] = {r["slug"]: r for r in resolutions if "slug" in r}
+
+    losses: list[dict] = []
+    for t in trades:
+        if t.get("action") not in ("BUY", "SELL") or t.get("risk_blocked"):
+            continue
+        slug = t.get("candle_slug", "")
+        res = res_by_slug.get(slug)
+        if res is None or res.get("pnl", 0) >= -0.001:
+            continue
+
+        side = t.get("token_side", "unknown")
+        btc_move = res.get("btc_move", 0)
+        winner = res.get("winner", "")
+
+        # Predictable: large BTC move favoured the opposite side
+        opposite_won = (side == "UP" and winner == "DOWN") or (side == "DOWN" and winner == "UP")
+        predictable = opposite_won and abs(btc_move) >= _PREDICTABLE_MOVE_THRESHOLD
+
+        reasoning = t.get("reasoning", "")
+        losses.append(
+            {
+                "slug": slug,
+                "side": side,
+                "fill_price": t.get("fill_price"),
+                "pnl": round(res.get("pnl", 0), 4),
+                "btc_move": round(btc_move, 1),
+                "winner": winner,
+                "predictable": predictable,
+                "reasoning_excerpt": reasoning[:_REASONING_EXCERPT_LEN],
+            }
+        )
+    return losses
+
+
+# ---------------------------------------------------------------------------
+# Flip detection
+# ---------------------------------------------------------------------------
+
+
+def analyze_flips(trades: list[dict]) -> list[dict]:
+    """Detect same-candle position flips (e.g. BUY→SELL→BUY).
+
+    A flip is when the bot takes opposing actions within the same candle.
+    Each flip represents wasted fees and potential loss.
+
+    Args:
+        trades: Trade dicts with ``action``, ``candle_slug``, ``fee``,
+            ``risk_blocked``.
+
+    Returns:
+        List of flip dicts, one per candle with flips detected.
+    """
+    by_slug: dict[str, list[dict]] = {}
+    for t in trades:
+        if t.get("action") not in ("BUY", "SELL") or t.get("risk_blocked"):
+            continue
+        slug = t.get("candle_slug", "")
+        if slug:
+            by_slug.setdefault(slug, []).append(t)
+
+    flips: list[dict] = []
+    for slug, candle_trades in by_slug.items():
+        if len(candle_trades) < 2:
+            continue
+        actions = [t["action"] for t in candle_trades]
+        # A flip occurs when consecutive actions differ
+        flip_count = sum(1 for i in range(1, len(actions)) if actions[i] != actions[i - 1])
+        if flip_count == 0:
+            continue
+        fees = sum(t.get("fee", 0) for t in candle_trades)
+        flips.append(
+            {
+                "slug": slug,
+                "actions": actions,
+                "flip_count": flip_count,
+                "trade_count": len(candle_trades),
+                "total_fees": round(fees, 4),
+            }
+        )
+    return flips
+
+
+# ---------------------------------------------------------------------------
+# Entry timing
+# ---------------------------------------------------------------------------
+
+_CANDLE_DURATION = 300  # 5 minutes in seconds
+_TIMING_BUCKETS = [
+    (0, 60),
+    (60, 120),
+    (120, 180),
+    (180, 240),
+    (240, 300),
+]
+
+
+def analyze_timing(
+    trades: list[dict],
+    resolutions: list[dict],
+) -> dict:
+    """Bin entries by elapsed seconds into the candle and correlate with outcomes.
+
+    Uses ``time_remaining_at_trade`` to compute elapsed time.
+
+    Args:
+        trades: Trade dicts with ``action``, ``candle_slug``,
+            ``time_remaining_at_trade``, ``risk_blocked``.
+        resolutions: Resolution dicts with ``slug``, ``pnl``.
+
+    Returns:
+        Dict with per-bucket trade counts and win rates.
+    """
+    res_by_slug: dict[str, dict] = {r["slug"]: r for r in resolutions if "slug" in r}
+
+    buckets: dict[str, dict] = {}
+    for lo, hi in _TIMING_BUCKETS:
+        label = f"{lo}-{hi}s"
+        buckets[label] = {"trades": 0, "wins": 0, "losses": 0}
+
+    for t in trades:
+        if t.get("action") not in ("BUY", "SELL") or t.get("risk_blocked"):
+            continue
+        tr = t.get("time_remaining_at_trade")
+        if tr is None:
+            continue
+        elapsed = _CANDLE_DURATION - tr
+
+        for lo, hi in _TIMING_BUCKETS:
+            if lo <= elapsed < hi:
+                label = f"{lo}-{hi}s"
+                buckets[label]["trades"] += 1
+                slug = t.get("candle_slug", "")
+                res = res_by_slug.get(slug)
+                if res is not None:
+                    pnl = res.get("pnl", 0)
+                    if pnl > 0.001:
+                        buckets[label]["wins"] += 1
+                    elif pnl < -0.001:
+                        buckets[label]["losses"] += 1
+                break
+
+    result: dict[str, dict] = {}
+    for label, data in buckets.items():
+        decided = data["wins"] + data["losses"]
+        result[label] = {
+            "trades": data["trades"],
+            "wins": data["wins"],
+            "losses": data["losses"],
+            "win_rate": round(data["wins"] / decided, 3) if decided else 0.0,
+        }
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Cross-iteration trends
+# ---------------------------------------------------------------------------
+
+
+def analyze_trends(iterations: list[dict], window: int = 5) -> dict:
+    """Compute rolling averages and deltas across iteration summaries.
+
+    Args:
+        iterations: List of iteration summary dicts, each with
+            ``win_rate``, ``total_pnl``, ``trade_analysis``, etc.
+        window: Rolling window size.
+
+    Returns:
+        Dict with per-metric rolling averages and latest delta.
+    """
+    metrics: dict[str, list[float]] = {
+        "win_rate": [],
+        "total_pnl": [],
+        "avg_fill_price": [],
+        "hold_rate": [],
+    }
+
+    for it in iterations:
+        metrics["win_rate"].append(it.get("win_rate", 0.0))
+        metrics["total_pnl"].append(it.get("total_pnl", 0.0))
+        ta = it.get("trade_analysis", {})
+        metrics["avg_fill_price"].append(ta.get("avg_fill_price", 0.0))
+        metrics["hold_rate"].append(ta.get("hold_rate", 0.0))
+
+    result: dict[str, dict] = {}
+    for name, values in metrics.items():
+        if not values:
+            result[name] = {"values": [], "rolling_avg": [], "delta": 0.0}
+            continue
+        rolling: list[float] = []
+        for i in range(len(values)):
+            start = max(0, i - window + 1)
+            avg = sum(values[start : i + 1]) / (i - start + 1)
+            rolling.append(round(avg, 4))
+        delta = rolling[-1] - rolling[-2] if len(rolling) >= 2 else 0.0
+        result[name] = {
+            "values": [round(v, 4) for v in values],
+            "rolling_avg": rolling,
+            "delta": round(delta, 4),
+        }
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Auto-recommendations
+# ---------------------------------------------------------------------------
+
+
+def generate_recommendations(
+    entry_quality: dict,
+    side_accuracy: dict,
+    losses: list[dict],
+    flips: list[dict],
+    missed: dict,
+    trends: dict,
+) -> list[dict]:
+    """Generate actionable recommendations from analysis results.
+
+    Each recommendation has ``severity`` (high/medium/low),
+    ``category``, ``message``, and ``evidence``.
+
+    Args:
+        entry_quality: Output of :func:`analyze_entry_quality`.
+        side_accuracy: Output of :func:`analyze_side_accuracy`.
+        losses: Output of :func:`analyze_losses`.
+        flips: Output of :func:`analyze_flips`.
+        missed: Output of :func:`analyze_missed_opportunities`.
+        trends: Output of :func:`analyze_trends`.
+
+    Returns:
+        List of recommendation dicts sorted by severity (high first).
+    """
+    recs: list[dict] = []
+    severity_order = {"high": 0, "medium": 1, "low": 2}
+
+    # Expensive entries
+    avg_fill = entry_quality.get("avg_fill_price", 0.0)
+    if avg_fill >= DEEP_ENTRY_EXPENSIVE_THRESHOLD:
+        recs.append(
+            {
+                "severity": "high",
+                "category": "entry_quality",
+                "message": f"Average fill price is {avg_fill:.2f} — entries are too expensive",
+                "evidence": f"{entry_quality.get('expensive', 0) + entry_quality.get('very_expensive', 0)} of {entry_quality.get('total_fills', 0)} fills above 0.55",
+            }
+        )
+
+    # Poor side accuracy
+    for side, data in side_accuracy.items():
+        wr = data.get("win_rate", 0.0)
+        decided = data.get("wins", 0) + data.get("losses", 0)
+        if decided >= 3 and wr < DEEP_SIDE_ACCURACY_WARN:
+            recs.append(
+                {
+                    "severity": "high",
+                    "category": "side_accuracy",
+                    "message": f"{side} side win rate is {wr:.0%} ({data.get('wins', 0)}W/{data.get('losses', 0)}L)",
+                    "evidence": f"Total PnL on {side}: {data.get('total_pnl', 0):.4f}",
+                }
+            )
+
+    # Excessive flipping
+    total_flips = sum(f.get("flip_count", 0) for f in flips)
+    if total_flips > DEEP_FLIP_WARN:
+        total_fees = sum(f.get("total_fees", 0) for f in flips)
+        recs.append(
+            {
+                "severity": "medium",
+                "category": "flipping",
+                "message": f"{total_flips} position flips detected across {len(flips)} candles",
+                "evidence": f"Total flip fees: {total_fees:.4f}",
+            }
+        )
+
+    # High missed opportunities
+    high_missed = missed.get("high_move_missed", 0)
+    if high_missed >= 2:
+        recs.append(
+            {
+                "severity": "medium",
+                "category": "missed_opportunities",
+                "message": f"{high_missed} high-move candles (>=${DEEP_MISSED_HIGH_MOVE_THRESHOLD:.0f} BTC) missed",
+                "evidence": f"Biggest missed move: ${missed.get('biggest_missed_move', 0):.1f}",
+            }
+        )
+
+    # Predictable losses
+    predictable = [loss for loss in losses if loss.get("predictable")]
+    if predictable:
+        recs.append(
+            {
+                "severity": "medium",
+                "category": "predictable_losses",
+                "message": f"{len(predictable)} of {len(losses)} losses were predictable (large opposite BTC move)",
+                "evidence": f"Worst: {min(loss['pnl'] for loss in predictable):.4f} PnL",
+            }
+        )
+
+    # Declining win rate trend
+    wr_trend = trends.get("win_rate", {})
+    if wr_trend.get("delta", 0) < -0.05:
+        recs.append(
+            {
+                "severity": "low",
+                "category": "trend",
+                "message": f"Win rate trending down (delta: {wr_trend['delta']:.2%})",
+                "evidence": f"Latest rolling avg: {wr_trend.get('rolling_avg', [0])[-1]:.2%}",
+            }
+        )
+
+    recs.sort(key=lambda r: severity_order.get(r["severity"], 99))
+    return recs
