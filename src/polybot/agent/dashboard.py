@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from polybot.ml_scorer import FEATURE_NAMES
+from polybot.ml_scorer import FEATURE_NAMES  # noqa: F401 — used by enrich_iteration_summary
 
 if TYPE_CHECKING:
     from polybot.agent.context import AgentContext
@@ -241,6 +241,18 @@ def load_iteration_summaries(log: logging.Logger | None = None) -> list[dict]:
     if summaries:
         _log.info("Loaded %d iteration summaries from archive", len(summaries))
     return summaries
+
+
+def _ml_model_dict(ctx: AgentContext) -> dict:
+    """Build ML model dict for the dashboard using the public API."""
+    state = ctx.ml_scorer.get_model_state()
+    return {
+        "training_samples": state.training_samples,
+        "model_trained": state.model_trained,
+        "weights": state.weights,
+        "bias": state.bias,
+        "feature_names": state.feature_names,
+    }
 
 
 class DashboardAssembler:
@@ -524,13 +536,7 @@ class DashboardAssembler:
                 "max_drawdown": ctx.risk.state.max_drawdown,
                 "is_halted": ctx.risk.state.is_halted,
             },
-            "ml_model": {
-                "training_samples": ctx.ml_scorer._training_samples,
-                "model_trained": ctx.ml_scorer._training_samples >= ctx.ml_scorer._min_samples,
-                "weights": {name: round(w, 4) for name, w in zip(FEATURE_NAMES, ctx.ml_scorer._weights, strict=False)},
-                "bias": round(ctx.ml_scorer._bias, 4),
-                "feature_names": list(FEATURE_NAMES),
-            },
+            "ml_model": _ml_model_dict(ctx),
             "calibration": {
                 "total_records": ctx.calibrator.total_records,
                 "shadow_correct": ctx.calibrator._shadow_correct,
