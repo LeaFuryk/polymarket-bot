@@ -24,6 +24,7 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Dashboard: hydration warning** — Added `suppressHydrationWarning` to `<html>` and `<body>` in `layout.tsx`
 
 ### Added
+- **Velocity-magnitude conflict detection** — First-class velocity signal: detects when BTC price velocity opposes the magnitude direction (e.g., BTC at -$25 but recovering at +$2/s). Severity scoring (velocity 40% + drawback 35% + time 25%) with three tiers: strong (>=70%, stale signal), moderate (40-70%, weakened signal), aligned. Injects warnings into AI prompts, adds velocity conflict line to PRIMARY SIGNAL section, screens out strong conflicts, scales BUY size (50-75%) when trading against velocity. ML scorer gains `btc_velocity` and `velocity_conflict` features with backward-compatible zero-padded model loading.
 - **Deep analysis pipeline** — 8 pure stateless analysis functions in `analysis/deep.py` (entry quality, side accuracy, missed opportunities, loss deep-dive, flip detection, entry timing, cross-iteration trends, auto-recommendations) plus `polybot-analyze-deep` CLI command with Rich rendering and JSON output
 - **Dashboard: indicator panels** — All indicator panels on Trading page — Adaptive Entry, ML Model, Ensemble, Calibration, Exit Analysis, Knowledge Observations, Microstructure, Monitor/Prefilter — receiving live data via WebSocket
 - **Midpoint gap metric** — Captures UP+DOWN midpoint sum deviation from 1.0 at trade time; displayed in trade timeline (amber highlight when gap > 3%)

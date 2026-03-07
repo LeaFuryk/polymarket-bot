@@ -69,13 +69,17 @@ def _zero_features() -> dict[str, float]:
 
 class TestConstants:
     def test_feature_count(self):
-        assert NUM_FEATURES == 10
+        assert NUM_FEATURES == 12
 
     def test_feature_names_length_matches(self):
         assert len(FEATURE_NAMES) == NUM_FEATURES
 
     def test_normalization_scales_length(self):
         assert len(NORMALIZATION_SCALES) == NUM_FEATURES
+
+    def test_velocity_features_present(self):
+        assert "btc_velocity" in FEATURE_NAMES
+        assert "velocity_conflict" in FEATURE_NAMES
 
     def test_thresholds_ordered(self):
         assert STRONG_DOWN_THRESHOLD < LEAN_DOWN_THRESHOLD
@@ -232,6 +236,30 @@ class TestFeatureExtractor:
             reversal_rate=0.42,
         )
         assert features["reversal_rate"] == 0.42
+
+    def test_extract_velocity_features_default(self):
+        features = self.extractor.extract(
+            candles=None,
+            btc_price=None,
+            candle_open=None,
+            up_mid=None,
+            down_mid=None,
+        )
+        assert features["btc_velocity"] == 0.0
+        assert features["velocity_conflict"] == 0.0
+
+    def test_extract_velocity_features_passthrough(self):
+        features = self.extractor.extract(
+            candles=None,
+            btc_price=None,
+            candle_open=None,
+            up_mid=None,
+            down_mid=None,
+            btc_velocity=2.5,
+            velocity_conflict_severity=0.7,
+        )
+        assert features["btc_velocity"] == 2.5
+        assert features["velocity_conflict"] == 0.7
 
     def test_extract_volatility(self):
         candles = _make_candles(8, direction="up")
@@ -420,12 +448,13 @@ class TestMLScorer:
         assert features["streak_signed"] == 3.0
         assert features["btc_vs_open"] == 50.0
 
-    def test_feature_count_mismatch_resets(self, tmp_path: Path):
+    def test_feature_count_mismatch_shrink_resets(self, tmp_path: Path):
+        """When saved model has MORE features than current, reset entirely."""
         model_file = tmp_path / "ml_model.json"
         model_file.write_text(
             json.dumps(
                 {
-                    "weights": [0.1, 0.2],  # wrong length
+                    "weights": [0.1] * 20,  # more than NUM_FEATURES
                     "bias": 0.5,
                     "training_samples": 100,
                 }
@@ -435,6 +464,32 @@ class TestMLScorer:
         state = scorer.get_model_state()
         assert state.training_samples == 0
         assert state.bias == 0.0
+
+    def test_feature_count_grow_zero_pads(self, tmp_path: Path):
+        """When saved model has fewer features, zero-pad and preserve weights."""
+        model_file = tmp_path / "ml_model.json"
+        old_weights = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+        model_file.write_text(
+            json.dumps(
+                {
+                    "weights": old_weights,
+                    "bias": 0.5,
+                    "training_samples": 50,
+                }
+            )
+        )
+        scorer = MLScorer(data_dir=tmp_path)
+        state = scorer.get_model_state()
+        # Training samples and bias preserved
+        assert state.training_samples == 50
+        assert state.bias == 0.5
+        # Old weights preserved, new features zero-padded
+        weights_list = [state.weights[name] for name in FEATURE_NAMES]
+        for i, old_w in enumerate(old_weights):
+            assert weights_list[i] == pytest.approx(old_w, abs=1e-5)
+        # New features (btc_velocity, velocity_conflict) should be zero
+        assert state.weights["btc_velocity"] == 0.0
+        assert state.weights["velocity_conflict"] == 0.0
 
     def test_model_trained_after_min_samples(self, tmp_path: Path):
         scorer = MLScorer(data_dir=tmp_path)
@@ -469,12 +524,12 @@ class TestBackwardCompatibility:
     def test_import_feature_names(self):
         from polybot.ml_scorer import FEATURE_NAMES  # noqa: F811
 
-        assert len(FEATURE_NAMES) == 10
+        assert len(FEATURE_NAMES) == 12
 
     def test_import_num_features(self):
         from polybot.ml_scorer import NUM_FEATURES  # noqa: F811
 
-        assert NUM_FEATURES == 10
+        assert NUM_FEATURES == 12
 
     def test_import_feature_extractor(self):
         from polybot.ml_scorer import FeatureExtractor  # noqa: F811

@@ -127,6 +127,8 @@ class MLScorer:
         up_bid_depth: float = 0,
         up_ask_depth: float = 0,
         reversal_rate: float = 0.0,
+        btc_velocity: float = 0.0,
+        velocity_conflict_severity: float = 0.0,
     ) -> dict[str, float]:
         """Extract ML features from market data.
 
@@ -141,6 +143,8 @@ class MLScorer:
             up_bid_depth=up_bid_depth,
             up_ask_depth=up_ask_depth,
             reversal_rate=reversal_rate,
+            btc_velocity=btc_velocity,
+            velocity_conflict_severity=velocity_conflict_severity,
         )
 
     def get_summary(self) -> str:
@@ -197,10 +201,22 @@ class MLScorer:
             self._bias = data.get("bias", 0.0)
             self._training_samples = data.get("training_samples", 0)
             if len(self._weights) != NUM_FEATURES:
-                self._log.warning("Feature count mismatch, resetting ML model")
-                self._weights = [0.0] * NUM_FEATURES
-                self._bias = 0.0
-                self._training_samples = 0
+                old_len = len(self._weights)
+                if old_len < NUM_FEATURES:
+                    # Zero-pad new features to preserve learned weights
+                    self._weights.extend([0.0] * (NUM_FEATURES - old_len))
+                    self._log.info(
+                        "ML model zero-padded: %d → %d features (preserving %d samples)",
+                        old_len,
+                        NUM_FEATURES,
+                        self._training_samples,
+                    )
+                else:
+                    # Shrunk — reset to be safe
+                    self._log.warning("Feature count shrank %d → %d, resetting ML model", old_len, NUM_FEATURES)
+                    self._weights = [0.0] * NUM_FEATURES
+                    self._bias = 0.0
+                    self._training_samples = 0
             elif self._training_samples > 0:
                 self._log.info(
                     "Loaded ML model: %d training samples, bias=%.4f",

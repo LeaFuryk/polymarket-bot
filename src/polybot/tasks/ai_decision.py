@@ -49,6 +49,7 @@ from polybot.tasks.context_builder import (
     build_chainlink_warning,
     build_counter_trend_advisory,
     build_stop_loss_warning,
+    build_velocity_conflict_warning,
     format_ml_line,
 )
 from polybot.tasks.decision_guards import (
@@ -57,6 +58,7 @@ from polybot.tasks.decision_guards import (
     apply_entry_price_cap,
     apply_position_sizing,
     apply_single_entry,
+    apply_velocity_conflict_scaling,
     clamp_sell_size,
     compute_position_scale,
     force_exit_side,
@@ -66,6 +68,7 @@ from polybot.tasks.prompt_context import (
     compute_btc_trajectory,
     compute_entry_timing_stats,
     compute_retracement_context,
+    detect_velocity_magnitude_conflict,
     format_microstructure,
 )
 from polybot.tasks.trade_logger import build_decision_row, build_trade_record
@@ -643,6 +646,12 @@ class AIDecision:
         indicator_results = compute_indicators(snapshot, self._feature_config, session_ctx)
         indicators_text = format_indicators(indicator_results)
 
+        # Velocity conflict (computed early for ML features)
+        velocity_conflict = detect_velocity_magnitude_conflict(
+            list(self._shared.prefilter_history),
+            time_remaining=features.time_remaining,
+        )
+
         # ML prediction
         btc_price_val = snapshot.btc_price.price_usd if snapshot.btc_price else None
         ml_features = self._ml_scorer.extract_features(
@@ -654,6 +663,8 @@ class AIDecision:
             up_bid_depth=snapshot.orderbook.bid_depth,
             up_ask_depth=snapshot.orderbook.ask_depth,
             reversal_rate=self._adaptive_entry.rolling_reversal_rate if self._adaptive_entry else 0.0,
+            btc_velocity=velocity_conflict.velocity_rate,
+            velocity_conflict_severity=velocity_conflict.severity,
         )
         ml_prediction = self._ml_scorer.predict(ml_features)
         if market:
@@ -685,6 +696,9 @@ class AIDecision:
         indicators_text = append_section(
             indicators_text, compute_entry_timing_stats(self._session_trades, self._recent_resolutions)
         )
+
+        # Velocity-magnitude conflict warning
+        indicators_text = append_section(indicators_text, build_velocity_conflict_warning(velocity_conflict))
 
         # Safeguard warnings
         if snapshot.btc_price and snapshot.btc_price.price_divergence is not None:
@@ -763,6 +777,7 @@ class AIDecision:
             ai_cycle_cost=self._last_cycle_api_cost,
             ai_session_cost=self._total_api_cost,
             candle_open_btc=candle_open_btc,
+            velocity_conflict=velocity_conflict,
         )
 
         self._portfolio.cash -= api_cost
@@ -881,6 +896,10 @@ class AIDecision:
 
             scale, trend_scale = compute_position_scale(rr_ratio, btc_move, trend_score, decision.token_side)
             decision = apply_position_sizing(decision, scale, trend_scale)
+
+        # Velocity conflict sizing guard
+        if decision.action == Action.BUY:
+            decision = apply_velocity_conflict_scaling(decision, velocity_conflict)
 
         # Shadow predictions for HOLD
         if decision.action == Action.HOLD and decision.hypothetical_direction and market:
