@@ -24,7 +24,7 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Dashboard: hydration warning** — Added `suppressHydrationWarning` to `<html>` and `<body>` in `layout.tsx`
 
 ### Added
-- **Deep analysis functions** — 6 pure stateless functions in `analysis/deep.py`: `analyze_entry_quality`, `analyze_side_accuracy`, `analyze_missed_opportunities`, `analyze_losses`, `analyze_flips`, `analyze_timing` for post-run iteration analysis (entry quality, per-side win rates, missed candles, loss deep-dive, flip detection, entry timing)
+- **Deep analysis functions** — 8 pure stateless functions in `analysis/deep.py`: entry quality, side accuracy, missed opportunities, loss deep-dive, flip detection, entry timing, cross-iteration trends, and auto-recommendations for post-run iteration analysis
 - **Dashboard: indicator panels** — All indicator panels on Trading page — Adaptive Entry, ML Model, Ensemble, Calibration, Exit Analysis, Knowledge Observations, Microstructure, Monitor/Prefilter — receiving live data via WebSocket
 - **Midpoint gap metric** — Captures UP+DOWN midpoint sum deviation from 1.0 at trade time; displayed in trade timeline (amber highlight when gap > 3%)
 - **Execution quality monitoring** — Real-time fill rate banner on trading page and per-iteration historical metrics on history page; backend computes fill rate, timeout count, fill source breakdown, avg matched size from `live_order` data

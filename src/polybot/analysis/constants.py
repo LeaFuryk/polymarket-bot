@@ -65,3 +65,19 @@ PERCENTILE_BUCKETS: list[int] = [10, 25, 50, 75, 90, 95]
 
 ANNUALIZATION_FACTOR: int = 1440
 """Cycles per day used for Sharpe ratio annualization."""
+
+# ---------------------------------------------------------------------------
+# Deep analysis — recommendation thresholds
+# ---------------------------------------------------------------------------
+
+DEEP_ENTRY_EXPENSIVE_THRESHOLD: float = 0.65
+"""Avg fill price above this triggers 'expensive entries' recommendation."""
+
+DEEP_SIDE_ACCURACY_WARN: float = 0.55
+"""Side win rate below this triggers 'poor side accuracy' recommendation."""
+
+DEEP_FLIP_WARN: int = 2
+"""Number of flips above this triggers 'excessive flipping' recommendation."""
+
+DEEP_MISSED_HIGH_MOVE_THRESHOLD: float = 50.0
+"""BTC move ($) above which a missed candle is 'high-move missed'."""
