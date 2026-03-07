@@ -282,7 +282,12 @@ export interface IterationSummary {
   resolutions_detail?: IterationResolutionDetail[];
   calibration?: IterationCalibration;
   exit_analysis?: IterationExitAnalysis;
-  ml_model?: { training_samples: number; model_trained: boolean };
+  ml_model?: {
+    training_samples: number;
+    model_trained: boolean;
+    weights?: Record<string, number>;
+    bias?: number;
+  };
   observations?: Array<{ category: string; text: string; timestamp: string }>;
   session_history?: string;
   live_trading?: IterationLiveTrading;
@@ -295,6 +300,7 @@ export interface MLModelData {
   weights?: Record<string, number>;
   bias?: number;
   feature_names?: string[];
+  min_samples?: number;
 }
 
 export interface CalibrationData {

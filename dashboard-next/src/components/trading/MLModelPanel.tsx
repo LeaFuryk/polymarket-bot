@@ -35,7 +35,7 @@ export function MLModelPanel({ mlModel }: MLModelPanelProps) {
           </span>
         ) : (
           <span className="inline-flex items-center rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] font-semibold text-amber-400">
-            TRAINING {mlModel.training_samples}/10
+            TRAINING {mlModel.training_samples}/{mlModel.min_samples ?? 10}
           </span>
         )}
       </div>
@@ -83,8 +83,9 @@ export function MLModelPanel({ mlModel }: MLModelPanelProps) {
         )
       ) : (
         <div className="text-xs text-zinc-500">
-          Need {Math.max(0, 10 - mlModel.training_samples)} more samples to
-          train
+          Need{" "}
+          {Math.max(0, (mlModel.min_samples ?? 10) - mlModel.training_samples)}{" "}
+          more samples to train
         </div>
       )}
     </div>
