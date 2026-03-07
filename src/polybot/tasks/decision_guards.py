@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 
 from polybot.models import Action, OrderType, TokenSide, TradingDecision
+from polybot.tasks.prompt_context import VelocityConflict
 
 logger = logging.getLogger(__name__)
 
@@ -299,3 +300,53 @@ def apply_position_sizing(
         )
 
     return decision
+
+
+def apply_velocity_conflict_scaling(
+    decision: TradingDecision,
+    conflict: VelocityConflict,
+    *,
+    log: logging.Logger | None = None,
+) -> TradingDecision:
+    """Scale BUY size down when velocity conflicts with magnitude.
+
+    Only affects BUYs that align with the magnitude direction — i.e.,
+    the trade is going with magnitude but against velocity.
+
+    Strong conflict (>=0.7): scale to 50%.
+    Moderate conflict (>=0.4): scale to 75%.
+    """
+    if decision.action != Action.BUY:
+        return decision
+    if not conflict.has_conflict or conflict.severity < 0.4:
+        return decision
+
+    # Only scale when the BUY direction aligns with magnitude (trading against velocity)
+    buy_dir = "UP" if decision.token_side == TokenSide.UP else "DOWN"
+    if buy_dir != conflict.magnitude_direction:
+        return decision
+
+    scale = 0.50 if conflict.severity >= 0.7 else 0.75
+    scaled_size = round(decision.size * scale, 1)
+    if scaled_size < 1.0:
+        scaled_size = 1.0
+
+    _log = log or logger
+    _log.info(
+        "Velocity conflict scaling: %.1f → %.1f (scale=%.2f, severity=%.0f%%)",
+        decision.size,
+        scaled_size,
+        scale,
+        conflict.severity * 100,
+    )
+    return TradingDecision(
+        action=decision.action,
+        order_type=decision.order_type,
+        size=scaled_size,
+        confidence=decision.confidence,
+        reasoning=decision.reasoning,
+        market_view=decision.market_view,
+        token_side=decision.token_side,
+        hypothetical_direction=decision.hypothetical_direction,
+        confidence_drivers=decision.confidence_drivers,
+    )

@@ -36,6 +36,8 @@ class FeatureExtractor:
         up_bid_depth: float = 0,
         up_ask_depth: float = 0,
         reversal_rate: float = 0.0,
+        btc_velocity: float = 0.0,
+        velocity_conflict_severity: float = 0.0,
     ) -> dict[str, float]:
         """Extract feature dict from raw market data.
 
@@ -49,6 +51,8 @@ class FeatureExtractor:
             up_bid_depth: UP bid depth from order book.
             up_ask_depth: UP ask depth from order book.
             reversal_rate: Rolling reversal rate from adaptive entry (0-1).
+            btc_velocity: Current BTC velocity in $/s.
+            velocity_conflict_severity: Velocity-magnitude conflict severity (0-1).
 
         Returns:
             Dict mapping each feature name to its raw (un-normalized) value.
@@ -76,6 +80,8 @@ class FeatureExtractor:
         features["down_midpoint"] = down_mid or 0.5
         features["book_imbalance"] = up_bid_depth / up_ask_depth if up_ask_depth > 0 else 1.0
         features["reversal_rate"] = reversal_rate
+        features["btc_velocity"] = btc_velocity
+        features["velocity_conflict"] = velocity_conflict_severity
 
         return features
 

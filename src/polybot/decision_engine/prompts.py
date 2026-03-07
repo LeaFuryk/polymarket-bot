@@ -28,6 +28,7 @@ Say should_trade=false if ANY of these apply:
 - BTC move magnitude < $15 AND no streak (< 3 same-direction) AND time < 60s AND reversal rate < 40%
 - Both token asks are > $0.40 (unattractive entries) AND BTC move magnitude < $15 AND reversal rate < 40%
 - BTC move is $0 (no signal at all)
+- BTC move >$15 BUT a velocity conflict with severity >= 70% is flagged (magnitude is stale, skip)
 
 When in doubt, say false. Save the budget for setups with a clear directional signal.
 """
@@ -116,6 +117,15 @@ The 24h change tells you the daily trend but is NOT predictive for the next 5-mi
 - Earlier entries on moderate moves get better prices than waiting for extreme moves.
 - Run `polybot-validate` for current continuation/reversal rates from accumulated data.
 
+## Velocity-Magnitude Conflicts
+- The magnitude signal (BTC vs candle open) can become STALE when BTC is recovering.
+- Example: BTC is $-25 from open (DOWN signal) but velocity is +$2/s — BTC is recovering fast.
+- When a VELOCITY CONFLICT warning appears, the magnitude direction is unreliable:
+  - **Strong conflict (>=70%)**: magnitude is likely stale. Do NOT enter based on magnitude alone. Skip or wait.
+  - **Moderate conflict (40-70%)**: magnitude weakened. Reduce confidence and position size.
+- Velocity conflicts are most dangerous when drawback is high (peak being erased) and time remains.
+- A conflict does NOT mean the opposite direction will win — it means the signal has degraded.
+
 ## Computed Indicators
 You may receive computed technical indicators below. These are dynamically selected \
 based on past performance. Use them as supporting signals, not sole decision drivers.
@@ -158,6 +168,7 @@ def format_feature_vector(
     ai_cycle_cost: float = 0.0,
     ai_session_cost: float = 0.0,
     candle_open_btc: float | None = None,
+    velocity_conflict: object | None = None,
 ) -> str:
     """Format a FeatureVector into a clear prompt for Claude."""
     up_ob = fv.market.orderbook
@@ -177,9 +188,18 @@ def format_feature_vector(
         else:
             move_desc = "STRONG move — high conviction signal"
         who_winning = "UP winning" if diff >= 0 else "DOWN winning"
+        vc_line = ""
+        if velocity_conflict is not None and getattr(velocity_conflict, "severity", 0) >= 0.4:
+            vc = velocity_conflict
+            vc_line = (
+                f"**VELOCITY CONFLICT ({vc.label})**: "
+                f"velocity ${vc.velocity_rate:+.1f}/s ({vc.velocity_direction}) "
+                f"opposes magnitude — severity {vc.severity:.0%}\n"
+            )
         btc_move_line = (
             f"## >>> PRIMARY SIGNAL: BTC vs Candle Open <<<\n"
             f"BTC move: **${diff:+,.2f}** ({who_winning}) — {move_desc}\n"
+            f"{vc_line}"
             f"BTC NOW: ${fv.market.btc_price.price_usd:,.2f} | Candle Open: ${candle_open_btc:,.2f} | "
             f"Time left: {fv.time_remaining:.0f}s\n"
         )
