@@ -246,6 +246,103 @@ def render_deep_report(report: dict, console: Console) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Markdown output
+# ---------------------------------------------------------------------------
+
+
+def write_markdown_report(report: dict, path: Path) -> None:
+    """Write a deep analysis report as readable Markdown.
+
+    Args:
+        report: Report dict from :func:`build_deep_report`.
+        path: Destination ``.md`` file path.
+    """
+    lines: list[str] = []
+    summary = report.get("summary", {})
+
+    lines.append(f"# Deep Analysis — {report.get('iteration', 'unknown')}")
+    lines.append("")
+    lines.append(f"- **Trades:** {summary.get('total_trades', 0)}")
+    lines.append(f"- **Resolutions:** {summary.get('total_resolutions', 0)}")
+    lines.append(f"- **Win rate:** {summary.get('win_rate', 0):.0%}")
+    lines.append(f"- **PnL:** {summary.get('total_pnl', 0):.4f}")
+    lines.append("")
+
+    # Entry quality
+    eq = report.get("entry_quality", {})
+    if eq.get("total_fills", eq.get("total_buys", 0)) > 0:
+        lines.append("## Entry Quality")
+        lines.append("")
+        lines.append("| Metric | Value |")
+        lines.append("|--------|-------|")
+        lines.append(f"| Avg fill price | {eq.get('avg_fill_price', 0):.4f} |")
+        lines.append(f"| Avg confidence | {eq.get('avg_confidence', 0):.4f} |")
+        lines.append(f"| Avg entry gap | {eq.get('avg_entry_gap', 0):.4f} |")
+        lines.append("")
+
+    # Side accuracy
+    sa = report.get("side_accuracy", {})
+    if sa:
+        lines.append("## Side Accuracy")
+        lines.append("")
+        lines.append("| Side | Trades | W/L | Win Rate | PnL |")
+        lines.append("|------|--------|-----|----------|-----|")
+        for side, data in sa.items():
+            lines.append(
+                f"| {side} | {data.get('trades', 0)} | "
+                f"{data.get('wins', 0)}/{data.get('losses', 0)} | "
+                f"{data.get('win_rate', 0):.0%} | {data.get('total_pnl', 0):.4f} |"
+            )
+        lines.append("")
+
+    # Losses
+    losses = report.get("losses", [])
+    if losses:
+        lines.append(f"## Losses ({len(losses)})")
+        lines.append("")
+        for loss in losses:
+            pred = "YES" if loss.get("predictable") else "no"
+            lines.append(
+                f"- **{loss.get('slug', '')}** ({loss.get('side', '')}): "
+                f"PnL {loss.get('pnl', 0):.4f}, BTC ${loss.get('btc_move', 0):.1f}, predictable: {pred}"
+            )
+        lines.append("")
+
+    # Flips
+    flips = report.get("flips", [])
+    if flips:
+        total_fees = sum(f.get("total_fees", 0) for f in flips)
+        lines.append(f"## Flips ({len(flips)} candles, fees: {total_fees:.4f})")
+        lines.append("")
+
+    # Missed
+    missed = report.get("missed_opportunities", {})
+    if missed.get("missed_candles", 0) > 0:
+        lines.append("## Missed Opportunities")
+        lines.append("")
+        lines.append(
+            f"- High-move missed: {missed.get('high_move_missed', 0)}, "
+            f"low-move skipped: {missed.get('low_move_skipped', 0)}, "
+            f"biggest: ${missed.get('biggest_missed_move', 0):.1f}"
+        )
+        lines.append("")
+
+    # Recommendations
+    recs = report.get("recommendations", [])
+    if recs:
+        lines.append("## Recommendations")
+        lines.append("")
+        for rec in recs:
+            sev = rec.get("severity", "low").upper()
+            lines.append(f"- **[{sev}]** {rec.get('message', '')}")
+            if rec.get("evidence"):
+                lines.append(f"  - {rec['evidence']}")
+        lines.append("")
+
+    path.write_text("\n".join(lines))
+
+
+# ---------------------------------------------------------------------------
 # CLI entry point
 # ---------------------------------------------------------------------------
 

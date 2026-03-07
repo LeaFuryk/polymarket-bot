@@ -25,6 +25,7 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 - **Deep analysis pipeline** — 8 pure stateless analysis functions in `analysis/deep.py` (entry quality, side accuracy, missed opportunities, loss deep-dive, flip detection, entry timing, cross-iteration trends, auto-recommendations) plus `polybot-analyze-deep` CLI command with Rich rendering and JSON output
+- **Archive deep analysis** — `polybot-archive --analyze` flag auto-runs deep analysis after archiving, saving `analysis.json` and `analysis.md` to the archive directory; `write_markdown_report()` converts report dict to readable Markdown with tables and bullet points
 - **Dashboard: indicator panels** — All indicator panels on Trading page — Adaptive Entry, ML Model, Ensemble, Calibration, Exit Analysis, Knowledge Observations, Microstructure, Monitor/Prefilter — receiving live data via WebSocket
 - **Midpoint gap metric** — Captures UP+DOWN midpoint sum deviation from 1.0 at trade time; displayed in trade timeline (amber highlight when gap > 3%)
 - **Execution quality monitoring** — Real-time fill rate banner on trading page and per-iteration historical metrics on history page; backend computes fill rate, timeout count, fill source breakdown, avg matched size from `live_order` data

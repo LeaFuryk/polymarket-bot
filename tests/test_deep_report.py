@@ -7,7 +7,7 @@ import json
 
 from rich.console import Console
 
-from polybot.analysis.deep_report import build_deep_report, render_deep_report
+from polybot.analysis.deep_report import build_deep_report, render_deep_report, write_markdown_report
 
 
 def _create_archive(tmp_path, trades=None, resolutions=None, summary=None):
@@ -288,3 +288,104 @@ class TestRenderDeepReport:
 
         output = buf.getvalue()
         assert "Test recommendation" in output
+
+
+class TestWriteMarkdownReport:
+    def test_writes_markdown_file(self, tmp_path):
+        trades = [
+            {
+                "action": "BUY",
+                "fill_price": 0.50,
+                "confidence": 0.7,
+                "token_side": "UP",
+                "candle_slug": "s1",
+                "risk_blocked": False,
+                "reasoning": "test",
+                "fee": 0.01,
+            },
+        ]
+        resolutions = [{"slug": "s1", "winner": "UP", "btc_move": 80.0, "pnl": 0.10}]
+        summary = {"label": "test_md", "win_rate": 0.6, "total_pnl": 0.10}
+
+        iter_dir = _create_archive(tmp_path, trades=trades, resolutions=resolutions, summary=summary)
+        report = build_deep_report(iter_dir)
+
+        md_path = tmp_path / "analysis.md"
+        write_markdown_report(report, md_path)
+
+        md = md_path.read_text()
+        assert "# Deep Analysis" in md
+        assert "test_md" in md
+        assert "Win rate" in md
+        assert "Entry Quality" in md
+
+    def test_empty_report_markdown(self, tmp_path):
+        iter_dir = _create_archive(tmp_path)
+        report = build_deep_report(iter_dir)
+
+        md_path = tmp_path / "analysis.md"
+        write_markdown_report(report, md_path)
+
+        md = md_path.read_text()
+        assert "# Deep Analysis" in md
+        assert "Trades:** 0" in md
+
+    def test_markdown_with_recommendations(self, tmp_path):
+        report = {
+            "iteration": "test",
+            "summary": {"total_trades": 5, "total_resolutions": 3, "win_rate": 0.4, "total_pnl": -0.5},
+            "entry_quality": {"total_fills": 0},
+            "side_accuracy": {},
+            "losses": [],
+            "flips": [],
+            "missed_opportunities": {"missed_candles": 0},
+            "timing": {},
+            "trends": {},
+            "recommendations": [
+                {"severity": "high", "category": "test", "message": "Improve entry prices", "evidence": "Avg > 0.65"},
+            ],
+        }
+
+        md_path = tmp_path / "analysis.md"
+        write_markdown_report(report, md_path)
+
+        md = md_path.read_text()
+        assert "## Recommendations" in md
+        assert "[HIGH]" in md
+        assert "Improve entry prices" in md
+
+    def test_markdown_with_losses_and_flips(self, tmp_path):
+        trades = [
+            {
+                "action": "BUY",
+                "fill_price": 0.55,
+                "confidence": 0.7,
+                "token_side": "UP",
+                "candle_slug": "s1",
+                "risk_blocked": False,
+                "reasoning": "bullish",
+                "fee": 0.01,
+            },
+            {
+                "action": "SELL",
+                "fill_price": 0.45,
+                "confidence": 0.6,
+                "token_side": "UP",
+                "candle_slug": "s1",
+                "risk_blocked": False,
+                "reasoning": "exit",
+                "fee": 0.01,
+            },
+        ]
+        resolutions = [{"slug": "s1", "winner": "DOWN", "btc_move": -80.0, "pnl": -0.10}]
+        summary = {"label": "loss_test", "win_rate": 0.0, "total_pnl": -0.10}
+
+        iter_dir = _create_archive(tmp_path, trades=trades, resolutions=resolutions, summary=summary)
+        report = build_deep_report(iter_dir)
+
+        md_path = tmp_path / "analysis.md"
+        write_markdown_report(report, md_path)
+
+        md = md_path.read_text()
+        assert "## Losses" in md
+        assert "## Flips" in md

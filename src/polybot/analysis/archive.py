@@ -302,6 +302,11 @@ def main() -> None:
         action="store_true",
         help="Skip cleaning working directories after archiving",
     )
+    parser.add_argument(
+        "--analyze",
+        action="store_true",
+        help="Run deep analysis after archiving and save analysis.json + analysis.md",
+    )
     args = parser.parse_args()
 
     console = Console()
@@ -351,6 +356,15 @@ def main() -> None:
     console.print(f"  [cyan]PnL:[/cyan]        ${summary['total_pnl']:+,.2f}")
     console.print(f"  [cyan]Net Result:[/cyan] ${summary['net_result']:+,.2f}")
     console.print()
+
+    # Deep analysis
+    if args.analyze:
+        from polybot.analysis.deep_report import build_deep_report, write_markdown_report
+
+        report = build_deep_report(dest)
+        (dest / "analysis.json").write_text(json.dumps(report, indent=2))
+        write_markdown_report(report, dest / "analysis.md")
+        console.print(f"[green]Deep analysis saved → {dest / 'analysis.json'}, {dest / 'analysis.md'}[/green]")
 
     # Replay summary
     if replay_stats.get("candles_replayed", 0) > 0:
