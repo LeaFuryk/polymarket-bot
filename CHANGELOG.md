@@ -8,6 +8,7 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Refactored
+- **`adaptive_entry`** — Converted from single 735-LOC file to a package: `reversal_detector` (retracement detection), `threshold_calculator` (fakeout-based thresholds), `ai_context` (prompt generation), `tracker` (orchestrator). Dashboard uses public `window_size`/`history_count` properties instead of private attrs. Added 59 tests.
 - **`ml_scorer`** — Converted from single 332-LOC file to a package with separated concerns: `FeatureExtractor` (stateless feature engineering), `MLScorer` (model training/inference), `ModelState` (public diagnostic snapshot replacing private attribute access in dashboard). Added 51 tests at 97% coverage.
 
 ### Changed
