@@ -7,6 +7,13 @@ pipeline and the dashboard iteration history view.
 
 from __future__ import annotations
 
+from polybot.analysis.constants import (
+    DEEP_ENTRY_EXPENSIVE_THRESHOLD,
+    DEEP_FLIP_WARN,
+    DEEP_MISSED_HIGH_MOVE_THRESHOLD,
+    DEEP_SIDE_ACCURACY_WARN,
+)
+
 # ---------------------------------------------------------------------------
 # Entry quality
 # ---------------------------------------------------------------------------
@@ -352,3 +359,163 @@ def analyze_timing(
             "win_rate": round(data["wins"] / decided, 3) if decided else 0.0,
         }
     return result
+
+
+# ---------------------------------------------------------------------------
+# Cross-iteration trends
+# ---------------------------------------------------------------------------
+
+
+def analyze_trends(iterations: list[dict], window: int = 5) -> dict:
+    """Compute rolling averages and deltas across iteration summaries.
+
+    Args:
+        iterations: List of iteration summary dicts, each with
+            ``win_rate``, ``total_pnl``, ``trade_analysis``, etc.
+        window: Rolling window size.
+
+    Returns:
+        Dict with per-metric rolling averages and latest delta.
+    """
+    metrics: dict[str, list[float]] = {
+        "win_rate": [],
+        "total_pnl": [],
+        "avg_fill_price": [],
+        "hold_rate": [],
+    }
+
+    for it in iterations:
+        metrics["win_rate"].append(it.get("win_rate", 0.0))
+        metrics["total_pnl"].append(it.get("total_pnl", 0.0))
+        ta = it.get("trade_analysis", {})
+        metrics["avg_fill_price"].append(ta.get("avg_fill_price", 0.0))
+        metrics["hold_rate"].append(ta.get("hold_rate", 0.0))
+
+    result: dict[str, dict] = {}
+    for name, values in metrics.items():
+        if not values:
+            result[name] = {"values": [], "rolling_avg": [], "delta": 0.0}
+            continue
+        rolling: list[float] = []
+        for i in range(len(values)):
+            start = max(0, i - window + 1)
+            avg = sum(values[start : i + 1]) / (i - start + 1)
+            rolling.append(round(avg, 4))
+        delta = rolling[-1] - rolling[-2] if len(rolling) >= 2 else 0.0
+        result[name] = {
+            "values": [round(v, 4) for v in values],
+            "rolling_avg": rolling,
+            "delta": round(delta, 4),
+        }
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Auto-recommendations
+# ---------------------------------------------------------------------------
+
+
+def generate_recommendations(
+    entry_quality: dict,
+    side_accuracy: dict,
+    losses: list[dict],
+    flips: list[dict],
+    missed: dict,
+    trends: dict,
+) -> list[dict]:
+    """Generate actionable recommendations from analysis results.
+
+    Each recommendation has ``severity`` (high/medium/low),
+    ``category``, ``message``, and ``evidence``.
+
+    Args:
+        entry_quality: Output of :func:`analyze_entry_quality`.
+        side_accuracy: Output of :func:`analyze_side_accuracy`.
+        losses: Output of :func:`analyze_losses`.
+        flips: Output of :func:`analyze_flips`.
+        missed: Output of :func:`analyze_missed_opportunities`.
+        trends: Output of :func:`analyze_trends`.
+
+    Returns:
+        List of recommendation dicts sorted by severity (high first).
+    """
+    recs: list[dict] = []
+    severity_order = {"high": 0, "medium": 1, "low": 2}
+
+    # Expensive entries
+    avg_fill = entry_quality.get("avg_fill_price", 0.0)
+    if avg_fill >= DEEP_ENTRY_EXPENSIVE_THRESHOLD:
+        recs.append(
+            {
+                "severity": "high",
+                "category": "entry_quality",
+                "message": f"Average fill price is {avg_fill:.2f} — entries are too expensive",
+                "evidence": f"{entry_quality.get('expensive', 0) + entry_quality.get('very_expensive', 0)} of {entry_quality.get('total_fills', 0)} fills above 0.55",
+            }
+        )
+
+    # Poor side accuracy
+    for side, data in side_accuracy.items():
+        wr = data.get("win_rate", 0.0)
+        decided = data.get("wins", 0) + data.get("losses", 0)
+        if decided >= 3 and wr < DEEP_SIDE_ACCURACY_WARN:
+            recs.append(
+                {
+                    "severity": "high",
+                    "category": "side_accuracy",
+                    "message": f"{side} side win rate is {wr:.0%} ({data.get('wins', 0)}W/{data.get('losses', 0)}L)",
+                    "evidence": f"Total PnL on {side}: {data.get('total_pnl', 0):.4f}",
+                }
+            )
+
+    # Excessive flipping
+    total_flips = sum(f.get("flip_count", 0) for f in flips)
+    if total_flips > DEEP_FLIP_WARN:
+        total_fees = sum(f.get("total_fees", 0) for f in flips)
+        recs.append(
+            {
+                "severity": "medium",
+                "category": "flipping",
+                "message": f"{total_flips} position flips detected across {len(flips)} candles",
+                "evidence": f"Total flip fees: {total_fees:.4f}",
+            }
+        )
+
+    # High missed opportunities
+    high_missed = missed.get("high_move_missed", 0)
+    if high_missed >= 2:
+        recs.append(
+            {
+                "severity": "medium",
+                "category": "missed_opportunities",
+                "message": f"{high_missed} high-move candles (>=${DEEP_MISSED_HIGH_MOVE_THRESHOLD:.0f} BTC) missed",
+                "evidence": f"Biggest missed move: ${missed.get('biggest_missed_move', 0):.1f}",
+            }
+        )
+
+    # Predictable losses
+    predictable = [loss for loss in losses if loss.get("predictable")]
+    if predictable:
+        recs.append(
+            {
+                "severity": "medium",
+                "category": "predictable_losses",
+                "message": f"{len(predictable)} of {len(losses)} losses were predictable (large opposite BTC move)",
+                "evidence": f"Worst: {min(loss['pnl'] for loss in predictable):.4f} PnL",
+            }
+        )
+
+    # Declining win rate trend
+    wr_trend = trends.get("win_rate", {})
+    if wr_trend.get("delta", 0) < -0.05:
+        recs.append(
+            {
+                "severity": "low",
+                "category": "trend",
+                "message": f"Win rate trending down (delta: {wr_trend['delta']:.2%})",
+                "evidence": f"Latest rolling avg: {wr_trend.get('rolling_avg', [0])[-1]:.2%}",
+            }
+        )
+
+    recs.sort(key=lambda r: severity_order.get(r["severity"], 99))
+    return recs

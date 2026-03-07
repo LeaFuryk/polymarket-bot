@@ -7,6 +7,8 @@ from polybot.analysis.deep import (
     analyze_missed_opportunities,
     analyze_side_accuracy,
     analyze_timing,
+    analyze_trends,
+    generate_recommendations,
 )
 from polybot.analysis.engine import (
     build_decision_timeline,
@@ -26,6 +28,8 @@ __all__ = [
     "analyze_missed_opportunities",
     "analyze_side_accuracy",
     "analyze_timing",
+    "analyze_trends",
+    "generate_recommendations",
     # engine — pure analysis functions
     "build_decision_timeline",
     "compute_ob_stats",

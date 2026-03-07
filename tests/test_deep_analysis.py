@@ -9,6 +9,8 @@ from polybot.analysis.deep import (
     analyze_missed_opportunities,
     analyze_side_accuracy,
     analyze_timing,
+    analyze_trends,
+    generate_recommendations,
 )
 
 # ---------------------------------------------------------------------------
@@ -473,3 +475,165 @@ class TestAnalyzeTiming:
         assert len(result) == 5
         expected = ["0-60s", "60-120s", "120-180s", "180-240s", "240-300s"]
         assert list(result.keys()) == expected
+
+
+# ---------------------------------------------------------------------------
+# Fixtures for iteration summaries
+# ---------------------------------------------------------------------------
+
+
+def _iteration(win_rate: float = 0.5, total_pnl: float = 0.0, avg_fill: float = 0.50, hold_rate: float = 0.3) -> dict:
+    return {
+        "win_rate": win_rate,
+        "total_pnl": total_pnl,
+        "trade_analysis": {"avg_fill_price": avg_fill, "hold_rate": hold_rate},
+    }
+
+
+# ---------------------------------------------------------------------------
+# analyze_trends
+# ---------------------------------------------------------------------------
+
+
+class TestAnalyzeTrends:
+    def test_empty(self):
+        result = analyze_trends([])
+        assert result["win_rate"]["values"] == []
+        assert result["win_rate"]["delta"] == 0.0
+
+    def test_single_iteration(self):
+        result = analyze_trends([_iteration(win_rate=0.6)])
+        assert result["win_rate"]["values"] == [0.6]
+        assert result["win_rate"]["rolling_avg"] == [0.6]
+        assert result["win_rate"]["delta"] == 0.0
+
+    def test_rolling_average(self):
+        iters = [_iteration(win_rate=wr) for wr in [0.4, 0.5, 0.6, 0.7, 0.8]]
+        result = analyze_trends(iters, window=3)
+        # Last rolling avg = avg(0.6, 0.7, 0.8) = 0.7
+        assert result["win_rate"]["rolling_avg"][-1] == 0.7
+
+    def test_delta_positive(self):
+        iters = [_iteration(win_rate=0.4), _iteration(win_rate=0.6)]
+        result = analyze_trends(iters, window=1)
+        assert result["win_rate"]["delta"] == 0.2
+
+    def test_delta_negative(self):
+        iters = [_iteration(win_rate=0.7), _iteration(win_rate=0.5)]
+        result = analyze_trends(iters, window=1)
+        assert result["win_rate"]["delta"] == -0.2
+
+    def test_tracks_all_metrics(self):
+        iters = [_iteration(total_pnl=1.0, avg_fill=0.55, hold_rate=0.4)]
+        result = analyze_trends(iters)
+        assert "total_pnl" in result
+        assert "avg_fill_price" in result
+        assert "hold_rate" in result
+
+    def test_missing_trade_analysis(self):
+        result = analyze_trends([{"win_rate": 0.5}])
+        assert result["avg_fill_price"]["values"] == [0.0]
+
+
+# ---------------------------------------------------------------------------
+# generate_recommendations
+# ---------------------------------------------------------------------------
+
+
+class TestGenerateRecommendations:
+    def _base_inputs(self):
+        return {
+            "entry_quality": {"avg_fill_price": 0.50, "total_fills": 10, "expensive": 1, "very_expensive": 0},
+            "side_accuracy": {"UP": {"win_rate": 0.7, "wins": 7, "losses": 3, "total_pnl": 0.5}},
+            "losses": [],
+            "flips": [],
+            "missed": {"high_move_missed": 0, "biggest_missed_move": 0},
+            "trends": {"win_rate": {"delta": 0.0, "rolling_avg": [0.6]}},
+        }
+
+    def test_no_recommendations_when_healthy(self):
+        inputs = self._base_inputs()
+        result = generate_recommendations(**inputs)
+        assert result == []
+
+    def test_expensive_entries(self):
+        inputs = self._base_inputs()
+        inputs["entry_quality"]["avg_fill_price"] = 0.70
+        inputs["entry_quality"]["expensive"] = 5
+        inputs["entry_quality"]["very_expensive"] = 2
+        result = generate_recommendations(**inputs)
+        cats = [r["category"] for r in result]
+        assert "entry_quality" in cats
+        assert result[0]["severity"] == "high"
+
+    def test_poor_side_accuracy(self):
+        inputs = self._base_inputs()
+        inputs["side_accuracy"]["DOWN"] = {"win_rate": 0.3, "wins": 1, "losses": 4, "total_pnl": -0.2}
+        result = generate_recommendations(**inputs)
+        cats = [r["category"] for r in result]
+        assert "side_accuracy" in cats
+
+    def test_side_accuracy_ignored_few_trades(self):
+        inputs = self._base_inputs()
+        inputs["side_accuracy"]["DOWN"] = {"win_rate": 0.0, "wins": 0, "losses": 2, "total_pnl": -0.1}
+        result = generate_recommendations(**inputs)
+        cats = [r["category"] for r in result]
+        assert "side_accuracy" not in cats
+
+    def test_excessive_flipping(self):
+        inputs = self._base_inputs()
+        inputs["flips"] = [
+            {"slug": "s1", "flip_count": 2, "total_fees": 0.03},
+            {"slug": "s2", "flip_count": 1, "total_fees": 0.01},
+        ]
+        result = generate_recommendations(**inputs)
+        cats = [r["category"] for r in result]
+        assert "flipping" in cats
+
+    def test_high_missed_opportunities(self):
+        inputs = self._base_inputs()
+        inputs["missed"]["high_move_missed"] = 3
+        inputs["missed"]["biggest_missed_move"] = 120.0
+        result = generate_recommendations(**inputs)
+        cats = [r["category"] for r in result]
+        assert "missed_opportunities" in cats
+
+    def test_predictable_losses(self):
+        inputs = self._base_inputs()
+        inputs["losses"] = [
+            {"pnl": -0.10, "predictable": True},
+            {"pnl": -0.05, "predictable": False},
+        ]
+        result = generate_recommendations(**inputs)
+        cats = [r["category"] for r in result]
+        assert "predictable_losses" in cats
+
+    def test_declining_win_rate_trend(self):
+        inputs = self._base_inputs()
+        inputs["trends"]["win_rate"]["delta"] = -0.08
+        inputs["trends"]["win_rate"]["rolling_avg"] = [0.55]
+        result = generate_recommendations(**inputs)
+        cats = [r["category"] for r in result]
+        assert "trend" in cats
+
+    def test_sorted_by_severity(self):
+        inputs = self._base_inputs()
+        inputs["entry_quality"]["avg_fill_price"] = 0.70
+        inputs["entry_quality"]["expensive"] = 5
+        inputs["flips"] = [{"slug": "s1", "flip_count": 3, "total_fees": 0.05}]
+        inputs["trends"]["win_rate"]["delta"] = -0.10
+        inputs["trends"]["win_rate"]["rolling_avg"] = [0.4]
+        result = generate_recommendations(**inputs)
+        severities = [r["severity"] for r in result]
+        assert severities == sorted(severities, key=lambda s: {"high": 0, "medium": 1, "low": 2}[s])
+
+    def test_multiple_recommendations(self):
+        inputs = self._base_inputs()
+        inputs["entry_quality"]["avg_fill_price"] = 0.70
+        inputs["entry_quality"]["expensive"] = 5
+        inputs["side_accuracy"]["DOWN"] = {"win_rate": 0.3, "wins": 1, "losses": 5, "total_pnl": -0.3}
+        inputs["flips"] = [{"slug": "s1", "flip_count": 3, "total_fees": 0.05}]
+        inputs["missed"]["high_move_missed"] = 4
+        inputs["missed"]["biggest_missed_move"] = 150.0
+        result = generate_recommendations(**inputs)
+        assert len(result) >= 4
