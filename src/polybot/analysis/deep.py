@@ -171,3 +171,184 @@ def analyze_missed_opportunities(
         "biggest_missed_move": round(max((m["abs_move"] for m in missed), default=0.0), 1),
         "missed_details": missed,
     }
+
+
+# ---------------------------------------------------------------------------
+# Loss deep-dive
+# ---------------------------------------------------------------------------
+
+_REASONING_EXCERPT_LEN = 200
+_PREDICTABLE_MOVE_THRESHOLD = 50.0  # $50 BTC move in opposite direction
+
+
+def analyze_losses(
+    trades: list[dict],
+    resolutions: list[dict],
+) -> list[dict]:
+    """Deep-dive into losing trades with context.
+
+    For each loss, captures entry side, fill price, reasoning excerpt,
+    BTC move, and whether the loss was predictable (large BTC move in
+    the opposite direction of the entry).
+
+    Args:
+        trades: Trade dicts with ``action``, ``token_side``, ``fill_price``,
+            ``reasoning``, ``candle_slug``, ``risk_blocked``.
+        resolutions: Resolution dicts with ``slug``, ``winner``, ``pnl``,
+            ``btc_move``.
+
+    Returns:
+        List of loss detail dicts, one per losing candle.
+    """
+    res_by_slug: dict[str, dict] = {r["slug"]: r for r in resolutions if "slug" in r}
+
+    losses: list[dict] = []
+    for t in trades:
+        if t.get("action") not in ("BUY", "SELL") or t.get("risk_blocked"):
+            continue
+        slug = t.get("candle_slug", "")
+        res = res_by_slug.get(slug)
+        if res is None or res.get("pnl", 0) >= -0.001:
+            continue
+
+        side = t.get("token_side", "unknown")
+        btc_move = res.get("btc_move", 0)
+        winner = res.get("winner", "")
+
+        # Predictable: large BTC move favoured the opposite side
+        opposite_won = (side == "UP" and winner == "DOWN") or (side == "DOWN" and winner == "UP")
+        predictable = opposite_won and abs(btc_move) >= _PREDICTABLE_MOVE_THRESHOLD
+
+        reasoning = t.get("reasoning", "")
+        losses.append(
+            {
+                "slug": slug,
+                "side": side,
+                "fill_price": t.get("fill_price"),
+                "pnl": round(res.get("pnl", 0), 4),
+                "btc_move": round(btc_move, 1),
+                "winner": winner,
+                "predictable": predictable,
+                "reasoning_excerpt": reasoning[:_REASONING_EXCERPT_LEN],
+            }
+        )
+    return losses
+
+
+# ---------------------------------------------------------------------------
+# Flip detection
+# ---------------------------------------------------------------------------
+
+
+def analyze_flips(trades: list[dict]) -> list[dict]:
+    """Detect same-candle position flips (e.g. BUY→SELL→BUY).
+
+    A flip is when the bot takes opposing actions within the same candle.
+    Each flip represents wasted fees and potential loss.
+
+    Args:
+        trades: Trade dicts with ``action``, ``candle_slug``, ``fee``,
+            ``risk_blocked``.
+
+    Returns:
+        List of flip dicts, one per candle with flips detected.
+    """
+    by_slug: dict[str, list[dict]] = {}
+    for t in trades:
+        if t.get("action") not in ("BUY", "SELL") or t.get("risk_blocked"):
+            continue
+        slug = t.get("candle_slug", "")
+        if slug:
+            by_slug.setdefault(slug, []).append(t)
+
+    flips: list[dict] = []
+    for slug, candle_trades in by_slug.items():
+        if len(candle_trades) < 2:
+            continue
+        actions = [t["action"] for t in candle_trades]
+        # A flip occurs when consecutive actions differ
+        flip_count = sum(1 for i in range(1, len(actions)) if actions[i] != actions[i - 1])
+        if flip_count == 0:
+            continue
+        fees = sum(t.get("fee", 0) for t in candle_trades)
+        flips.append(
+            {
+                "slug": slug,
+                "actions": actions,
+                "flip_count": flip_count,
+                "trade_count": len(candle_trades),
+                "total_fees": round(fees, 4),
+            }
+        )
+    return flips
+
+
+# ---------------------------------------------------------------------------
+# Entry timing
+# ---------------------------------------------------------------------------
+
+_CANDLE_DURATION = 300  # 5 minutes in seconds
+_TIMING_BUCKETS = [
+    (0, 60),
+    (60, 120),
+    (120, 180),
+    (180, 240),
+    (240, 300),
+]
+
+
+def analyze_timing(
+    trades: list[dict],
+    resolutions: list[dict],
+) -> dict:
+    """Bin entries by elapsed seconds into the candle and correlate with outcomes.
+
+    Uses ``time_remaining_at_trade`` to compute elapsed time.
+
+    Args:
+        trades: Trade dicts with ``action``, ``candle_slug``,
+            ``time_remaining_at_trade``, ``risk_blocked``.
+        resolutions: Resolution dicts with ``slug``, ``pnl``.
+
+    Returns:
+        Dict with per-bucket trade counts and win rates.
+    """
+    res_by_slug: dict[str, dict] = {r["slug"]: r for r in resolutions if "slug" in r}
+
+    buckets: dict[str, dict] = {}
+    for lo, hi in _TIMING_BUCKETS:
+        label = f"{lo}-{hi}s"
+        buckets[label] = {"trades": 0, "wins": 0, "losses": 0}
+
+    for t in trades:
+        if t.get("action") not in ("BUY", "SELL") or t.get("risk_blocked"):
+            continue
+        tr = t.get("time_remaining_at_trade")
+        if tr is None:
+            continue
+        elapsed = _CANDLE_DURATION - tr
+
+        for lo, hi in _TIMING_BUCKETS:
+            if lo <= elapsed < hi:
+                label = f"{lo}-{hi}s"
+                buckets[label]["trades"] += 1
+                slug = t.get("candle_slug", "")
+                res = res_by_slug.get(slug)
+                if res is not None:
+                    pnl = res.get("pnl", 0)
+                    if pnl > 0.001:
+                        buckets[label]["wins"] += 1
+                    elif pnl < -0.001:
+                        buckets[label]["losses"] += 1
+                break
+
+    result: dict[str, dict] = {}
+    for label, data in buckets.items():
+        decided = data["wins"] + data["losses"]
+        result[label] = {
+            "trades": data["trades"],
+            "wins": data["wins"],
+            "losses": data["losses"],
+            "win_rate": round(data["wins"] / decided, 3) if decided else 0.0,
+        }
+    return result
