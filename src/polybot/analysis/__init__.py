@@ -1,5 +1,6 @@
 """Analysis package — replay, validation, and reporting tools."""
 
+from polybot.analysis.deep import analyze_entry_quality, analyze_missed_opportunities, analyze_side_accuracy
 from polybot.analysis.engine import (
     build_decision_timeline,
     compute_ob_stats,
@@ -11,6 +12,10 @@ from polybot.analysis.engine import (
 from polybot.analysis.replay import render_aggregate_summary, render_report, replay_all_candles, replay_candle
 
 __all__ = [
+    # deep — post-run analysis functions
+    "analyze_entry_quality",
+    "analyze_missed_opportunities",
+    "analyze_side_accuracy",
     # engine — pure analysis functions
     "build_decision_timeline",
     "compute_ob_stats",
