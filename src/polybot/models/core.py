@@ -216,6 +216,8 @@ class LiveOrderResult(BaseModel):
     size_matched: float = 0.0
     decision_ob_ask: float | None = None
     decision_ob_bid: float | None = None
+    reprice_from: float | None = None  # original decision-time limit price before repricing
+    drift_pct: float | None = None  # measured price drift during AI latency
 
 
 class PendingLimitOrder(BaseModel):
