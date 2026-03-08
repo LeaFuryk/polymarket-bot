@@ -324,14 +324,31 @@ class RotationManager:
         spreads_down = [s.down_spread_pct for s in history if s.down_spread_pct is not None]
         moves = [s.btc_move_from_open for s in history]
 
+        btc_range = max(moves) - min(moves) if moves else 0.0
+        btc_final_move = moves[-1] if moves else 0.0
+
+        # Zero crossings: count sign changes in BTC move (skip noise < $1)
+        crossings = 0
+        for i in range(1, len(moves)):
+            if moves[i - 1] * moves[i] < 0 and abs(moves[i]) >= 1.0 and abs(moves[i - 1]) >= 1.0:
+                crossings += 1
+
+        # Reversal intensity: 0 = directional, 1 = full whipsaw
+        if btc_range > 1.0:
+            rev_intensity = 1.0 - abs(btc_final_move) / btc_range
+        else:
+            rev_intensity = 0.0
+
         summary = CandleMicrostructure(
             timestamp=time.time(),
             avg_spread_up=statistics.mean(spreads_up) if spreads_up else 0.0,
             avg_spread_down=statistics.mean(spreads_down) if spreads_down else 0.0,
             avg_depth=0.0,  # filled from snapshot if available
             avg_imbalance=1.0,
-            btc_range=max(moves) - min(moves) if moves else 0.0,
-            btc_final_move=moves[-1] if moves else 0.0,
+            btc_range=btc_range,
+            btc_final_move=btc_final_move,
+            zero_crossings=crossings,
+            reversal_intensity=rev_intensity,
         )
 
         ctx.shared.microstructure_history.append(summary)

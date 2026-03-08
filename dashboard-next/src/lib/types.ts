@@ -342,6 +342,15 @@ export interface MicrostructureEntry {
   avg_imbalance: number;
   btc_range: number;
   btc_final_move: number;
+  zero_crossings: number;
+  reversal_intensity: number;
+}
+
+export interface ReversalRegime {
+  score: number;
+  label: string;
+  avg_crossings: number;
+  avg_intensity: number;
 }
 
 export interface EnsembleStats {
@@ -383,6 +392,7 @@ export interface SnapshotData {
   resolutions_since_reflection?: number;
   knowledge_total_resolutions?: number;
   microstructure?: MicrostructureEntry[];
+  reversal_regime?: ReversalRegime | null;
 }
 
 // --- Candle Snapshots ---

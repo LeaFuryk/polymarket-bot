@@ -13,6 +13,7 @@ import asyncio
 import logging
 import time
 from functools import partial
+from typing import Any
 
 from py_clob_client.client import ClobClient
 from py_clob_client.clob_types import ApiCreds, OrderArgs, OrderType
@@ -20,6 +21,7 @@ from py_clob_client.clob_types import ApiCreds, OrderArgs, OrderType
 from polybot.config import ApiConfig, TradingConfig
 from polybot.execution.constants import (
     FEE_RATE_BPS,
+    MAX_SUBMIT_SPREAD_PCT,
     ORDER_EXPIRATION,
     POLL_INTERVAL_SECONDS,
     POST_CANCEL_WAIT_SECONDS,
@@ -264,6 +266,64 @@ class LiveExecutionEngine:
                 logger.warning("Live SELL blocked: no on-chain balance for token %s", token_id[:8])
                 return None
 
+        # --- Reprice from fresh orderbook + drift/spread guards ---
+        fresh_ob: OrderbookSnapshot | None = None
+        reprice_from: float | None = None
+        drift_pct: float | None = None
+
+        if not self._config.dry_run:
+            fresh_ob = await self._refetch_orderbook(token_id)
+            if fresh_ob is not None:
+                fresh_price = fresh_ob.best_ask if side == Side.BUY else fresh_ob.best_bid
+                if fresh_price is not None and limit_price > 0:
+                    drift_pct = (fresh_price - limit_price) / limit_price
+                    reprice_from = limit_price
+
+                    if side == Side.BUY:
+                        # Spread guard: skip BUY if submit-time spread is too wide
+                        if fresh_ob.spread_pct is not None and fresh_ob.spread_pct > MAX_SUBMIT_SPREAD_PCT:
+                            self._last_skip_reason = (
+                                f"submit spread {fresh_ob.spread_pct:.1%} > max {MAX_SUBMIT_SPREAD_PCT:.0%}"
+                            )
+                            logger.warning(
+                                "Live BUY skipped: spread %.1f%% exceeds max %.0f%%",
+                                fresh_ob.spread_pct * 100,
+                                MAX_SUBMIT_SPREAD_PCT * 100,
+                            )
+                            return None
+
+                        # Drift guard: skip BUY if price moved up > max_price_drift_pct
+                        if drift_pct > self._config.max_price_drift_pct:
+                            self._last_skip_reason = (
+                                f"price drift {drift_pct:.1%} > max {self._config.max_price_drift_pct:.0%}"
+                            )
+                            logger.warning(
+                                "Live BUY skipped: drift %.1f%% exceeds max %.0f%% (decision=%.4f → fresh=%.4f)",
+                                drift_pct * 100,
+                                self._config.max_price_drift_pct * 100,
+                                limit_price,
+                                fresh_price,
+                            )
+                            return None
+
+                        # Reprice BUY to fresh ask (within drift cap)
+                        logger.info(
+                            "Repricing BUY: %.4f → %.4f (drift %.1f%%)",
+                            limit_price,
+                            fresh_price,
+                            drift_pct * 100,
+                        )
+                        limit_price = fresh_price
+                    else:
+                        # SELL: always reprice to fresh bid (exits must go through)
+                        logger.info(
+                            "Repricing SELL: %.4f → %.4f (drift %.1f%%)",
+                            limit_price,
+                            fresh_price,
+                            drift_pct * 100,
+                        )
+                        limit_price = fresh_price
+
         # --- Submit limit order ---
         ttl = self._config.limit_order_ttl_seconds
         try:
@@ -282,11 +342,14 @@ class LiveExecutionEngine:
                     size=order_size,
                     limit_price=limit_price,
                     ttl=ttl,
+                    fresh_ob=fresh_ob,
                 )
 
-            # Populate decision-time orderbook on the result
+            # Populate decision-time orderbook and repricing telemetry
             result.decision_ob_ask = orderbook.best_ask
             result.decision_ob_bid = orderbook.best_bid
+            result.reprice_from = reprice_from
+            result.drift_pct = drift_pct
 
             if result.fill:
                 # Update wallet balance estimate
@@ -320,6 +383,7 @@ class LiveExecutionEngine:
         size: float,
         limit_price: float,
         ttl: int,
+        fresh_ob: OrderbookSnapshot | None = None,
     ) -> LiveOrderResult:
         """Create and submit a GTC limit order, poll for fill, cancel on timeout.
 
@@ -340,8 +404,9 @@ class LiveExecutionEngine:
         pre_balance = await self._get_conditional_balance(token_id)
         result.pre_balance = pre_balance
 
-        # Snapshot orderbook at submit time
-        fresh_ob = await self._refetch_orderbook(token_id)
+        # Snapshot orderbook at submit time (reuse caller's fresh OB if provided)
+        if fresh_ob is None:
+            fresh_ob = await self._refetch_orderbook(token_id)
         result.ob_at_submit = snapshot_ob(fresh_ob)
 
         order_args = OrderArgs(
@@ -403,10 +468,19 @@ class LiveExecutionEngine:
         for i in range(ttl):
             await asyncio.sleep(POLL_INTERVAL_SECONDS)
             try:
-                order_status = await loop.run_in_executor(None, partial(self._client.get_order, order_id))
+                # Fetch order status and orderbook in parallel (zero extra latency)
+                order_status, poll_ob = await asyncio.gather(
+                    loop.run_in_executor(None, partial(self._client.get_order, order_id)),
+                    self._refetch_orderbook(token_id),
+                )
 
                 status, sm = extract_order_fill_info(order_status)
-                result.polls.append({"ts": time.time(), "status": status, "size_matched": sm})
+                poll_entry: dict[str, Any] = {"ts": time.time(), "status": status, "size_matched": sm}
+                if poll_ob is not None:
+                    poll_entry["best_ask"] = poll_ob.best_ask
+                    poll_entry["best_bid"] = poll_ob.best_bid
+                    poll_entry["ask_depth"] = round(poll_ob.ask_depth, 2)
+                result.polls.append(poll_entry)
 
                 if status in ("MATCHED", "FILLED") or sm > 0:
                     fill_source = "status_poll" if status in ("MATCHED", "FILLED") else "size_matched"
@@ -424,6 +498,8 @@ class LiveExecutionEngine:
                         pass  # Already filled, cancel may fail — that's fine
 
                     fill = parse_order_response(order_status, side, size, limit_price)
+                    if fill is None and sm > 0:
+                        fill = make_fill_from_balance(side, sm, limit_price)
                     result.fill = fill
                     result.fill_ts = time.time()
                     result.fill_source = fill_source
@@ -486,6 +562,8 @@ class LiveExecutionEngine:
                     sm,
                 )
                 fill = parse_order_response(final_status, side, size, limit_price)
+                if fill is None and sm > 0:
+                    fill = make_fill_from_balance(side, sm, limit_price)
                 result.fill = fill
                 result.fill_ts = time.time()
                 result.fill_source = "post_cancel"

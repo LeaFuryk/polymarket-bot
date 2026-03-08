@@ -7,22 +7,46 @@ no side effects, making them trivially unit-testable.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from polybot.models import Action, ResolutionRecord
 from polybot.shared_state import PreFilterSnapshot
+from polybot.shared_state.candle_microstructure import CandleMicrostructure
+
+# ---------------------------------------------------------------------------
+# Velocity-magnitude conflict detection
+# ---------------------------------------------------------------------------
 
 
-def compute_btc_trajectory(history: list[PreFilterSnapshot]) -> str | None:
-    """Compute BTC velocity and peak-drawback from prefilter snapshots.
+@dataclass
+class VelocityConflict:
+    """Result of detecting a conflict between BTC magnitude and velocity."""
 
-    Returns a compact trajectory section for the AI prompt, or None
-    if insufficient data.
+    has_conflict: bool
+    severity: float  # 0.0 - 1.0
+    magnitude_direction: str  # "UP" or "DOWN"
+    velocity_direction: str  # "UP" or "DOWN"
+    velocity_rate: float  # $/s
+    btc_move: float  # current move from open
+    drawback_pct: float  # how much of peak has been given back (0-1)
+    time_remaining: float
+    label: str  # "STRONG_CONFLICT", "MODERATE_CONFLICT", or "ALIGNED"
+    detail: str  # human-readable explanation
+
+
+def _compute_velocity_data(
+    history: list[PreFilterSnapshot],
+) -> tuple[float, float, float, float, float] | None:
+    """Extract velocity stats from prefilter snapshots.
+
+    Returns (current_vel, earlier_vel, current_move, peak, drawback_pct)
+    or None if insufficient data.
     """
     if len(history) < 15:
         return None
 
     moves = [s.btc_move_from_open for s in history]
 
-    # Velocity: rate of change over last ~10s vs ~20-30s ago
     recent = moves[-10:]
     earlier = moves[-30:-20] if len(moves) >= 30 else moves[:10]
 
@@ -31,15 +55,124 @@ def compute_btc_trajectory(history: list[PreFilterSnapshot]) -> str | None:
 
     current_vel = (recent[-1] - recent[0]) / len(recent)
     earlier_vel = (earlier[-1] - earlier[0]) / len(earlier)
-
-    # Peak drawback: furthest BTC move vs current
     current_move = moves[-1]
-    # Find peak in the direction of the current move
+
+    # Peak drawback
     if current_move >= 0:
         peak = max(moves)
         drawback = peak - current_move
     else:
         peak = min(moves)
+        drawback = abs(peak) - abs(current_move)
+
+    drawback_pct = drawback / abs(peak) if abs(peak) > 0.01 else 0.0
+    drawback_pct = max(0.0, min(drawback_pct, 1.0))
+
+    return current_vel, earlier_vel, current_move, peak, drawback_pct
+
+
+def detect_velocity_magnitude_conflict(
+    history: list[PreFilterSnapshot],
+    time_remaining: float,
+) -> VelocityConflict:
+    """Detect when BTC velocity conflicts with magnitude direction.
+
+    Conflict exists when the magnitude signal points one way but velocity
+    shows BTC recovering in the opposite direction at > $0.5/s.
+    """
+    vel_data = _compute_velocity_data(history)
+
+    if vel_data is None:
+        return VelocityConflict(
+            has_conflict=False,
+            severity=0.0,
+            magnitude_direction="",
+            velocity_direction="",
+            velocity_rate=0.0,
+            btc_move=0.0,
+            drawback_pct=0.0,
+            time_remaining=time_remaining,
+            label="ALIGNED",
+            detail="Insufficient data for velocity analysis",
+        )
+
+    current_vel, _earlier_vel, current_move, _peak, drawback_pct = vel_data
+
+    mag_dir = "UP" if current_move >= 0 else "DOWN"
+    vel_dir = "UP" if current_vel >= 0 else "DOWN"
+    abs_vel = abs(current_vel)
+
+    # Conflict = opposite signs AND velocity above threshold
+    has_conflict = mag_dir != vel_dir and abs_vel > 0.5
+
+    if not has_conflict:
+        return VelocityConflict(
+            has_conflict=False,
+            severity=0.0,
+            magnitude_direction=mag_dir,
+            velocity_direction=vel_dir,
+            velocity_rate=current_vel,
+            btc_move=current_move,
+            drawback_pct=drawback_pct,
+            time_remaining=time_remaining,
+            label="ALIGNED",
+            detail=f"Magnitude ({mag_dir}) and velocity ({vel_dir}) aligned or velocity too low",
+        )
+
+    # Severity scoring:
+    # velocity_factor: how fast is BTC recovering? (0-1, capped at $3/s)
+    velocity_factor = min(abs_vel / 3.0, 1.0)
+
+    # drawback_factor: how much of peak has been given back? (0-1)
+    drawback_factor = drawback_pct
+
+    # time_factor: more time remaining = more opportunity for recovery (0-1)
+    time_factor = min(time_remaining / 200.0, 1.0)
+
+    severity = 0.4 * velocity_factor + 0.35 * drawback_factor + 0.25 * time_factor
+    severity = max(0.0, min(severity, 1.0))
+
+    if severity >= 0.7:
+        label = "STRONG_CONFLICT"
+    elif severity >= 0.4:
+        label = "MODERATE_CONFLICT"
+    else:
+        label = "ALIGNED"
+
+    detail = (
+        f"BTC at ${current_move:+,.0f} ({mag_dir}) but velocity ${current_vel:+.1f}/s ({vel_dir}), "
+        f"drawback {drawback_pct:.0%} of peak, {time_remaining:.0f}s left — severity {severity:.0%}"
+    )
+
+    return VelocityConflict(
+        has_conflict=True,
+        severity=severity,
+        magnitude_direction=mag_dir,
+        velocity_direction=vel_dir,
+        velocity_rate=current_vel,
+        btc_move=current_move,
+        drawback_pct=drawback_pct,
+        time_remaining=time_remaining,
+        label=label,
+        detail=detail,
+    )
+
+
+def compute_btc_trajectory(history: list[PreFilterSnapshot]) -> str | None:
+    """Compute BTC velocity and peak-drawback from prefilter snapshots.
+
+    Returns a compact trajectory section for the AI prompt, or None
+    if insufficient data.
+    """
+    vel_data = _compute_velocity_data(history)
+    if vel_data is None:
+        return None
+
+    current_vel, earlier_vel, current_move, peak, _drawback_pct = vel_data
+
+    if current_move >= 0:
+        drawback = peak - current_move
+    else:
         drawback = abs(peak) - abs(current_move)
 
     # Format
@@ -210,6 +343,63 @@ def format_microstructure(history: list) -> str | None:
     ]
 
     return "\n".join(parts)
+
+
+def compute_reversal_regime(
+    microstructure_history: list[CandleMicrostructure],
+    current_prefilter_history: list[PreFilterSnapshot] | None = None,
+) -> tuple[float, str] | None:
+    """Compute a reversal regime score from cross-candle microstructure.
+
+    Combines reversal intensity and zero crossings from completed candles,
+    optionally blended with live intra-candle metrics.
+
+    Returns (score, label) where score is 0-1 and label is one of
+    HIGH_REVERSAL, MODERATE_REVERSAL, or DIRECTIONAL.  Returns None if
+    fewer than 2 completed candles are available.
+    """
+    if len(microstructure_history) < 2:
+        return None
+
+    # Cross-candle score from completed candles
+    intensities = [h.reversal_intensity for h in microstructure_history]
+    crossings = [h.zero_crossings for h in microstructure_history]
+    avg_intensity = sum(intensities) / len(intensities)
+    avg_crossings = sum(crossings) / len(crossings)
+    crossing_score = min(avg_crossings / 4.0, 1.0)
+    cross_candle_score = 0.5 * avg_intensity + 0.5 * crossing_score
+
+    # Live candle metrics (optional)
+    live_score: float | None = None
+    if current_prefilter_history and len(current_prefilter_history) >= 10:
+        moves = [s.btc_move_from_open for s in current_prefilter_history]
+        # Live zero crossings
+        live_crossings = 0
+        for i in range(1, len(moves)):
+            if moves[i - 1] * moves[i] < 0 and abs(moves[i]) >= 1.0 and abs(moves[i - 1]) >= 1.0:
+                live_crossings += 1
+        # Live reversal intensity
+        btc_range = max(moves) - min(moves)
+        btc_final = moves[-1]
+        live_intensity = (1.0 - abs(btc_final) / btc_range) if btc_range > 1.0 else 0.0
+        live_score = 0.5 * live_intensity + 0.5 * min(live_crossings / 4.0, 1.0)
+
+    # Combined score
+    if live_score is not None:
+        score = 0.6 * cross_candle_score + 0.4 * live_score
+    else:
+        score = cross_candle_score
+
+    score = max(0.0, min(score, 1.0))
+
+    if score >= 0.6:
+        label = "HIGH_REVERSAL"
+    elif score >= 0.35:
+        label = "MODERATE_REVERSAL"
+    else:
+        label = "DIRECTIONAL"
+
+    return score, label
 
 
 def compute_entry_timing_stats(
