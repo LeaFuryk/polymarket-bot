@@ -48,6 +48,7 @@ from polybot.tasks.context_builder import (
     append_section,
     build_chainlink_warning,
     build_counter_trend_advisory,
+    build_reversal_regime_warning,
     build_stop_loss_warning,
     build_velocity_conflict_warning,
     format_ml_line,
@@ -57,6 +58,7 @@ from polybot.tasks.decision_guards import (
     apply_confidence_gate,
     apply_entry_price_cap,
     apply_position_sizing,
+    apply_reversal_regime_scaling,
     apply_single_entry,
     apply_velocity_conflict_scaling,
     clamp_sell_size,
@@ -68,6 +70,7 @@ from polybot.tasks.prompt_context import (
     compute_btc_trajectory,
     compute_entry_timing_stats,
     compute_retracement_context,
+    compute_reversal_regime,
     detect_velocity_magnitude_conflict,
     format_microstructure,
 )
@@ -652,6 +655,21 @@ class AIDecision:
             time_remaining=features.time_remaining,
         )
 
+        # Reversal regime (computed early for ML features)
+        _prefilter_list = list(self._shared.prefilter_history)
+        _regime_result = compute_reversal_regime(
+            self._shared.microstructure_history,
+            current_prefilter_history=_prefilter_list if len(_prefilter_list) >= 10 else None,
+        )
+        reversal_score = 0.0
+        zero_crossings_avg = 0.0
+        if _regime_result is not None:
+            reversal_score = _regime_result[0]
+            if self._shared.microstructure_history:
+                zero_crossings_avg = sum(h.zero_crossings for h in self._shared.microstructure_history) / len(
+                    self._shared.microstructure_history
+                )
+
         # ML prediction
         btc_price_val = snapshot.btc_price.price_usd if snapshot.btc_price else None
         ml_features = self._ml_scorer.extract_features(
@@ -665,6 +683,8 @@ class AIDecision:
             reversal_rate=self._adaptive_entry.rolling_reversal_rate if self._adaptive_entry else 0.0,
             btc_velocity=velocity_conflict.velocity_rate,
             velocity_conflict_severity=velocity_conflict.severity,
+            reversal_regime=reversal_score,
+            zero_crossings_avg=zero_crossings_avg,
         )
         ml_prediction = self._ml_scorer.predict(ml_features)
         if market:
@@ -696,6 +716,14 @@ class AIDecision:
         indicators_text = append_section(
             indicators_text, compute_entry_timing_stats(self._session_trades, self._recent_resolutions)
         )
+
+        # Reversal regime warning (score already computed above for ML)
+        if _regime_result is not None:
+            _rev_score, _rev_label = _regime_result
+            indicators_text = append_section(
+                indicators_text,
+                build_reversal_regime_warning(_rev_score, _rev_label, self._shared.microstructure_history),
+            )
 
         # Velocity-magnitude conflict warning
         indicators_text = append_section(indicators_text, build_velocity_conflict_warning(velocity_conflict))
@@ -900,6 +928,10 @@ class AIDecision:
         # Velocity conflict sizing guard
         if decision.action == Action.BUY:
             decision = apply_velocity_conflict_scaling(decision, velocity_conflict)
+
+        # Reversal regime sizing guard
+        if decision.action == Action.BUY:
+            decision = apply_reversal_regime_scaling(decision, reversal_score)
 
         # Shadow predictions for HOLD
         if decision.action == Action.HOLD and decision.hypothetical_direction and market:

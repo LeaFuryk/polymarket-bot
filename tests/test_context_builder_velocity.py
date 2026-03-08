@@ -38,7 +38,7 @@ class TestBuildVelocityConflictWarning:
         result = build_velocity_conflict_warning(_conflict(0.5))
         assert result is not None
         assert "## Velocity-Magnitude Conflict" in result
-        assert "Reduce confidence" in result
+        assert "auto-reduced to 75%" in result
         assert "DOWN" in result
         assert "UP" in result
 
@@ -46,20 +46,20 @@ class TestBuildVelocityConflictWarning:
         result = build_velocity_conflict_warning(_conflict(0.75, label="STRONG_CONFLICT"))
         assert result is not None
         assert "## VELOCITY-MAGNITUDE CONFLICT WARNING" in result
-        assert "STALE" in result
-        assert "do NOT trust magnitude alone" in result
+        assert "auto-reduced to 50%" in result
+        assert "Still trade" in result
 
     def test_moderate_boundary(self):
         # 0.4 is moderate
         result = build_velocity_conflict_warning(_conflict(0.4))
         assert result is not None
-        assert "Reduce confidence" in result
+        assert "auto-reduced to 75%" in result
 
     def test_strong_boundary(self):
         # 0.7 is strong
         result = build_velocity_conflict_warning(_conflict(0.7, label="STRONG_CONFLICT"))
         assert result is not None
-        assert "STALE" in result
+        assert "auto-reduced to 50%" in result
 
     def test_includes_velocity_rate(self):
         result = build_velocity_conflict_warning(_conflict(0.5, velocity_rate=3.5))

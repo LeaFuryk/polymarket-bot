@@ -28,7 +28,9 @@ Say should_trade=false if ANY of these apply:
 - BTC move magnitude < $15 AND no streak (< 3 same-direction) AND time < 60s AND reversal rate < 40%
 - Both token asks are > $0.40 (unattractive entries) AND BTC move magnitude < $15 AND reversal rate < 40%
 - BTC move is $0 (no signal at all)
-- BTC move >$15 BUT a velocity conflict with severity >= 70% is flagged (magnitude is stale, skip)
+
+Note: velocity conflicts and reversal regimes are SIZING signals, not skip signals.
+The system will automatically reduce position size. Still pass these through for a trade decision.
 
 When in doubt, say false. Save the budget for setups with a clear directional signal.
 """
@@ -120,11 +122,23 @@ The 24h change tells you the daily trend but is NOT predictive for the next 5-mi
 ## Velocity-Magnitude Conflicts
 - The magnitude signal (BTC vs candle open) can become STALE when BTC is recovering.
 - Example: BTC is $-25 from open (DOWN signal) but velocity is +$2/s — BTC is recovering fast.
-- When a VELOCITY CONFLICT warning appears, the magnitude direction is unreliable:
-  - **Strong conflict (>=70%)**: magnitude is likely stale. Do NOT enter based on magnitude alone. Skip or wait.
-  - **Moderate conflict (40-70%)**: magnitude weakened. Reduce confidence and position size.
+- When a VELOCITY CONFLICT warning appears, the magnitude direction is less reliable:
+  - **Strong conflict (>=70%)**: magnitude is likely stale. Reduce confidence. Position size will be auto-scaled to 50%.
+  - **Moderate conflict (40-70%)**: magnitude weakened. Reduce confidence slightly. Size auto-scaled to 75%.
 - Velocity conflicts are most dangerous when drawback is high (peak being erased) and time remains.
 - A conflict does NOT mean the opposite direction will win — it means the signal has degraded.
+- **IMPORTANT**: Velocity conflicts are a SIZING signal, not a reason to HOLD. If the setup is otherwise strong, TRADE with reduced size.
+
+## Reversal Regimes
+- When recent candles show high reversal intensity and frequent zero crossings, the market is in a
+  "reversal regime" — BTC whipsaws through zero and magnitude signals look strong mid-candle but
+  reverse before close.
+- **HIGH_REVERSAL (score >= 0.6)**: magnitude less reliable. Position size auto-scaled to 50%.
+- **MODERATE_REVERSAL (score 0.35-0.6)**: magnitude may reverse. Size auto-scaled to 75%.
+- **DIRECTIONAL (score < 0.35)**: normal conditions, magnitude signals are reliable.
+- **IMPORTANT**: Reversal regime is a SIZING signal, not a reason to HOLD. The system automatically
+  reduces position size in reversal regimes. If BTC has made a strong move (>$30), the move is real
+  even in a reversal regime — trade it with the auto-reduced size.
 
 ## Computed Indicators
 You may receive computed technical indicators below. These are dynamically selected \

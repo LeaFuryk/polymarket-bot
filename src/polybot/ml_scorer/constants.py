@@ -18,6 +18,8 @@ FEATURE_NAMES: list[str] = [
     "reversal_rate",  # rolling reversal rate from adaptive entry (0-1)
     "btc_velocity",  # current BTC velocity in $/s
     "velocity_conflict",  # velocity-magnitude conflict severity (0-1)
+    "reversal_regime",  # combined reversal regime score (0-1)
+    "zero_crossings_avg",  # avg zero crossings per candle
 ]
 
 NUM_FEATURES: int = len(FEATURE_NAMES)
@@ -39,6 +41,8 @@ NORMALIZATION_SCALES: list[float] = [
     1.0,  # reversal_rate: 0 to 1 (already scaled)
     5.0,  # btc_velocity: typically -$5/s to +$5/s
     1.0,  # velocity_conflict: 0 to 1 (already scaled)
+    1.0,  # reversal_regime: 0 to 1 (already scaled)
+    5.0,  # zero_crossings_avg: typically 0 to 8
 ]
 
 # ---------------------------------------------------------------------------

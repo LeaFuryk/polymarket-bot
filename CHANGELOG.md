@@ -7,6 +7,12 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+- **Reversal regime dashboard integration** — `zero_crossings` and `reversal_intensity` serialized from `CandleMicrostructure` into dashboard snapshots; top-level `reversal_regime` object (score, label, avg_crossings, avg_intensity) computed via `compute_reversal_regime()` and exposed to frontend. New `ReversalRegime` TypeScript interface, extended `MicrostructureEntry` type. `MicrostructurePanel` displays color-coded regime badge (red=HIGH_REVERSAL, amber=MODERATE, green=DIRECTIONAL) and two new table columns (Crossings, Rev Int) with threshold-based coloring.
+
+### Changed
+- **Prompt philosophy: sizing over blocking** — Rewrote all AI prompt language across three layers (screening prompt, system prompt, context builder warnings) to frame velocity conflicts, reversal regimes, and counter-trend signals as **sizing signals** rather than skip/HOLD directives. Removed hard-skip rules from screening prompt for HIGH_REVERSAL and velocity conflicts. Replaced "do NOT enter / skip / wait / require higher conviction / HOLD" with "size is auto-reduced, trade if signal is strong." Adaptive entry fakeout advisory reframed to distinguish small fakeout-range moves from large trustworthy moves. All mechanical sizing guards (`apply_reversal_regime_scaling`, `apply_velocity_conflict_scaling`, `compute_position_scale`) were already correct — prompt text now matches.
+
 ### Refactored
 - **`adaptive_entry`** — Converted from single 735-LOC file to a package: `reversal_detector` (retracement detection), `threshold_calculator` (fakeout-based thresholds), `ai_context` (prompt generation), `tracker` (orchestrator). Dashboard uses public `window_size`/`history_count` properties instead of private attrs. Added 59 tests.
 - **`ml_scorer`** — Converted from single 332-LOC file to a package with separated concerns: `FeatureExtractor` (stateless feature engineering), `MLScorer` (model training/inference), `ModelState` (public diagnostic snapshot replacing private attribute access in dashboard). Added 51 tests at 97% coverage.

@@ -129,6 +129,8 @@ class MLScorer:
         reversal_rate: float = 0.0,
         btc_velocity: float = 0.0,
         velocity_conflict_severity: float = 0.0,
+        reversal_regime: float = 0.0,
+        zero_crossings_avg: float = 0.0,
     ) -> dict[str, float]:
         """Extract ML features from market data.
 
@@ -145,6 +147,8 @@ class MLScorer:
             reversal_rate=reversal_rate,
             btc_velocity=btc_velocity,
             velocity_conflict_severity=velocity_conflict_severity,
+            reversal_regime=reversal_regime,
+            zero_crossings_avg=zero_crossings_avg,
         )
 
     def get_summary(self) -> str:

@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 
 from polybot.ml_scorer import FEATURE_NAMES  # noqa: F401 — used by enrich_iteration_summary
 from polybot.ml_scorer.constants import MIN_TRAINING_SAMPLES
+from polybot.tasks.prompt_context import compute_reversal_regime
 
 if TYPE_CHECKING:
     from polybot.agent.context import AgentContext
@@ -630,12 +631,28 @@ class DashboardAssembler:
                     "avg_imbalance": round(ms.avg_imbalance, 3),
                     "btc_range": round(ms.btc_range, 1),
                     "btc_final_move": round(ms.btc_final_move, 1),
+                    "zero_crossings": ms.zero_crossings,
+                    "reversal_intensity": round(ms.reversal_intensity, 3),
                 }
                 for ms in ctx.shared.microstructure_history
             ],
+            "reversal_regime": None,
             "iterations": ctx.iteration_summaries,
             "candle_snapshots": candle_snapshots,
         }
+
+        # Reversal regime (computed from microstructure history)
+        regime = compute_reversal_regime(ctx.shared.microstructure_history)
+        if regime is not None:
+            score, label = regime
+            intensities = [h.reversal_intensity for h in ctx.shared.microstructure_history]
+            crossings = [h.zero_crossings for h in ctx.shared.microstructure_history]
+            data["reversal_regime"] = {
+                "score": round(score, 3),
+                "label": label,
+                "avg_crossings": round(sum(crossings) / len(crossings), 2),
+                "avg_intensity": round(sum(intensities) / len(intensities), 3),
+            }
 
         # Explicit trading mode (paper / live / dry_run)
         if ctx.config.trading.mode == "live" and ctx.config.trading.dry_run:
