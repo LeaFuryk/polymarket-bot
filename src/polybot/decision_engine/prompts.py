@@ -5,6 +5,7 @@ from __future__ import annotations
 import statistics
 
 from polybot.models import FeatureVector
+from polybot.tasks.prompt_context import VelocityConflict
 
 SCREENING_PROMPT = """\
 You are a fast screening agent for a Polymarket BTC 5-minute candle prediction market bot.
@@ -182,7 +183,7 @@ def format_feature_vector(
     ai_cycle_cost: float = 0.0,
     ai_session_cost: float = 0.0,
     candle_open_btc: float | None = None,
-    velocity_conflict: object | None = None,
+    velocity_conflict: VelocityConflict | None = None,
 ) -> str:
     """Format a FeatureVector into a clear prompt for Claude."""
     up_ob = fv.market.orderbook
@@ -203,12 +204,11 @@ def format_feature_vector(
             move_desc = "STRONG move — high conviction signal"
         who_winning = "UP winning" if diff >= 0 else "DOWN winning"
         vc_line = ""
-        if velocity_conflict is not None and getattr(velocity_conflict, "severity", 0) >= 0.4:
-            vc = velocity_conflict
+        if velocity_conflict is not None and velocity_conflict.severity >= 0.4:
             vc_line = (
-                f"**VELOCITY CONFLICT ({vc.label})**: "
-                f"velocity ${vc.velocity_rate:+.1f}/s ({vc.velocity_direction}) "
-                f"opposes magnitude — severity {vc.severity:.0%}\n"
+                f"**VELOCITY CONFLICT ({velocity_conflict.label})**: "
+                f"velocity ${velocity_conflict.velocity_rate:+.1f}/s ({velocity_conflict.velocity_direction}) "
+                f"opposes magnitude — severity {velocity_conflict.severity:.0%}\n"
             )
         btc_move_line = (
             f"## >>> PRIMARY SIGNAL: BTC vs Candle Open <<<\n"
