@@ -8,6 +8,14 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added
+- **Execution repricing with drift guard** — After AI returns a decision, fetches fresh orderbook and reprices limit orders to current market. BUY orders skip when price drifts >5% (chasing protection). SELL orders always reprice (exits must go through). Spread guard rejects BUY orders when submit-time spread >5%. Fresh OB passed through to avoid double-fetch. Telemetry fields `reprice_from` and `drift_pct` on `LiveOrderResult` for monitoring.
+- **Partial fill fallback** — When CLOB status is `LIVE` but `size_matched > 0`, constructs fill from `make_fill_from_balance()` instead of returning None. Fixes iter_035 non-fill #1 (37/40 shares matched but not captured).
+- **Prompt overhaul plan** (`docs/prompt-overhaul-plan.md`) — Complete redesign of AI prompts: structured JSON snapshots replacing prose, adaptive 3-tier trajectory sampling (1s/10s/30s), candle-local vs cross-candle indicator split, ml_scorer as pre-filled tool result, decision_history for AI self-calibration, temperature=0, latency benchmark phase.
+- **AI prompt map** (`docs/ai-prompt-map.md`) — Documents exact Claude API payloads for all 3 calls (screening, main decision, reflection) with verbatim system prompts, user message templates, tool schemas.
+- **Indicators catalog** (`docs/indicators-catalog.md`) — All indicators organized by category with source paths and "Send to AI?" recommendations.
+- **iter_035 timeout analysis** (`docs/iter035-timeout-analysis.md`) — Second-by-second timelines for all 3 timed-out orders showing price drift during AI latency.
+
+### Added
 - **Reversal regime dashboard integration** — `zero_crossings` and `reversal_intensity` serialized from `CandleMicrostructure` into dashboard snapshots; top-level `reversal_regime` object (score, label, avg_crossings, avg_intensity) computed via `compute_reversal_regime()` and exposed to frontend. New `ReversalRegime` TypeScript interface, extended `MicrostructureEntry` type. `MicrostructurePanel` displays color-coded regime badge (red=HIGH_REVERSAL, amber=MODERATE, green=DIRECTIONAL) and two new table columns (Crossings, Rev Int) with threshold-based coloring.
 
 ### Changed
