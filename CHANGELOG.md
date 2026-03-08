@@ -7,6 +7,17 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+- **Execution repricing with drift guard** — After AI returns a decision, fetches fresh orderbook and reprices limit orders to current market. BUY orders skip when price drifts >5% (chasing protection). SELL orders always reprice (exits must go through). Spread guard rejects BUY orders when submit-time spread >5%. Fresh OB passed through to avoid double-fetch. Telemetry fields `reprice_from` and `drift_pct` on `LiveOrderResult` for monitoring.
+- **Partial fill fallback** — When CLOB status is `LIVE` but `size_matched > 0`, constructs fill from `make_fill_from_balance()` instead of returning None. Fixes iter_035 non-fill #1 (37/40 shares matched but not captured).
+- **Prompt overhaul plan** (`docs/prompt-overhaul-plan.md`) — Complete redesign of AI prompts: structured JSON snapshots replacing prose, adaptive 3-tier trajectory sampling (1s/10s/30s), candle-local vs cross-candle indicator split, ml_scorer as pre-filled tool result, decision_history for AI self-calibration, temperature=0, latency benchmark phase.
+- **AI prompt map** (`docs/ai-prompt-map.md`) — Documents exact Claude API payloads for all 3 calls (screening, main decision, reflection) with verbatim system prompts, user message templates, tool schemas.
+- **Indicators catalog** (`docs/indicators-catalog.md`) — All indicators organized by category with source paths and "Send to AI?" recommendations.
+- **iter_035 timeout analysis** (`docs/iter035-timeout-analysis.md`) — Second-by-second timelines for all 3 timed-out orders showing price drift during AI latency.
+- **Reversal regime dashboard integration** — `zero_crossings` and `reversal_intensity` serialized from `CandleMicrostructure` into dashboard snapshots; top-level `reversal_regime` object (score, label, avg_crossings, avg_intensity) computed via `compute_reversal_regime()` and exposed to frontend. New `ReversalRegime` TypeScript interface, extended `MicrostructureEntry` type. `MicrostructurePanel` displays color-coded regime badge (red=HIGH_REVERSAL, amber=MODERATE, green=DIRECTIONAL) and two new table columns (Crossings, Rev Int) with threshold-based coloring.
+
+### Changed
+- **Prompt philosophy: sizing over blocking** — Rewrote all AI prompt language across three layers (screening prompt, system prompt, context builder warnings) to frame velocity conflicts, reversal regimes, and counter-trend signals as **sizing signals** rather than skip/HOLD directives. Removed hard-skip rules from screening prompt for HIGH_REVERSAL and velocity conflicts. Replaced "do NOT enter / skip / wait / require higher conviction / HOLD" with "size is auto-reduced, trade if signal is strong." Adaptive entry fakeout advisory reframed to distinguish small fakeout-range moves from large trustworthy moves. All mechanical sizing guards (`apply_reversal_regime_scaling`, `apply_velocity_conflict_scaling`, `compute_position_scale`) were already correct — prompt text now matches.
 
 ## [v0.18.0] — 2026-03-07
 
@@ -27,6 +38,7 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Dashboard: hydration warning** — Added `suppressHydrationWarning` to `<html>` and `<body>` in `layout.tsx`
 
 ### Added
+- **Velocity-magnitude conflict detection** — First-class velocity signal: detects when BTC price velocity opposes the magnitude direction (e.g., BTC at -$25 but recovering at +$2/s). Severity scoring (velocity 40% + drawback 35% + time 25%) with three tiers: strong (>=70%, stale signal), moderate (40-70%, weakened signal), aligned. Injects warnings into AI prompts, adds velocity conflict line to PRIMARY SIGNAL section, screens out strong conflicts, scales BUY size (50-75%) when trading against velocity. ML scorer gains `btc_velocity` and `velocity_conflict` features with backward-compatible zero-padded model loading.
 - **Deep analysis pipeline** — 8 pure stateless analysis functions in `analysis/deep.py` (entry quality, side accuracy, missed opportunities, loss deep-dive, flip detection, entry timing, cross-iteration trends, auto-recommendations) plus `polybot-analyze-deep` CLI command with Rich rendering and JSON output
 - **Dashboard: indicator panels** — All indicator panels on Trading page — Adaptive Entry, ML Model, Ensemble, Calibration, Exit Analysis, Knowledge Observations, Microstructure, Monitor/Prefilter — receiving live data via WebSocket
 - **Midpoint gap metric** — Captures UP+DOWN midpoint sum deviation from 1.0 at trade time; displayed in trade timeline (amber highlight when gap > 3%)

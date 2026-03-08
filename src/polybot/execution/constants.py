@@ -46,6 +46,12 @@ POST_CANCEL_WAIT_SECONDS: float = 1.0
 # Stealth fill detection
 # ---------------------------------------------------------------------------
 
+MAX_SUBMIT_SPREAD_PCT: float = 0.05
+"""Maximum spread (as fraction of midpoint) to accept at submit time for BUY orders.
+
+Orders with wider spreads are skipped — protects against illiquid / dead markets.
+"""
+
 STEALTH_FILL_TOLERANCE: float = 0.90
 """Minimum fraction of expected size for a balance delta to count as a fill.
 

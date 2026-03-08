@@ -9,6 +9,7 @@ import anthropic
 
 from polybot.config import AiConfig
 from polybot.models import Action, FeatureVector, OrderType, TokenSide, TradingDecision
+from polybot.tasks.prompt_context import VelocityConflict
 
 from .constants import HOLD_FALLBACK, SCREEN_MAX_TOKENS, SCREEN_TEMPERATURE
 from .prompts import SCREENING_PROMPT, SYSTEM_PROMPT, format_feature_vector, format_screening_context
@@ -50,6 +51,7 @@ class DecisionEngine:
         ai_cycle_cost: float = 0.0,
         ai_session_cost: float = 0.0,
         candle_open_btc: float | None = None,
+        velocity_conflict: VelocityConflict | None = None,
     ) -> tuple[TradingDecision, float, float]:
         """Get a trading decision from Claude.
 
@@ -63,6 +65,7 @@ class DecisionEngine:
             ai_cycle_cost=ai_cycle_cost,
             ai_session_cost=ai_session_cost,
             candle_open_btc=candle_open_btc,
+            velocity_conflict=velocity_conflict,
         )
         start = time.monotonic()
 
