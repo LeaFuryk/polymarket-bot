@@ -350,3 +350,46 @@ def apply_velocity_conflict_scaling(
         hypothetical_direction=decision.hypothetical_direction,
         confidence_drivers=decision.confidence_drivers,
     )
+
+
+def apply_reversal_regime_scaling(
+    decision: TradingDecision,
+    reversal_score: float,
+    *,
+    log: logging.Logger | None = None,
+) -> TradingDecision:
+    """Scale BUY size down when in a reversal regime.
+
+    HIGH_REVERSAL (>=0.6): scale to 50%.
+    MODERATE_REVERSAL (>=0.35): scale to 75%.
+    Below 0.35: no-op.
+    """
+    if decision.action != Action.BUY:
+        return decision
+    if reversal_score < 0.35:
+        return decision
+
+    scale = 0.50 if reversal_score >= 0.6 else 0.75
+    scaled_size = round(decision.size * scale, 1)
+    if scaled_size < 1.0:
+        scaled_size = 1.0
+
+    _log = log or logger
+    _log.info(
+        "Reversal regime scaling: %.1f → %.1f (scale=%.2f, score=%.2f)",
+        decision.size,
+        scaled_size,
+        scale,
+        reversal_score,
+    )
+    return TradingDecision(
+        action=decision.action,
+        order_type=decision.order_type,
+        size=scaled_size,
+        confidence=decision.confidence,
+        reasoning=decision.reasoning,
+        market_view=decision.market_view,
+        token_side=decision.token_side,
+        hypothetical_direction=decision.hypothetical_direction,
+        confidence_drivers=decision.confidence_drivers,
+    )

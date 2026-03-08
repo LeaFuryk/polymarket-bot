@@ -38,6 +38,8 @@ class FeatureExtractor:
         reversal_rate: float = 0.0,
         btc_velocity: float = 0.0,
         velocity_conflict_severity: float = 0.0,
+        reversal_regime: float = 0.0,
+        zero_crossings_avg: float = 0.0,
     ) -> dict[str, float]:
         """Extract feature dict from raw market data.
 
@@ -53,6 +55,8 @@ class FeatureExtractor:
             reversal_rate: Rolling reversal rate from adaptive entry (0-1).
             btc_velocity: Current BTC velocity in $/s.
             velocity_conflict_severity: Velocity-magnitude conflict severity (0-1).
+            reversal_regime: Combined reversal regime score (0-1).
+            zero_crossings_avg: Average zero crossings per candle.
 
         Returns:
             Dict mapping each feature name to its raw (un-normalized) value.
@@ -82,6 +86,8 @@ class FeatureExtractor:
         features["reversal_rate"] = reversal_rate
         features["btc_velocity"] = btc_velocity
         features["velocity_conflict"] = velocity_conflict_severity
+        features["reversal_regime"] = reversal_regime
+        features["zero_crossings_avg"] = zero_crossings_avg
 
         return features
 

@@ -11,6 +11,7 @@ from dataclasses import dataclass
 
 from polybot.models import Action, ResolutionRecord
 from polybot.shared_state import PreFilterSnapshot
+from polybot.shared_state.candle_microstructure import CandleMicrostructure
 
 # ---------------------------------------------------------------------------
 # Velocity-magnitude conflict detection
@@ -342,6 +343,63 @@ def format_microstructure(history: list) -> str | None:
     ]
 
     return "\n".join(parts)
+
+
+def compute_reversal_regime(
+    microstructure_history: list[CandleMicrostructure],
+    current_prefilter_history: list[PreFilterSnapshot] | None = None,
+) -> tuple[float, str] | None:
+    """Compute a reversal regime score from cross-candle microstructure.
+
+    Combines reversal intensity and zero crossings from completed candles,
+    optionally blended with live intra-candle metrics.
+
+    Returns (score, label) where score is 0-1 and label is one of
+    HIGH_REVERSAL, MODERATE_REVERSAL, or DIRECTIONAL.  Returns None if
+    fewer than 2 completed candles are available.
+    """
+    if len(microstructure_history) < 2:
+        return None
+
+    # Cross-candle score from completed candles
+    intensities = [h.reversal_intensity for h in microstructure_history]
+    crossings = [h.zero_crossings for h in microstructure_history]
+    avg_intensity = sum(intensities) / len(intensities)
+    avg_crossings = sum(crossings) / len(crossings)
+    crossing_score = min(avg_crossings / 4.0, 1.0)
+    cross_candle_score = 0.5 * avg_intensity + 0.5 * crossing_score
+
+    # Live candle metrics (optional)
+    live_score: float | None = None
+    if current_prefilter_history and len(current_prefilter_history) >= 10:
+        moves = [s.btc_move_from_open for s in current_prefilter_history]
+        # Live zero crossings
+        live_crossings = 0
+        for i in range(1, len(moves)):
+            if moves[i - 1] * moves[i] < 0 and abs(moves[i]) >= 1.0 and abs(moves[i - 1]) >= 1.0:
+                live_crossings += 1
+        # Live reversal intensity
+        btc_range = max(moves) - min(moves)
+        btc_final = moves[-1]
+        live_intensity = (1.0 - abs(btc_final) / btc_range) if btc_range > 1.0 else 0.0
+        live_score = 0.5 * live_intensity + 0.5 * min(live_crossings / 4.0, 1.0)
+
+    # Combined score
+    if live_score is not None:
+        score = 0.6 * cross_candle_score + 0.4 * live_score
+    else:
+        score = cross_candle_score
+
+    score = max(0.0, min(score, 1.0))
+
+    if score >= 0.6:
+        label = "HIGH_REVERSAL"
+    elif score >= 0.35:
+        label = "MODERATE_REVERSAL"
+    else:
+        label = "DIRECTIONAL"
+
+    return score, label
 
 
 def compute_entry_timing_stats(

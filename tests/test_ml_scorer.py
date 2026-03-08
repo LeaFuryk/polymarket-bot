@@ -69,7 +69,7 @@ def _zero_features() -> dict[str, float]:
 
 class TestConstants:
     def test_feature_count(self):
-        assert NUM_FEATURES == 12
+        assert NUM_FEATURES == 14
 
     def test_feature_names_length_matches(self):
         assert len(FEATURE_NAMES) == NUM_FEATURES
@@ -80,6 +80,10 @@ class TestConstants:
     def test_velocity_features_present(self):
         assert "btc_velocity" in FEATURE_NAMES
         assert "velocity_conflict" in FEATURE_NAMES
+
+    def test_reversal_features_present(self):
+        assert "reversal_regime" in FEATURE_NAMES
+        assert "zero_crossings_avg" in FEATURE_NAMES
 
     def test_thresholds_ordered(self):
         assert STRONG_DOWN_THRESHOLD < LEAN_DOWN_THRESHOLD
@@ -260,6 +264,30 @@ class TestFeatureExtractor:
         )
         assert features["btc_velocity"] == 2.5
         assert features["velocity_conflict"] == 0.7
+
+    def test_extract_reversal_features_default(self):
+        features = self.extractor.extract(
+            candles=None,
+            btc_price=None,
+            candle_open=None,
+            up_mid=None,
+            down_mid=None,
+        )
+        assert features["reversal_regime"] == 0.0
+        assert features["zero_crossings_avg"] == 0.0
+
+    def test_extract_reversal_features_passthrough(self):
+        features = self.extractor.extract(
+            candles=None,
+            btc_price=None,
+            candle_open=None,
+            up_mid=None,
+            down_mid=None,
+            reversal_regime=0.65,
+            zero_crossings_avg=3.5,
+        )
+        assert features["reversal_regime"] == 0.65
+        assert features["zero_crossings_avg"] == 3.5
 
     def test_extract_volatility(self):
         candles = _make_candles(8, direction="up")
@@ -487,9 +515,11 @@ class TestMLScorer:
         weights_list = [state.weights[name] for name in FEATURE_NAMES]
         for i, old_w in enumerate(old_weights):
             assert weights_list[i] == pytest.approx(old_w, abs=1e-5)
-        # New features (btc_velocity, velocity_conflict) should be zero
+        # New features should be zero
         assert state.weights["btc_velocity"] == 0.0
         assert state.weights["velocity_conflict"] == 0.0
+        assert state.weights["reversal_regime"] == 0.0
+        assert state.weights["zero_crossings_avg"] == 0.0
 
     def test_model_trained_after_min_samples(self, tmp_path: Path):
         scorer = MLScorer(data_dir=tmp_path)
@@ -524,12 +554,12 @@ class TestBackwardCompatibility:
     def test_import_feature_names(self):
         from polybot.ml_scorer import FEATURE_NAMES  # noqa: F811
 
-        assert len(FEATURE_NAMES) == 12
+        assert len(FEATURE_NAMES) == 14
 
     def test_import_num_features(self):
         from polybot.ml_scorer import NUM_FEATURES  # noqa: F811
 
-        assert NUM_FEATURES == 12
+        assert NUM_FEATURES == 14
 
     def test_import_feature_extractor(self):
         from polybot.ml_scorer import FeatureExtractor  # noqa: F811

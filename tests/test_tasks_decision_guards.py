@@ -8,6 +8,7 @@ from polybot.tasks.decision_guards import (
     apply_confidence_gate,
     apply_entry_price_cap,
     apply_position_sizing,
+    apply_reversal_regime_scaling,
     apply_single_entry,
     apply_velocity_conflict_scaling,
     clamp_sell_size,
@@ -369,4 +370,49 @@ class TestApplyVelocityConflictScaling:
         d = _buy(side=TokenSide.DOWN, size=1.0)
         c = _conflict(0.8, mag_dir="DOWN", vel_dir="UP")
         result = apply_velocity_conflict_scaling(d, c)
+        assert result.size >= 1.0
+
+
+# ---------------------------------------------------------------------------
+# apply_reversal_regime_scaling
+# ---------------------------------------------------------------------------
+
+
+class TestApplyReversalRegimeScaling:
+    def test_no_op_for_hold(self):
+        d = _hold()
+        assert apply_reversal_regime_scaling(d, 0.8) is d
+
+    def test_no_op_for_sell(self):
+        d = _sell()
+        assert apply_reversal_regime_scaling(d, 0.8) is d
+
+    def test_no_op_below_threshold(self):
+        d = _buy(size=100.0)
+        assert apply_reversal_regime_scaling(d, 0.3) is d
+
+    def test_moderate_scales_to_75pct(self):
+        d = _buy(size=100.0)
+        result = apply_reversal_regime_scaling(d, 0.45)
+        assert result.size == 75.0
+        assert result.action == Action.BUY
+
+    def test_high_scales_to_50pct(self):
+        d = _buy(size=100.0)
+        result = apply_reversal_regime_scaling(d, 0.7)
+        assert result.size == 50.0
+
+    def test_boundary_0_35_scales(self):
+        d = _buy(size=80.0)
+        result = apply_reversal_regime_scaling(d, 0.35)
+        assert result.size == 60.0  # 80 * 0.75
+
+    def test_boundary_0_6_scales_to_50pct(self):
+        d = _buy(size=100.0)
+        result = apply_reversal_regime_scaling(d, 0.6)
+        assert result.size == 50.0
+
+    def test_minimum_size_floor(self):
+        d = _buy(size=1.0)
+        result = apply_reversal_regime_scaling(d, 0.8)
         assert result.size >= 1.0

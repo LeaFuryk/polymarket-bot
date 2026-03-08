@@ -57,12 +57,13 @@ def build_counter_trend_advisory(trend_value: float) -> str | None:
         return None
     weak_side = "DOWN" if trend_value > 0 else "UP"
     trend_label = "BULLISH" if trend_value > 0 else "BEARISH"
+    reduce_pct = "50%" if abs(trend_value) >= 0.7 else "30%"
     return (
-        "## Counter-Trend Advisory\n"
-        f"Strong {trend_label} trend detected (score={trend_value:+.2f}). "
-        f"{weak_side} trades are counter-trend.\n"
-        "Historical counter-trend accuracy: ~55-60% (vs ~75% trend-aligned).\n"
-        "If going counter-trend, require higher conviction and use smaller size."
+        "## Counter-Trend Info\n"
+        f"EMA trend is {trend_label} (score={trend_value:+.2f}). "
+        f"{weak_side} trades are counter-trend — position size auto-reduced by {reduce_pct}.\n"
+        "This is a SIZING adjustment only. The 5-min candle signal (BTC move) is the primary driver. "
+        "If BTC has moved strongly, trade it — the sizing guard handles the trend risk."
     )
 
 
@@ -78,8 +79,8 @@ def build_velocity_conflict_warning(conflict: VelocityConflict) -> str | None:
             f"but velocity is ${conflict.velocity_rate:+.1f}/s ({conflict.velocity_direction}).\n"
             f"Drawback: {conflict.drawback_pct:.0%} of peak recovered | "
             f"Severity: {conflict.severity:.0%} | {conflict.time_remaining:.0f}s left\n"
-            "The magnitude signal is STALE — do NOT trust magnitude alone. "
-            "Reduce size or skip this entry."
+            "Magnitude signal is weakened. Position size will be auto-reduced to 50%. "
+            "Still trade if the setup is otherwise strong."
         )
 
     return (
@@ -88,7 +89,40 @@ def build_velocity_conflict_warning(conflict: VelocityConflict) -> str | None:
         f"but velocity is ${conflict.velocity_rate:+.1f}/s ({conflict.velocity_direction}).\n"
         f"Drawback: {conflict.drawback_pct:.0%} of peak | "
         f"Severity: {conflict.severity:.0%} | {conflict.time_remaining:.0f}s left\n"
-        "Reduce confidence and size — magnitude may not hold through resolution."
+        "Position size will be auto-reduced to 75%. Trade if edge is clear."
+    )
+
+
+def build_reversal_regime_warning(
+    score: float,
+    label: str,
+    microstructure_history: list | None = None,
+) -> str | None:
+    """Return a reversal regime warning if score >= 0.3, else None."""
+    if score < 0.3:
+        return None
+
+    # Compute stats for the warning text
+    stats = ""
+    if microstructure_history and len(microstructure_history) >= 1:
+        avg_cross = sum(h.zero_crossings for h in microstructure_history) / len(microstructure_history)
+        avg_int = sum(h.reversal_intensity for h in microstructure_history) / len(microstructure_history)
+        stats = (
+            f"Avg crossings/candle: {avg_cross:.1f} | Avg reversal intensity: {avg_int:.2f} | Regime score: {score:.2f}"
+        )
+
+    if label == "HIGH_REVERSAL":
+        return (
+            "## REVERSAL REGIME WARNING\n"
+            "Recent candles whipsawed. Position size will be auto-reduced to 50%. "
+            "Still trade if BTC move is strong (>$30) — the move is real, just use smaller size.\n"
+            + (stats or f"Regime score: {score:.2f}")
+        )
+
+    return (
+        "## Reversal Regime Advisory\n"
+        "Recent candles show reversal patterns. Position size will be auto-reduced to 75%. "
+        "Trade normally — sizing handles the risk.\n" + (stats or f"Regime score: {score:.2f}")
     )
 
 

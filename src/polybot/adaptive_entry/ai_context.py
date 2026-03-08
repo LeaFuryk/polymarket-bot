@@ -57,9 +57,8 @@ def build_ai_context(
                 f"\U0001f30a **HIGH-VOLATILITY MARKET**: Recent fakeouts reached "
                 f"${fakeout_max:.0f} — {pct_above:.0f}% above the "
                 f"${btc_threshold:.0f} threshold. "
-                f"Even moves that clear the threshold may reverse. Wait for sustained "
-                f"confirmation (15-20s above threshold) rather than entering immediately. "
-                f"The 150-200s window has historically outperformed early entries in wild markets.",
+                f"Small moves near the threshold (${btc_threshold:.0f}-${fakeout_p75:.0f}) are less reliable. "
+                f"Larger moves well past the fakeout range are more trustworthy — trade them.",
             ]
         )
 
@@ -82,30 +81,19 @@ def build_ai_context(
                     "",
                     f"\u26a0 **Uncertain reversal history ({rate:.0%} at initial cross)** but BTC has moved "
                     f"**${abs_btc_move:.0f}** — past the fakeout threshold (${btc_threshold:.0f}). "
-                    f"The reversal rate was measured at the initial cross; moves beyond "
-                    f"${btc_threshold:.0f} have cleared typical fakeout noise. "
-                    f"Momentum entries are favored over contrarian.",
-                    "",
-                    "\u23f3 **Entry timing**: BTC has cleared fakeout noise, but uncertain regimes still show elevated "
-                    "reversal risk on very early entries (>200s). Size down or wait for brief confirmation if "
-                    "confidence is marginal.",
+                    f"Moves beyond ${btc_threshold:.0f} have cleared typical fakeout noise. "
+                    f"Momentum entries are favored over contrarian. Trade it.",
                 ]
             )
         else:
             lines.extend(
                 [
                     "",
-                    f"\u26a0 **Uncertain market ({rate:.0%} reversal)**: Direction has been unreliable. "
+                    f"\u26a0 **Uncertain market ({rate:.0%} reversal)**: Direction has been unreliable at the initial cross. "
                     f"When both sides are priced near even (both asks $0.35\u2013$0.65), "
                     f"**lean toward the cheaper side** \u2014 at ~50% accuracy, only cheap entries are profitable. "
-                    f"An entry at $0.35 profits +$0.15/trade at 50%; $0.60 loses -$0.10/trade at 50%. "
-                    f"However, if one side is clearly confirmed by price (e.g., $0.90 vs $0.10), "
-                    f"trust the market signal \u2014 the cheap side is cheap for a reason. "
-                    f"This applies mainly to early-candle balanced prices, not late confirmations.",
-                    "",
-                    "\u23f3 **Entry timing**: Early entries (>200s remaining) in uncertain regimes have historically "
-                    "underperformed. The 150-200s window offers better directional clarity. If the current move "
-                    "is marginal, consider waiting for stronger confirmation.",
+                    f"However, if one side is clearly confirmed by price (e.g., $0.80+), "
+                    f"trust the market signal \u2014 the cheap side is cheap for a reason.",
                 ]
             )
     elif rate < 0.25:

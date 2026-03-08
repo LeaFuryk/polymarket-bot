@@ -97,7 +97,10 @@ export default function TradingPage() {
         resolutionsSinceReflection={snapshot.resolutions_since_reflection}
         totalResolutions={snapshot.knowledge_total_resolutions}
       />
-      <MicrostructurePanel microstructure={snapshot.microstructure ?? null} />
+      <MicrostructurePanel
+        microstructure={snapshot.microstructure ?? null}
+        reversalRegime={snapshot.reversal_regime}
+      />
 
       {/* Open candle unrealized PnL */}
       {openPnL !== null && (
