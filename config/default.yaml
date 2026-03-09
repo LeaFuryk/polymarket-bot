@@ -1,9 +1,7 @@
 market:
-  # Polymarket condition ID for the market to trade
-  # Example: US Presidential Election 2024 Winner
-  condition_id: "0x"
-  # Token ID for the specific outcome to trade (YES token)
-  token_id: ""
+  # Series slug prefix — discovery appends the 5-min boundary timestamp
+  # Full slug at runtime: will-bitcoin-go-up-5-min-{unix_ts}
+  series_slug: "will-bitcoin-go-up-5-min"
 
 api:
   polymarket_host: "https://clob.polymarket.com"

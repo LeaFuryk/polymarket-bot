@@ -15,8 +15,8 @@ def main() -> None:
         print("ERROR: Set POLYBOT_AI_API_KEY in .env or environment")
         sys.exit(1)
 
-    if config.market.condition_id == "0x":
-        print("ERROR: Set a valid market condition_id in config or POLYBOT_MARKET_CONDITION_ID")
+    if not config.market.series_slug:
+        print("ERROR: Set a valid series_slug in config or POLYBOT_MARKET_SERIES_SLUG")
         sys.exit(1)
 
     agent = TradingAgent(config)
