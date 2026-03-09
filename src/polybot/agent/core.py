@@ -30,8 +30,8 @@ class TradingAgent:
         startup_data = load_startup_data(config, log=self._log)
 
         # Build AgentContext via factory (all sub-component wiring)
-        factory = ContextFactory(config, logger=self._log)
-        self._ctx = factory.build(startup_data)
+        factory = ContextFactory(config, startup_data, logger=self._log)
+        self._ctx = factory.build()
 
         # Snapshot builder (closure called lazily at runtime, self._ctx exists by then)
         def _build_initial_snapshot() -> str:

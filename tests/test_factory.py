@@ -60,7 +60,7 @@ class TestContextFactory:
         try:
             config = AppConfig()
             factory = ContextFactory(config)
-            ctx = factory.build(StartupData())
+            ctx = factory.build()
 
             assert isinstance(ctx, AgentContext)
         finally:
@@ -74,7 +74,7 @@ class TestContextFactory:
         try:
             config = AppConfig()
             factory = ContextFactory(config)
-            ctx = factory.build(StartupData())
+            ctx = factory.build()
 
             assert ctx.config is config
             assert ctx.chainlink_ws is mocks["ChainlinkWSFeed"].return_value
@@ -108,7 +108,6 @@ class TestContextFactory:
         mocks, patchers = _apply_patches()
         try:
             config = AppConfig()
-            factory = ContextFactory(config)
             sd = StartupData(
                 resolutions_since_reflection=5,
                 knowledge_state={"key": "val"},
@@ -117,7 +116,8 @@ class TestContextFactory:
                 iteration_summaries=[{"iter": 1}],
                 iteration_label="iter_003",
             )
-            ctx = factory.build(sd)
+            factory = ContextFactory(config, sd)
+            ctx = factory.build()
 
             assert ctx.resolutions_since_reflection == 5
             assert ctx.historical_resolutions == [{"slug": "a"}]
@@ -139,7 +139,7 @@ class TestContextFactory:
         mocks, patchers = _apply_patches()
         try:
             config = AppConfig()  # default mode is not "live"
-            ctx = ContextFactory(config).build(StartupData())
+            ctx = ContextFactory(config, StartupData()).build()
 
             assert ctx.live_mode is False
             assert ctx.live_engine is None
@@ -157,7 +157,7 @@ class TestContextFactory:
         patchers.append(live_engine_patch)
         try:
             config = AppConfig(trading={"mode": "live"})
-            ctx = ContextFactory(config).build(StartupData())
+            ctx = ContextFactory(config, StartupData()).build()
 
             assert ctx.live_mode is True
             assert ctx.live_engine is mock_live.return_value
@@ -172,7 +172,7 @@ class TestContextFactory:
         mocks, patchers = _apply_patches()
         try:
             config = AppConfig(logging={"sqlite_enabled": False})
-            ctx = ContextFactory(config).build(StartupData())
+            ctx = ContextFactory(config, StartupData()).build()
 
             assert ctx.datastore is None
             mocks["DataStore"].assert_not_called()
@@ -186,7 +186,7 @@ class TestContextFactory:
         mocks, patchers = _apply_patches()
         try:
             config = AppConfig(logging={"sqlite_enabled": True})
-            ctx = ContextFactory(config).build(StartupData())
+            ctx = ContextFactory(config, StartupData()).build()
 
             assert ctx.datastore is mocks["DataStore"].return_value
         finally:
