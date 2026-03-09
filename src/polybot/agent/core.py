@@ -32,11 +32,6 @@ from polybot.market_data.chainlink_ws import ChainlinkWSFeed
 from polybot.market_data.discovery import MarketDiscovery
 from polybot.market_data.provider import MarketDataProvider
 from polybot.ml_scorer import MLScorer
-from polybot.models import (
-    CandleMarket,
-    ResolutionRecord,
-    TradeRecord,
-)
 from polybot.prefilter import PreFilter
 from polybot.resolution import MarketDataResolutionRepo, ResolutionTracker
 from polybot.risk.manager import RiskManager
@@ -53,158 +48,116 @@ class TradingAgent:
     """Orchestrator — launches concurrent tasks for market monitoring, AI decisions, and position management."""
 
     def __init__(self, config: AppConfig, logger: logging.Logger | None = None) -> None:
-        self._config = config
         self._log = logger or logging.getLogger(__name__)
 
-        # Sub-components
-        self._chainlink_ws = ChainlinkWSFeed(config.api.polymarket_rtds_url)
-        self._discovery = MarketDiscovery(config)
-        self._market_data = MarketDataProvider(config, chainlink_ws=self._chainlink_ws)
-        self._decision_engine = DecisionEngine(config.ai)
-        self._execution_sim = ExecutionSimulator(config.simulator)
-        self._orderbook = SimulatedOrderBook(config.simulator)
-        self._portfolio = Portfolio(config.agent.initial_cash)
-        self._risk = RiskManager(config.risk, config.agent.initial_cash)
+        # Sub-components (local vars — ownership moves to AgentContext)
+        chainlink_ws = ChainlinkWSFeed(config.api.polymarket_rtds_url)
+        discovery = MarketDiscovery(config)
+        market_data = MarketDataProvider(config, chainlink_ws=chainlink_ws)
+        decision_engine = DecisionEngine(config.ai)
+        execution_sim = ExecutionSimulator(config.simulator)
+        orderbook = SimulatedOrderBook(config.simulator)
+        portfolio = Portfolio(config.agent.initial_cash)
+        risk = RiskManager(config.risk, config.agent.initial_cash)
 
         # Live trading engine (created if mode == "live")
-        self._live_mode = config.trading.mode == "live"
-        self._live_engine: LiveExecutionEngine | None = None
-        self._shadow_portfolio: Portfolio | None = None
+        live_mode = config.trading.mode == "live"
+        live_engine: LiveExecutionEngine | None = None
+        shadow_portfolio: Portfolio | None = None
 
-        if self._live_mode:
-            self._live_engine = LiveExecutionEngine(config.trading, config.api)
-            self._shadow_portfolio = Portfolio(config.agent.initial_cash)
+        if live_mode:
+            live_engine = LiveExecutionEngine(config.trading, config.api)
+            shadow_portfolio = Portfolio(config.agent.initial_cash)
             self._log.warning(
                 "LIVE TRADING MODE — real CLOB orders will be placed%s",
                 " (DRY RUN)" if config.trading.dry_run else "",
             )
-        self._trade_log = TradeLog(config.logging)
 
-        # Resolution tracking
-        self._resolution_tracker = ResolutionTracker(
-            MarketDataResolutionRepo(self._market_data._btc, self._market_data._rest),
+        trade_log = TradeLog(config.logging)
+        resolution_tracker = ResolutionTracker(
+            MarketDataResolutionRepo(market_data._btc, market_data._rest),
         )
-
-        # Rules-based pre-filter (checks 1-5 only, no R/R gate)
-        self._prefilter = PreFilter()
-
-        # Confidence calibration
-        self._calibrator = ConfidenceCalibrator(
-            data_dir=Path(config.logging.log_dir),
-        )
-
-        # Exit strategy tracker
-        self._exit_tracker = ExitTracker(
-            data_dir=Path(config.logging.log_dir),
-        )
-
-        # Adaptive entry threshold tracker
-        self._adaptive_entry = AdaptiveEntryTracker(
+        prefilter = PreFilter()
+        calibrator = ConfidenceCalibrator(data_dir=Path(config.logging.log_dir))
+        exit_tracker = ExitTracker(data_dir=Path(config.logging.log_dir))
+        adaptive_entry = AdaptiveEntryTracker(
             data_dir=Path(config.logging.log_dir),
             window=config.monitor.adaptive_entry_window,
         )
-
-        # ML scorer
-        self._ml_scorer = MLScorer(
-            data_dir=Path(config.logging.log_dir),
-        )
-
-        # Knowledge / feedback learning
-        self._knowledge_manager = KnowledgeManager(config.logging.knowledge_dir, config.ai)
-        self._feature_config = FeatureConfig(Path(config.logging.knowledge_dir).parent / "feature_config.json")
-        self._recent_resolutions: list[ResolutionRecord] = []  # for reflection (capped at 20)
-        self._session_resolutions: list[ResolutionRecord] = []  # for dashboard (uncapped)
-        self._recent_trades: list[TradeRecord] = []
-        self._session_trades: list[TradeRecord] = []
-        # Bot version (captured once at startup)
-        self._bot_version: str = __version__
-
-        # Current candle market
-        self._current_market: CandleMarket | None = None
+        ml_scorer = MLScorer(data_dir=Path(config.logging.log_dir))
+        knowledge_manager = KnowledgeManager(config.logging.knowledge_dir, config.ai)
+        feature_config = FeatureConfig(Path(config.logging.knowledge_dir).parent / "feature_config.json")
 
         # WebSocket dashboard server
         from polybot.ws.broadcaster import DashboardBroadcaster
         from polybot.ws.server import DashboardWSServer
 
-        self._ws_broadcaster = DashboardBroadcaster()
-        self._ws_server = DashboardWSServer(
-            broadcaster=self._ws_broadcaster,
+        ws_broadcaster = DashboardBroadcaster()
+        ws_server = DashboardWSServer(
+            broadcaster=ws_broadcaster,
             port=config.logging.ws_port,
         )
 
-        def _build_initial_snapshot() -> str:
-            from polybot.ws.protocol import MSG_SNAPSHOT, make_message
-
-            data = self._dashboard_assembler.assemble_dashboard_data(self._ctx)
-            data["ws_clients"] = self._ws_broadcaster.client_count
-            return make_message(MSG_SNAPSHOT, data)
-
-        self._ws_server._initial_snapshot_builder = _build_initial_snapshot
-
-        # ML features for training after resolution
-        self._pending_ml_features: dict[str, dict[str, float]] = {}
-
         # SQLite analytics store
-        self._datastore: DataStore | None = None
+        datastore: DataStore | None = None
         if config.logging.sqlite_enabled:
-            self._datastore = DataStore(config.logging.sqlite_db_path)
+            datastore = DataStore(config.logging.sqlite_db_path)
 
         # Persistent market history store (never deleted by archive)
         iteration_label = StatePersistence.compute_iteration_label()
-        self._market_history = MarketHistoryStore(
+        market_history = MarketHistoryStore(
             config.logging.market_history_db_path,
             iteration=iteration_label,
         )
 
-        # Shared state for concurrent tasks
-        self._shared = SharedState()
+        shared = SharedState()
 
-        # Task objects (created in run())
-        self._ai_decision: AIDecision | None = None
-        self._position_monitor: PositionMonitor | None = None
-
-        # State persistence, rotation manager, and dashboard assembler
+        # Orchestration managers (TradingAgent-only, not in ctx)
         self._state_persistence = StatePersistence(logger=self._log)
         self._rotation_manager = RotationManager(logger=self._log)
         self._dashboard_assembler = DashboardAssembler(logger=self._log)
 
-        # Build AgentContext — typed container for extracted modules
-        self._state_path = Path(config.logging.log_dir) / "agent_state.json"
+        # Build AgentContext — single source of truth for all sub-components
         self._ctx = AgentContext(
             config=config,
-            chainlink_ws=self._chainlink_ws,
-            discovery=self._discovery,
-            market_data=self._market_data,
-            decision_engine=self._decision_engine,
-            execution_sim=self._execution_sim,
-            orderbook=self._orderbook,
-            portfolio=self._portfolio,
-            risk=self._risk,
-            trade_log=self._trade_log,
-            resolution_tracker=self._resolution_tracker,
-            prefilter=self._prefilter,
-            calibrator=self._calibrator,
-            exit_tracker=self._exit_tracker,
-            adaptive_entry=self._adaptive_entry,
-            ml_scorer=self._ml_scorer,
-            knowledge_manager=self._knowledge_manager,
-            feature_config=self._feature_config,
-            shared=self._shared,
-            live_mode=self._live_mode,
-            live_engine=self._live_engine,
-            shadow_portfolio=self._shadow_portfolio,
-            ws_broadcaster=self._ws_broadcaster,
-            ws_server=self._ws_server,
-            datastore=self._datastore,
-            market_history=self._market_history,
-            bot_version=self._bot_version,
-            state_path=self._state_path,
-            recent_resolutions=self._recent_resolutions,
-            session_resolutions=self._session_resolutions,
-            recent_trades=self._recent_trades,
-            session_trades=self._session_trades,
-            pending_ml_features=self._pending_ml_features,
+            chainlink_ws=chainlink_ws,
+            discovery=discovery,
+            market_data=market_data,
+            decision_engine=decision_engine,
+            execution_sim=execution_sim,
+            orderbook=orderbook,
+            portfolio=portfolio,
+            risk=risk,
+            trade_log=trade_log,
+            resolution_tracker=resolution_tracker,
+            prefilter=prefilter,
+            calibrator=calibrator,
+            exit_tracker=exit_tracker,
+            adaptive_entry=adaptive_entry,
+            ml_scorer=ml_scorer,
+            knowledge_manager=knowledge_manager,
+            feature_config=feature_config,
+            shared=shared,
+            live_mode=live_mode,
+            live_engine=live_engine,
+            shadow_portfolio=shadow_portfolio,
+            ws_broadcaster=ws_broadcaster,
+            ws_server=ws_server,
+            datastore=datastore,
+            market_history=market_history,
+            bot_version=__version__,
+            state_path=Path(config.logging.log_dir) / "agent_state.json",
         )
+
+        # Snapshot builder (closure called lazily at runtime, self._ctx exists by then)
+        def _build_initial_snapshot() -> str:
+            from polybot.ws.protocol import MSG_SNAPSHOT, make_message
+
+            data = self._dashboard_assembler.assemble_dashboard_data(self._ctx)
+            data["ws_clients"] = self._ctx.ws_broadcaster.client_count
+            return make_message(MSG_SNAPSHOT, data)
+
+        self._ctx.ws_server._initial_snapshot_builder = _build_initial_snapshot
 
         # Restore persisted state (populates ctx.historical_resolutions/trades)
         self._state_persistence.load_agent_state(self._ctx)
@@ -213,30 +166,31 @@ class TradingAgent:
 
     async def run(self) -> None:
         """Main entry point — launches concurrent tasks."""
-        setup_logging(self._config)
-        self._log.info("TradingAgent starting — v%s, cash=%.2f", self._bot_version, self._config.agent.initial_cash)
+        ctx = self._ctx
+        setup_logging(ctx.config)
+        self._log.info("TradingAgent starting — v%s, cash=%.2f", ctx.bot_version, ctx.config.agent.initial_cash)
 
         loop = asyncio.get_running_loop()
         for sig in (signal.SIGINT, signal.SIGTERM):
             loop.add_signal_handler(sig, self._handle_signal)
 
         # Open SQLite analytics store
-        if self._datastore is not None:
-            self._datastore.open()
+        if ctx.datastore is not None:
+            ctx.datastore.open()
 
         # Open persistent market history store
-        self._market_history.open()
+        ctx.market_history.open()
 
         # Live trading startup validation
-        if self._live_mode and self._live_engine:
-            tc = self._config.trading
+        if ctx.live_mode and ctx.live_engine:
+            tc = ctx.config.trading
             if not tc.private_key:
                 self._log.critical("LIVE MODE: no private_key configured — aborting")
                 return
             if not (tc.api_key and tc.api_secret and tc.api_passphrase):
                 self._log.critical("LIVE MODE: missing API credentials — run scripts/generate_api_key.py first")
                 return
-            initial_balance = await self._live_engine.sync_balance()
+            initial_balance = await ctx.live_engine.sync_balance()
             if initial_balance <= 0 and not tc.dry_run:
                 self._log.critical(
                     "LIVE MODE: wallet balance is $%.2f — aborting (fund wallet or use dry_run=true)", initial_balance
@@ -251,99 +205,95 @@ class TradingAgent:
             )
 
         # Start Chainlink WebSocket feed (primary BTC price — matches resolution)
-        await self._chainlink_ws.start()
+        await ctx.chainlink_ws.start()
 
         # Load BTC 5-min candle history
-        await self._market_data.btc_feed.load_candle_history(200)
+        await ctx.market_data.btc_feed.load_candle_history(200)
 
         # Bootstrap adaptive entry from Binance if insufficient history
-        await self._adaptive_entry.bootstrap_from_binance()
+        await ctx.adaptive_entry.bootstrap_from_binance()
 
         # Resolve any pending bets from previous sessions
-        await self._state_persistence.resolve_pending_bets(self._ctx)
+        await self._state_persistence.resolve_pending_bets(ctx)
 
         # Create task objects
         market_monitor = MarketMonitor(
-            config=self._config,
-            shared=self._shared,
-            market_data=self._market_data,
-            prefilter=self._prefilter,
-            portfolio=self._portfolio,
-            resolution_tracker=self._resolution_tracker,
-            datastore=self._datastore,
-            feature_config=self._feature_config if self._datastore else None,
-            market_history=self._market_history,
-            adaptive_entry=self._adaptive_entry,
+            config=ctx.config,
+            shared=ctx.shared,
+            market_data=ctx.market_data,
+            prefilter=ctx.prefilter,
+            portfolio=ctx.portfolio,
+            resolution_tracker=ctx.resolution_tracker,
+            datastore=ctx.datastore,
+            feature_config=ctx.feature_config if ctx.datastore else None,
+            market_history=ctx.market_history,
+            adaptive_entry=ctx.adaptive_entry,
         )
 
-        self._ai_decision = AIDecision(
-            config=self._config,
-            shared=self._shared,
-            decision_engine=self._decision_engine,
-            execution_sim=self._execution_sim,
-            orderbook=self._orderbook,
-            portfolio=self._portfolio,
-            risk=self._risk,
-            trade_log=self._trade_log,
-            prefilter=self._prefilter,
-            calibrator=self._calibrator,
-            exit_tracker=self._exit_tracker,
-            ml_scorer=self._ml_scorer,
-            knowledge_manager=self._knowledge_manager,
-            feature_config=self._feature_config,
-            resolution_tracker=self._resolution_tracker,
-            adaptive_entry=self._adaptive_entry,
-            recent_resolutions=self._recent_resolutions,
-            recent_trades=self._recent_trades,
-            session_trades=self._session_trades,
-            pending_ml_features=self._pending_ml_features,
-            live_engine=self._live_engine,
-            shadow_portfolio=self._shadow_portfolio,
+        ctx.ai_decision = AIDecision(
+            config=ctx.config,
+            shared=ctx.shared,
+            decision_engine=ctx.decision_engine,
+            execution_sim=ctx.execution_sim,
+            orderbook=ctx.orderbook,
+            portfolio=ctx.portfolio,
+            risk=ctx.risk,
+            trade_log=ctx.trade_log,
+            prefilter=ctx.prefilter,
+            calibrator=ctx.calibrator,
+            exit_tracker=ctx.exit_tracker,
+            ml_scorer=ctx.ml_scorer,
+            knowledge_manager=ctx.knowledge_manager,
+            feature_config=ctx.feature_config,
+            resolution_tracker=ctx.resolution_tracker,
+            adaptive_entry=ctx.adaptive_entry,
+            recent_resolutions=ctx.recent_resolutions,
+            recent_trades=ctx.recent_trades,
+            session_trades=ctx.session_trades,
+            pending_ml_features=ctx.pending_ml_features,
+            live_engine=ctx.live_engine,
+            shadow_portfolio=ctx.shadow_portfolio,
         )
 
-        if self._datastore is not None:
-            self._ai_decision._datastore = self._datastore
+        if ctx.datastore is not None:
+            ctx.ai_decision._datastore = ctx.datastore
 
         # Wire up WS trade event push
         async def _on_trade(record):
-            if self._ws_broadcaster.has_clients:
-                await self._ws_broadcaster.broadcast(self._ws_broadcaster.build_trade_event(record))
+            if ctx.ws_broadcaster.has_clients:
+                await ctx.ws_broadcaster.broadcast(ctx.ws_broadcaster.build_trade_event(record))
 
-        self._ai_decision.on_trade_callback = _on_trade
+        ctx.ai_decision.on_trade_callback = _on_trade
 
-        self._position_monitor = PositionMonitor(
-            config=self._config,
-            shared=self._shared,
-            portfolio=self._portfolio,
+        ctx.position_monitor = PositionMonitor(
+            config=ctx.config,
+            shared=ctx.shared,
+            portfolio=ctx.portfolio,
         )
 
-        # Update context with task objects created above
-        self._ctx.ai_decision = self._ai_decision
-        self._ctx.position_monitor = self._position_monitor
-
         # Start WebSocket server
-        if self._config.logging.ws_enabled:
-            await self._ws_server.start()
+        if ctx.config.logging.ws_enabled:
+            await ctx.ws_server.start()
 
         # Launch all tasks concurrently
         tasks = [
             asyncio.create_task(market_monitor.run(), name="market_monitor"),
-            asyncio.create_task(self._ai_decision.run(), name="ai_decision"),
-            asyncio.create_task(self._position_monitor.run(), name="position_monitor"),
+            asyncio.create_task(ctx.ai_decision.run(), name="ai_decision"),
+            asyncio.create_task(ctx.position_monitor.run(), name="position_monitor"),
             asyncio.create_task(self._rotation_loop(), name="rotation_loop"),
             asyncio.create_task(self._dashboard_loop(), name="dashboard_loop"),
         ]
-        if self._config.logging.ws_enabled:
+        if ctx.config.logging.ws_enabled:
             tasks.append(asyncio.create_task(self._ws_broadcast_loop(), name="ws_broadcast"))
-        if self._live_mode and self._live_engine:
+        if ctx.live_mode and ctx.live_engine:
             tasks.append(asyncio.create_task(self._balance_sync_loop(), name="balance_sync"))
-        if self._datastore is not None:
-            tasks.append(asyncio.create_task(self._datastore.writer_loop(), name="datastore_writer"))
-        tasks.append(asyncio.create_task(self._market_history.writer_loop(), name="market_history_writer"))
+        if ctx.datastore is not None:
+            tasks.append(asyncio.create_task(ctx.datastore.writer_loop(), name="datastore_writer"))
+        tasks.append(asyncio.create_task(ctx.market_history.writer_loop(), name="market_history_writer"))
 
         try:
             # Wait until shutdown
-            while not self._shared.shutdown:
+            while not ctx.shared.shutdown:
                 await asyncio.sleep(0.5)
 
             # Signal all tasks to stop
@@ -356,7 +306,7 @@ class TradingAgent:
 
     def _handle_signal(self) -> None:
         self._log.info("Shutdown signal received")
-        self._shared.shutdown = True
+        self._ctx.shared.shutdown = True
 
     async def _rotation_loop(self) -> None:
         """Delegates to RotationManager.rotation_loop."""
@@ -373,14 +323,14 @@ class TradingAgent:
     async def _balance_sync_loop(self) -> None:
         """Periodically syncs wallet balance and checks kill switch (live mode only)."""
         self._log.info("BalanceSyncLoop started")
-        while not self._shared.shutdown:
+        while not self._ctx.shared.shutdown:
             try:
-                if self._live_engine:
-                    balance = await self._live_engine.sync_balance()
-                    killed = self._live_engine.check_kill_switch(self._ctx.session_resolution_pnl)
+                if self._ctx.live_engine:
+                    balance = await self._ctx.live_engine.sync_balance()
+                    killed = self._ctx.live_engine.check_kill_switch(self._ctx.session_resolution_pnl)
                     if killed:
                         self._log.critical("Kill switch triggered — initiating shutdown")
-                        self._shared.shutdown = True
+                        self._ctx.shared.shutdown = True
                         break
                     self._log.debug("Wallet balance: $%.2f", balance)
             except Exception:
@@ -393,22 +343,23 @@ class TradingAgent:
         return self._dashboard_assembler.assemble_dashboard_data(self._ctx)
 
     async def _shutdown_components(self) -> None:
+        ctx = self._ctx
         self._log.info("Shutting down components...")
-        await self._ws_server.stop()
-        await self._chainlink_ws.stop()
-        if self._datastore is not None:
-            await self._datastore.close()
-        await self._market_history.close()
-        await self._discovery.close()
-        await self._market_data.close()
-        self._trade_log.close()
-        cancelled = self._orderbook.cancel_all()
+        await ctx.ws_server.stop()
+        await ctx.chainlink_ws.stop()
+        if ctx.datastore is not None:
+            await ctx.datastore.close()
+        await ctx.market_history.close()
+        await ctx.discovery.close()
+        await ctx.market_data.close()
+        ctx.trade_log.close()
+        cancelled = ctx.orderbook.cancel_all()
         if cancelled:
             self._log.info("Cancelled %d pending limit orders", cancelled)
         self._log.info(
             "Final state — cash=%.2f up_shares=%.2f down_shares=%.2f total=%.2f",
-            self._portfolio.cash,
-            self._portfolio.up_position.shares,
-            self._portfolio.down_position.shares,
-            self._portfolio.total_value,
+            ctx.portfolio.cash,
+            ctx.portfolio.up_position.shares,
+            ctx.portfolio.down_position.shares,
+            ctx.portfolio.total_value,
         )
