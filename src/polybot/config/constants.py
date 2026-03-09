@@ -9,20 +9,16 @@ from __future__ import annotations
 
 # -- Market -------------------------------------------------------------------
 DEFAULT_CONDITION_ID: str = "0x"
-DEFAULT_CLOB_API_URL: str = "https://clob.polymarket.com"
 DEFAULT_SERIES_SLUG: str = "btc-updown-5m"
 
 # -- API endpoints ------------------------------------------------------------
 DEFAULT_POLYMARKET_HOST: str = "https://clob.polymarket.com"
 DEFAULT_COINGECKO_URL: str = "https://api.coingecko.com/api/v3"
-DEFAULT_POLYMARKET_WS_URL: str = "wss://ws-subscriptions-clob.polymarket.com/ws/market"
 DEFAULT_ETHEREUM_RPC_URL: str = "https://ethereum.publicnode.com"
 CHAINLINK_BTCUSD_ADDRESS: str = "0xF4030086522a5bEEa4988F8cA5B36dbC97BeE88c"
 DEFAULT_POLYMARKET_RTDS_URL: str = "wss://ws-live-data.polymarket.com"
 
 # -- Agent behaviour ----------------------------------------------------------
-DEFAULT_DECISION_INTERVAL: int = 60  # seconds
-DEFAULT_FAST_POLL_INTERVAL: int = 10  # seconds
 DEFAULT_INITIAL_CASH: float = 10_000.0
 DEFAULT_RESOLUTION_BUFFER_SECONDS: int = 10
 DEFAULT_MIN_CONFIDENCE: float = 0.55
@@ -48,7 +44,6 @@ DEFAULT_MAX_SPREAD_PCT: float = 0.05
 DEFAULT_MIN_LIQUIDITY: float = 100.0
 DEFAULT_DAILY_LOSS_LIMIT_PCT: float = 0.10
 DEFAULT_MAX_CONCENTRATION_PCT: float = 0.50
-DEFAULT_MIN_REWARD_RISK_RATIO: float = 1.3
 
 # -- Monitoring ---------------------------------------------------------------
 DEFAULT_MARKET_MONITOR_INTERVAL: float = 1.0  # seconds
@@ -69,7 +64,6 @@ DEFAULT_LOG_DIR: str = "logs"
 DEFAULT_KNOWLEDGE_DIR: str = "data/knowledge"
 DEFAULT_SQLITE_DB_PATH: str = "logs/polybot.db"
 DEFAULT_MARKET_HISTORY_DB_PATH: str = "data/market_history.db"
-DEFAULT_DASHBOARD_REFRESH_RATE: int = 2  # seconds
 DEFAULT_WS_PORT: int = 8765
 
 # -- Trading ------------------------------------------------------------------

@@ -10,7 +10,6 @@ from polybot.config.constants import (
     DEFAULT_ETHEREUM_RPC_URL,
     DEFAULT_POLYMARKET_HOST,
     DEFAULT_POLYMARKET_RTDS_URL,
-    DEFAULT_POLYMARKET_WS_URL,
 )
 
 
@@ -19,7 +18,6 @@ class ApiConfig(BaseModel):
 
     polymarket_host: str = DEFAULT_POLYMARKET_HOST
     coingecko_url: str = DEFAULT_COINGECKO_URL
-    polymarket_ws_url: str = DEFAULT_POLYMARKET_WS_URL
     ethereum_rpc_url: str = DEFAULT_ETHEREUM_RPC_URL
     chainlink_btcusd_address: str = CHAINLINK_BTCUSD_ADDRESS
     polymarket_rtds_url: str = DEFAULT_POLYMARKET_RTDS_URL

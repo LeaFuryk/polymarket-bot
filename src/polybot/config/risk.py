@@ -10,7 +10,6 @@ from polybot.config.constants import (
     DEFAULT_MAX_POSITION_PCT,
     DEFAULT_MAX_SPREAD_PCT,
     DEFAULT_MIN_LIQUIDITY,
-    DEFAULT_MIN_REWARD_RISK_RATIO,
 )
 
 
@@ -22,7 +21,6 @@ class RiskConfig(BaseModel):
     min_liquidity: float = DEFAULT_MIN_LIQUIDITY
     daily_loss_limit_pct: float = DEFAULT_DAILY_LOSS_LIMIT_PCT
     max_concentration_pct: float = DEFAULT_MAX_CONCENTRATION_PCT
-    min_reward_risk_ratio: float = DEFAULT_MIN_REWARD_RISK_RATIO
 
     @field_validator("max_position_pct", "max_concentration_pct", "daily_loss_limit_pct")
     @classmethod
