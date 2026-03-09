@@ -1,7 +1,7 @@
 """Position monitor task — tracks P&L, triggers stop-loss/take-profit exits.
 
 Runs every 1 second. Uses cached snapshot data (no API calls).
-Pushes exit signals to the exit_trigger_queue when SL/TP thresholds are hit.
+Calls ``AIDecision.evaluate_exit()`` when SL/TP thresholds are hit.
 
 Dynamic SL/TP: computes adaptive thresholds from 5 factors (time, regime,
 BTC velocity, ML alignment, entry price quality). Tighter when signals say
@@ -13,10 +13,14 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from typing import TYPE_CHECKING
 
 from polybot.config import AppConfig
 from polybot.shared_state import EntryContext, SharedState
 from polybot.simulator.portfolio import Portfolio
+
+if TYPE_CHECKING:
+    from polybot.tasks.ai_decision import AIDecision
 
 logger = logging.getLogger(__name__)
 
@@ -29,10 +33,12 @@ class PositionMonitor:
         config: AppConfig,
         shared: SharedState,
         portfolio: Portfolio,
+        ai_decision: AIDecision,
     ) -> None:
         self._config = config
         self._shared = shared
         self._portfolio = portfolio
+        self._ai_decision = ai_decision
         self._interval = config.monitor.position_monitor_interval
         self._stop_loss_pct = config.monitor.stop_loss_pct
         self._take_profit_pct = config.monitor.take_profit_pct
@@ -348,13 +354,15 @@ class PositionMonitor:
                 components,
             )
             self._triggered[token_side] = "stop_loss"
-            await self._shared.exit_trigger_queue.put(
-                {
-                    "token_side": token_side,
-                    "reason": f"stop_loss ({pnl_pct:+.1%}, dynamic SL={dynamic_sl:+.0%})",
-                    "pnl_pct": pnl_pct,
-                    "trigger_type": "stop_loss",
-                }
+            asyncio.create_task(
+                self._ai_decision.evaluate_exit(
+                    {
+                        "token_side": token_side,
+                        "reason": f"stop_loss ({pnl_pct:+.1%}, dynamic SL={dynamic_sl:+.0%})",
+                        "pnl_pct": pnl_pct,
+                        "trigger_type": "stop_loss",
+                    }
+                )
             )
 
         # Reversal retracement: BTC retraced 80%+ from peak toward open
@@ -403,16 +411,18 @@ class PositionMonitor:
                             components,
                         )
                         self._triggered[token_side] = "reversal_retracement"
-                        await self._shared.exit_trigger_queue.put(
-                            {
-                                "token_side": token_side,
-                                "reason": (
-                                    f"reversal_retracement (peak=${peak_move:+.0f}, "
-                                    f"now=${current_move:+.0f}, {retracement:.0%} retraced)"
-                                ),
-                                "pnl_pct": pnl_pct,
-                                "trigger_type": "reversal_retracement",
-                            }
+                        asyncio.create_task(
+                            self._ai_decision.evaluate_exit(
+                                {
+                                    "token_side": token_side,
+                                    "reason": (
+                                        f"reversal_retracement (peak=${peak_move:+.0f}, "
+                                        f"now=${current_move:+.0f}, {retracement:.0%} retraced)"
+                                    ),
+                                    "pnl_pct": pnl_pct,
+                                    "trigger_type": "reversal_retracement",
+                                }
+                            )
                         )
                         return  # Don't also check TP on same tick
 
@@ -424,13 +434,15 @@ class PositionMonitor:
                 dynamic_tp * 100,
             )
             self._triggered[token_side] = "take_profit"
-            await self._shared.exit_trigger_queue.put(
-                {
-                    "token_side": token_side,
-                    "reason": f"take_profit ({pnl_pct:+.1%}, dynamic TP=+{dynamic_tp:.0%})",
-                    "pnl_pct": pnl_pct,
-                    "trigger_type": "take_profit",
-                }
+            asyncio.create_task(
+                self._ai_decision.evaluate_exit(
+                    {
+                        "token_side": token_side,
+                        "reason": f"take_profit ({pnl_pct:+.1%}, dynamic TP=+{dynamic_tp:.0%})",
+                        "pnl_pct": pnl_pct,
+                        "trigger_type": "take_profit",
+                    }
+                )
             )
 
     def _sl_components_str(self, token_side: str) -> str:

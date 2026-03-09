@@ -30,8 +30,7 @@ shared_state/
 | **Market data** | `latest_snapshot`, `snapshot_timestamp` | MarketMonitor | AIDecision, PositionMonitor |
 | **Candle** | `current_market`, `candle_open_btc` | Agent | All tasks |
 | **Pre-filter** | `prefilter_history` | MarketMonitor | AIDecision |
-| **AI trigger** | `ai_trigger_event`, `ai_trigger_reason`, `ai_last_call_time` | MarketMonitor, PositionMonitor | AIDecision |
-| **Exit signals** | `exit_trigger_queue` | PositionMonitor | AIDecision |
+| **AI trigger** | `ai_trigger_reason`, `ai_last_call_time` | AIDecision | Dashboard/WS |
 | **P&L** | `position_pnl_pct` | PositionMonitor | Dashboard/WS |
 | **Session stats** | `session_wins`, `session_losses` | Agent | Indicators |
 | **Microstructure** | `microstructure_history` | Agent | AIDecision |

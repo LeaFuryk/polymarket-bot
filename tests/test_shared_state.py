@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
-
 from polybot.shared_state import (
     CandleMicrostructure,
     EntryContext,
@@ -116,15 +114,7 @@ class TestSharedStateInit:
         assert state.dynamic_sl == {}
         assert state.dynamic_tp == {}
 
-    def test_ai_trigger_event_not_set(self):
-        state = SharedState()
-        assert not state.ai_trigger_event.is_set()
-
     def test_signal_type_and_regime_defaults(self):
         state = SharedState()
         assert state.signal_type == DEFAULT_SIGNAL_TYPE
         assert state.regime == DEFAULT_REGIME
-
-    def test_exit_trigger_queue_type(self):
-        state = SharedState()
-        assert isinstance(state.exit_trigger_queue, asyncio.Queue)

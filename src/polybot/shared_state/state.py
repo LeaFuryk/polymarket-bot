@@ -8,7 +8,6 @@ safe without locks.
 
 from __future__ import annotations
 
-import asyncio
 from collections import deque
 from typing import Any
 
@@ -46,12 +45,8 @@ class SharedState:
         )
 
         # -- AI trigger coordination --
-        self.ai_trigger_event: asyncio.Event = asyncio.Event()
         self.ai_trigger_reason: str = ""
         self.ai_last_call_time: float = 0.0
-
-        # -- Position monitor -> AI exit signals --
-        self.exit_trigger_queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
 
         # -- Real-time P&L for dashboard --
         self.position_pnl_pct: dict[str, float] = {}

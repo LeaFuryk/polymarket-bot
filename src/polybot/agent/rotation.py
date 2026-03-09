@@ -292,13 +292,6 @@ class RotationManager:
             if ctx.position_monitor:
                 ctx.position_monitor.reset_triggers()
 
-            # Clear exit trigger queue
-            while not ctx.shared.exit_trigger_queue.empty():
-                try:
-                    ctx.shared.exit_trigger_queue.get_nowait()
-                except asyncio.QueueEmpty:
-                    break
-
             # Save microstructure summary before clearing
             self.save_candle_microstructure(ctx)
 
