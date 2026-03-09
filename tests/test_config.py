@@ -15,8 +15,6 @@ from polybot.config import (
     load_config,
 )
 from polybot.config.constants import (
-    DEFAULT_CLOB_API_URL,
-    DEFAULT_DECISION_INTERVAL,
     DEFAULT_MIN_CONFIDENCE,
     DEFAULT_POLYMARKET_HOST,
 )
@@ -27,12 +25,6 @@ from polybot.config.constants import (
 class TestConstants:
     """Default constants are used by config models."""
 
-    def test_market_defaults(self):
-        from polybot.config import MarketConfig
-
-        cfg = MarketConfig()
-        assert cfg.clob_api_url == DEFAULT_CLOB_API_URL
-
     def test_api_defaults(self):
         from polybot.config import ApiConfig
 
@@ -41,7 +33,6 @@ class TestConstants:
 
     def test_agent_defaults(self):
         cfg = AgentConfig()
-        assert cfg.decision_interval == DEFAULT_DECISION_INTERVAL
         assert cfg.min_confidence == DEFAULT_MIN_CONFIDENCE
 
 
@@ -96,13 +87,13 @@ class TestConfigLoader:
         loader = ConfigLoader(tmp_path / "nonexistent.yaml")
         cfg = loader.load()
         assert isinstance(cfg, AppConfig)
-        assert cfg.agent.decision_interval == DEFAULT_DECISION_INTERVAL
+        assert cfg.agent.min_confidence == DEFAULT_MIN_CONFIDENCE
 
     def test_yaml_overrides_defaults(self, tmp_path: Path):
         yaml_path = tmp_path / "test.yaml"
-        yaml_path.write_text(yaml.dump({"agent": {"decision_interval": 120}}))
+        yaml_path.write_text(yaml.dump({"agent": {"initial_cash": 5000.0}}))
         cfg = ConfigLoader(yaml_path).load()
-        assert cfg.agent.decision_interval == 120
+        assert cfg.agent.initial_cash == 5000.0
 
     def test_env_overrides_yaml(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         yaml_path = tmp_path / "test.yaml"
