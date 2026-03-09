@@ -5,12 +5,9 @@ from __future__ import annotations
 import asyncio
 import logging
 import sqlite3
-import time
 from pathlib import Path
 
 from polybot.datastore.constants import (
-    FLUSH_BATCH_SIZE,
-    FLUSH_INTERVAL_SECONDS,
     JOURNAL_MODE,
     SYNCHRONOUS_MODE,
 )
@@ -126,6 +123,7 @@ class DataStore:
         self._current_candle_id: int | None = None
         self._pending_items: list[SnapshotRow | DecisionRow] = []
         self._logger = logger or _default_logger
+        self._writer_task: asyncio.Task | None = None
 
     # --- Lifecycle ---
 
@@ -146,10 +144,16 @@ class DataStore:
         self._logger.info("DataStore opened: %s (WAL mode)", self._db_path)
 
     async def close(self) -> None:
-        """Flush remaining queue items and close connection."""
+        """Cancel writer task, flush remaining items, and close connection."""
+        if self._writer_task is not None:
+            self._writer_task.cancel()
+            try:
+                await self._writer_task
+            except asyncio.CancelledError:
+                pass
+            self._writer_task = None
         if self._conn is None:
             return
-        # Final flush
         await self._flush()
         self._conn.close()
         self._conn = None
@@ -231,8 +235,14 @@ class DataStore:
 
     # --- Non-blocking queue API (called from hot loops) ---
 
+    def _ensure_writer(self) -> None:
+        """Start the writer task lazily on first enqueue."""
+        if self._writer_task is None or self._writer_task.done():
+            self._writer_task = asyncio.create_task(self._writer_loop(), name="datastore_writer")
+
     def queue_snapshot(self, row: SnapshotRow) -> None:
         """Enqueue a snapshot row for batched insert. Non-blocking."""
+        self._ensure_writer()
         try:
             self._queue.put_nowait(row)
         except asyncio.QueueFull:
@@ -240,6 +250,7 @@ class DataStore:
 
     def queue_decision(self, row: DecisionRow) -> None:
         """Enqueue a decision row for batched insert. Non-blocking."""
+        self._ensure_writer()
         try:
             self._queue.put_nowait(row)
         except asyncio.QueueFull:
@@ -247,44 +258,19 @@ class DataStore:
 
     # --- Background writer task ---
 
-    async def writer_loop(self) -> None:
-        """Async task: drain queue and batch-insert every N seconds or N rows."""
-        self._logger.info("DataStore writer_loop started")
-        last_flush = time.monotonic()
-
-        while True:
-            try:
-                # Wait for at least one item or timeout
+    async def _writer_loop(self) -> None:
+        """Drain queue and batch-insert every 0.5s."""
+        self._logger.info("DataStore writer started")
+        try:
+            while True:
+                await asyncio.sleep(0.5)
                 try:
-                    item = await asyncio.wait_for(self._queue.get(), timeout=FLUSH_INTERVAL_SECONDS)
-                    self._pending_items.append(item)
-                except TimeoutError:
-                    pass
-                except asyncio.CancelledError:
-                    raise
-
-                # Drain any additional items that are ready
-                while not self._queue.empty():
-                    try:
-                        item = self._queue.get_nowait()
-                        self._pending_items.append(item)
-                    except asyncio.QueueEmpty:
-                        break
-
-                now = time.monotonic()
-                elapsed = now - last_flush
-                if len(self._pending_items) >= FLUSH_BATCH_SIZE or elapsed >= FLUSH_INTERVAL_SECONDS:
                     await self._flush()
-                    last_flush = time.monotonic()
-
-            except asyncio.CancelledError:
-                # Final flush on cancellation
-                await self._flush()
-                self._logger.info("DataStore writer_loop stopped")
-                return
-            except Exception:
-                self._logger.exception("DataStore writer_loop error")
-                await asyncio.sleep(1.0)
+                except Exception:
+                    self._logger.debug("DataStore flush error", exc_info=True)
+        except asyncio.CancelledError:
+            await self._flush()
+            self._logger.info("DataStore writer stopped")
 
     async def _flush(self) -> None:
         """Drain queue and batch-insert all pending rows."""
