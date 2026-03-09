@@ -8,7 +8,7 @@ from pathlib import Path
 from polybot import __version__
 from polybot.adaptive_entry import AdaptiveEntryTracker
 from polybot.agent.context import AgentContext
-from polybot.agent.helpers import StartupData, compute_iteration_label
+from polybot.agent.helpers import StartupData
 from polybot.calibration import ConfidenceCalibrator
 from polybot.config import AppConfig
 from polybot.datastore import DataStore, MarketHistoryStore
@@ -41,13 +41,20 @@ class ContextFactory:
     orchestration.
     """
 
-    def __init__(self, config: AppConfig, logger: logging.Logger | None = None) -> None:
+    def __init__(
+        self,
+        config: AppConfig,
+        startup_data: StartupData | None = None,
+        logger: logging.Logger | None = None,
+    ) -> None:
         self._config = config
+        self._startup_data = startup_data or StartupData()
         self._log = logger or logging.getLogger(__name__)
 
-    def build(self, startup_data: StartupData | None = None) -> AgentContext:
+    def build(self) -> AgentContext:
         """Create all components and return a populated AgentContext."""
         config = self._config
+        sd = self._startup_data
 
         chainlink_ws = ChainlinkWSFeed(config.api.polymarket_rtds_url)
         discovery = MarketDiscovery(config)
@@ -99,16 +106,13 @@ class ContextFactory:
             datastore = DataStore(config.logging.sqlite_db_path)
 
         # Persistent market history store (never deleted by archive)
-        iteration_label = startup_data.iteration_label if startup_data else compute_iteration_label()
+        iteration_label = sd.iteration_label
         market_history = MarketHistoryStore(
             config.logging.market_history_db_path,
             iteration=iteration_label,
         )
 
         shared = SharedState()
-
-        # Pre-populate from startup data
-        sd = startup_data or StartupData()
 
         if sd.knowledge_state:
             knowledge_manager.load_state(sd.knowledge_state)
