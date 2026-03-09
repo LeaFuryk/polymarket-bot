@@ -445,6 +445,15 @@ def assemble_dashboard_data(ctx: AgentContext, log: logging.Logger | None = None
     return data
 
 
+def build_snapshot_message(ctx: AgentContext, log: logging.Logger | None = None) -> str:
+    """Build a full WS snapshot message from the current dashboard state."""
+    from polybot.ws.protocol import MSG_SNAPSHOT, make_message
+
+    data = assemble_dashboard_data(ctx, log=log)
+    data["ws_clients"] = ctx.ws_broadcaster.client_count
+    return make_message(MSG_SNAPSHOT, data)
+
+
 def write_dashboard_json(ctx: AgentContext, log: logging.Logger | None = None) -> None:
     """Write dashboard_data.json for the web dashboard."""
     _log = log or logger

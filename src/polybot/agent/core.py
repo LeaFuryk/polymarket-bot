@@ -7,7 +7,7 @@ import logging
 import signal
 
 from polybot.agent.dashboard import (
-    assemble_dashboard_data,
+    build_snapshot_message,
     sync_from_ai_decision,
     write_dashboard_json,
 )
@@ -136,14 +136,10 @@ class TradingAgent:
             nonlocal _last_balance_sync
             import time
 
-            from polybot.ws.protocol import MSG_SNAPSHOT, make_message
-
             sync_from_ai_decision(ctx)
             write_dashboard_json(ctx, log=self._log)
             if ctx.ws_broadcaster and ctx.ws_broadcaster.has_clients:
-                data = assemble_dashboard_data(ctx, log=self._log)
-                data["ws_clients"] = ctx.ws_broadcaster.client_count
-                await ctx.ws_broadcaster.broadcast(make_message(MSG_SNAPSHOT, data))
+                await ctx.ws_broadcaster.broadcast(build_snapshot_message(ctx, log=self._log))
                 await ctx.ws_broadcaster.broadcast(ctx.ws_broadcaster.build_status_update(ctx))
 
             # Live mode: sync wallet balance (at most every 60s) and check kill switch
