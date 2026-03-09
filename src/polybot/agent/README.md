@@ -8,7 +8,7 @@ Orchestrates concurrent tasks for market monitoring, AI decisions, position mana
 |---|---|---|
 | `core.py` | Thin orchestrator — wires components, launches async tasks | `TradingAgent` |
 | `context.py` | Typed dataclass holding references to all sub-components | `AgentContext` |
-| `dashboard.py` | Dashboard data assembly, JSON writing, WS broadcasting | `DashboardAssembler`, `enrich_iteration_summary()` |
+| `dashboard.py` | Dashboard data assembly and JSON writing (module-level functions) | `assemble_dashboard_data()`, `write_dashboard_json()`, `sync_from_ai_decision()`, `enrich_iteration_summary()` |
 | `rotation.py` | Market discovery, candle transitions, microstructure capture | `RotationManager` |
 | `state.py` | Agent state persistence, history loading, pending bet resolution | `StatePersistence` |
 | `helpers.py` | Logging setup, PnL computation | `setup_logging()`, `compute_pnl_from_trades()` |
@@ -20,8 +20,10 @@ All extracted modules receive an `AgentContext` dataclass instead of importing `
 ```
 TradingAgent (core.py)
   ├── creates AgentContext
-  ├── delegates to RotationManager.rotation_loop(ctx)
-  ├── delegates to DashboardAssembler.dashboard_loop(ctx)
+  ├── delegates to RotationManager (called by MarketMonitor)
+  ├── wires on_cycle_complete callback → dashboard sync + WS broadcast
+  ├── MarketMonitor broadcasts MSG_MARKET + MSG_STATUS per tick
+  ├── PositionMonitor broadcasts MSG_POSITION per tick
   ├── delegates to StatePersistence.load/save(ctx)
   └── owns run() lifecycle + shutdown
 ```

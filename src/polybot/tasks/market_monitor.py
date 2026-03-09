@@ -16,6 +16,7 @@ from polybot.adaptive_entry import AdaptiveEntryTracker
 from polybot.config import AppConfig
 
 if TYPE_CHECKING:
+    from polybot.agent.context import AgentContext
     from polybot.agent.rotation import RotationManager
     from polybot.datastore import DataStore, MarketHistoryStore
     from polybot.tasks.ai_decision import AIDecision
@@ -50,6 +51,7 @@ class MarketMonitor:
         feature_config: FeatureConfig | None = None,
         market_history: MarketHistoryStore | None = None,
         adaptive_entry: AdaptiveEntryTracker | None = None,
+        ctx: AgentContext | None = None,
     ) -> None:
         self._config = config
         self._shared = shared
@@ -63,6 +65,7 @@ class MarketMonitor:
         self._feature_config = feature_config
         self._market_history = market_history
         self._adaptive_entry = adaptive_entry
+        self._ctx = ctx
         self._interval = config.monitor.market_monitor_interval
         self._rr_threshold = config.monitor.rr_trigger_threshold
         self._cooldown = config.monitor.ai_cooldown_seconds
@@ -79,6 +82,7 @@ class MarketMonitor:
 
             try:
                 await self._tick()
+                await self._broadcast_updates()
             except Exception:
                 logger.exception("MarketMonitor tick error")
 
@@ -285,6 +289,15 @@ class MarketMonitor:
                     reason,
                     elapsed,
                 )
+
+    async def _broadcast_updates(self) -> None:
+        """Push lightweight market + status updates to WS clients."""
+        if self._ctx is None:
+            return
+        ws = self._ctx.ws_broadcaster
+        if ws and ws.has_clients:
+            await ws.broadcast(ws.build_market_update(self._ctx))
+            await ws.broadcast(ws.build_status_update(self._ctx))
 
     def _queue_snapshot(
         self,

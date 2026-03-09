@@ -5,40 +5,18 @@ from __future__ import annotations
 import asyncio
 import logging
 import signal
-from pathlib import Path
 
-from polybot import __version__
-from polybot.adaptive_entry import AdaptiveEntryTracker
-from polybot.agent.context import AgentContext
 from polybot.agent.dashboard import (
-    DashboardAssembler,
+    assemble_dashboard_data,
     load_iteration_summaries,
+    sync_from_ai_decision,
+    write_dashboard_json,
 )
+from polybot.agent.factory import ContextFactory
 from polybot.agent.helpers import setup_logging
 from polybot.agent.rotation import RotationManager
 from polybot.agent.state import StatePersistence
-from polybot.calibration import ConfidenceCalibrator
 from polybot.config import AppConfig
-from polybot.datastore import DataStore, MarketHistoryStore
-from polybot.decision_engine.engine import DecisionEngine
-from polybot.execution.live import LiveExecutionEngine
-from polybot.exit_tracker import ExitTracker
-from polybot.indicators import (
-    FeatureConfig,
-)
-from polybot.knowledge import KnowledgeManager
-from polybot.logging.trade_log import TradeLog
-from polybot.market_data.chainlink_ws import ChainlinkWSFeed
-from polybot.market_data.discovery import MarketDiscovery
-from polybot.market_data.provider import MarketDataProvider
-from polybot.ml_scorer import MLScorer
-from polybot.prefilter import PreFilter
-from polybot.resolution import MarketDataResolutionRepo, ResolutionTracker
-from polybot.risk.manager import RiskManager
-from polybot.shared_state import SharedState
-from polybot.simulator.engine import ExecutionSimulator
-from polybot.simulator.orderbook import SimulatedOrderBook
-from polybot.simulator.portfolio import Portfolio
 from polybot.tasks.ai_decision import AIDecision
 from polybot.tasks.market_monitor import MarketMonitor
 from polybot.tasks.position_monitor import PositionMonitor
@@ -50,109 +28,18 @@ class TradingAgent:
     def __init__(self, config: AppConfig, logger: logging.Logger | None = None) -> None:
         self._log = logger or logging.getLogger(__name__)
 
-        # Sub-components (local vars — ownership moves to AgentContext)
-        chainlink_ws = ChainlinkWSFeed(config.api.polymarket_rtds_url)
-        discovery = MarketDiscovery(config)
-        market_data = MarketDataProvider(config, chainlink_ws=chainlink_ws)
-        decision_engine = DecisionEngine(config.ai)
-        execution_sim = ExecutionSimulator(config.simulator)
-        orderbook = SimulatedOrderBook(config.simulator)
-        portfolio = Portfolio(config.agent.initial_cash)
-        risk = RiskManager(config.risk, config.agent.initial_cash)
-
-        # Live trading engine (created if mode == "live")
-        live_mode = config.trading.mode == "live"
-        live_engine: LiveExecutionEngine | None = None
-        shadow_portfolio: Portfolio | None = None
-
-        if live_mode:
-            live_engine = LiveExecutionEngine(config.trading, config.api)
-            shadow_portfolio = Portfolio(config.agent.initial_cash)
-            self._log.warning(
-                "LIVE TRADING MODE — real CLOB orders will be placed%s",
-                " (DRY RUN)" if config.trading.dry_run else "",
-            )
-
-        trade_log = TradeLog(config.logging)
-        resolution_tracker = ResolutionTracker(
-            MarketDataResolutionRepo(market_data._btc, market_data._rest),
-        )
-        prefilter = PreFilter()
-        calibrator = ConfidenceCalibrator(data_dir=Path(config.logging.log_dir))
-        exit_tracker = ExitTracker(data_dir=Path(config.logging.log_dir))
-        adaptive_entry = AdaptiveEntryTracker(
-            data_dir=Path(config.logging.log_dir),
-            window=config.monitor.adaptive_entry_window,
-        )
-        ml_scorer = MLScorer(data_dir=Path(config.logging.log_dir))
-        knowledge_manager = KnowledgeManager(config.logging.knowledge_dir, config.ai)
-        feature_config = FeatureConfig(Path(config.logging.knowledge_dir).parent / "feature_config.json")
-
-        # WebSocket dashboard server
-        from polybot.ws.broadcaster import DashboardBroadcaster
-        from polybot.ws.server import DashboardWSServer
-
-        ws_broadcaster = DashboardBroadcaster()
-        ws_server = DashboardWSServer(
-            broadcaster=ws_broadcaster,
-            port=config.logging.ws_port,
-        )
-
-        # SQLite analytics store
-        datastore: DataStore | None = None
-        if config.logging.sqlite_enabled:
-            datastore = DataStore(config.logging.sqlite_db_path)
-
-        # Persistent market history store (never deleted by archive)
-        iteration_label = StatePersistence.compute_iteration_label()
-        market_history = MarketHistoryStore(
-            config.logging.market_history_db_path,
-            iteration=iteration_label,
-        )
-
-        shared = SharedState()
+        # Build AgentContext via factory (all sub-component wiring)
+        factory = ContextFactory(config, logger=self._log)
+        self._ctx = factory.build()
 
         # Orchestration managers (TradingAgent-only, not in ctx)
         self._state_persistence = StatePersistence(logger=self._log)
-        self._dashboard_assembler = DashboardAssembler(logger=self._log)
-
-        # Build AgentContext — single source of truth for all sub-components
-        self._ctx = AgentContext(
-            config=config,
-            chainlink_ws=chainlink_ws,
-            discovery=discovery,
-            market_data=market_data,
-            decision_engine=decision_engine,
-            execution_sim=execution_sim,
-            orderbook=orderbook,
-            portfolio=portfolio,
-            risk=risk,
-            trade_log=trade_log,
-            resolution_tracker=resolution_tracker,
-            prefilter=prefilter,
-            calibrator=calibrator,
-            exit_tracker=exit_tracker,
-            adaptive_entry=adaptive_entry,
-            ml_scorer=ml_scorer,
-            knowledge_manager=knowledge_manager,
-            feature_config=feature_config,
-            shared=shared,
-            live_mode=live_mode,
-            live_engine=live_engine,
-            shadow_portfolio=shadow_portfolio,
-            ws_broadcaster=ws_broadcaster,
-            ws_server=ws_server,
-            datastore=datastore,
-            market_history=market_history,
-            bot_version=__version__,
-            state_path=Path(config.logging.log_dir) / "agent_state.json",
-        )
 
         # Snapshot builder (closure called lazily at runtime, self._ctx exists by then)
         def _build_initial_snapshot() -> str:
             from polybot.ws.protocol import MSG_SNAPSHOT, make_message
 
-            data = self._dashboard_assembler.assemble_dashboard_data(self._ctx)
+            data = assemble_dashboard_data(self._ctx, log=self._log)
             data["ws_clients"] = self._ctx.ws_broadcaster.client_count
             return make_message(MSG_SNAPSHOT, data)
 
@@ -251,6 +138,20 @@ class TradingAgent:
 
         ctx.ai_decision.on_trade_callback = _on_trade
 
+        # Wire on_cycle_complete: sync dashboard state + broadcast snapshot
+        async def _on_cycle_complete():
+            from polybot.ws.protocol import MSG_SNAPSHOT, make_message
+
+            sync_from_ai_decision(ctx)
+            write_dashboard_json(ctx, log=self._log)
+            if ctx.ws_broadcaster and ctx.ws_broadcaster.has_clients:
+                data = assemble_dashboard_data(ctx, log=self._log)
+                data["ws_clients"] = ctx.ws_broadcaster.client_count
+                await ctx.ws_broadcaster.broadcast(make_message(MSG_SNAPSHOT, data))
+                await ctx.ws_broadcaster.broadcast(ctx.ws_broadcaster.build_status_update(ctx))
+
+        ctx.ai_decision.on_cycle_complete = _on_cycle_complete
+
         rotation_manager = RotationManager(ctx, logger=self._log)
 
         market_monitor = MarketMonitor(
@@ -266,6 +167,7 @@ class TradingAgent:
             feature_config=ctx.feature_config if ctx.datastore else None,
             market_history=ctx.market_history,
             adaptive_entry=ctx.adaptive_entry,
+            ctx=ctx,
         )
 
         position_monitor = PositionMonitor(
@@ -273,6 +175,7 @@ class TradingAgent:
             shared=ctx.shared,
             portfolio=ctx.portfolio,
             ai_decision=ctx.ai_decision,
+            ctx=ctx,
         )
 
         # Start WebSocket server
@@ -283,10 +186,7 @@ class TradingAgent:
         tasks = [
             asyncio.create_task(market_monitor.run(), name="market_monitor"),
             asyncio.create_task(position_monitor.run(), name="position_monitor"),
-            asyncio.create_task(self._dashboard_loop(), name="dashboard_loop"),
         ]
-        if ctx.config.logging.ws_enabled:
-            tasks.append(asyncio.create_task(self._ws_broadcast_loop(), name="ws_broadcast"))
         if ctx.live_mode and ctx.live_engine:
             tasks.append(asyncio.create_task(self._balance_sync_loop(), name="balance_sync"))
         if ctx.datastore is not None:
@@ -310,14 +210,6 @@ class TradingAgent:
         self._log.info("Shutdown signal received")
         self._ctx.shared.shutdown = True
 
-    async def _dashboard_loop(self) -> None:
-        """Delegates to DashboardAssembler.dashboard_loop."""
-        await self._dashboard_assembler.dashboard_loop(self._ctx)
-
-    async def _ws_broadcast_loop(self) -> None:
-        """Delegates to DashboardAssembler.ws_broadcast_loop."""
-        await self._dashboard_assembler.ws_broadcast_loop(self._ctx)
-
     async def _balance_sync_loop(self) -> None:
         """Periodically syncs wallet balance and checks kill switch (live mode only)."""
         self._log.info("BalanceSyncLoop started")
@@ -335,10 +227,6 @@ class TradingAgent:
                 self._log.exception("BalanceSyncLoop error")
             await asyncio.sleep(60.0)
         self._log.info("BalanceSyncLoop stopped")
-
-    def _assemble_dashboard_data(self) -> dict:
-        """Backward-compatible wrapper — delegates to DashboardAssembler."""
-        return self._dashboard_assembler.assemble_dashboard_data(self._ctx)
 
     async def _shutdown_components(self) -> None:
         ctx = self._ctx
