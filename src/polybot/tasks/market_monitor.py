@@ -16,6 +16,7 @@ from polybot.adaptive_entry import AdaptiveEntryTracker
 from polybot.config import AppConfig
 
 if TYPE_CHECKING:
+    from polybot.agent.rotation import RotationManager
     from polybot.datastore import DataStore, MarketHistoryStore
     from polybot.tasks.ai_decision import AIDecision
 from polybot.indicators import (
@@ -44,6 +45,7 @@ class MarketMonitor:
         portfolio: Portfolio,
         resolution_tracker: ResolutionTracker,
         ai_decision: AIDecision,
+        rotation_manager: RotationManager,
         datastore: DataStore | None = None,
         feature_config: FeatureConfig | None = None,
         market_history: MarketHistoryStore | None = None,
@@ -56,6 +58,7 @@ class MarketMonitor:
         self._portfolio = portfolio
         self._resolution_tracker = resolution_tracker
         self._ai_decision = ai_decision
+        self._rotation = rotation_manager
         self._datastore = datastore
         self._feature_config = feature_config
         self._market_history = market_history
@@ -64,6 +67,7 @@ class MarketMonitor:
         self._rr_threshold = config.monitor.rr_trigger_threshold
         self._cooldown = config.monitor.ai_cooldown_seconds
         self._adaptive_enabled = config.monitor.adaptive_entry_enabled
+        self._discovery_counter = 0
 
     async def run(self) -> None:
         """Main loop — runs until shutdown."""
@@ -86,11 +90,19 @@ class MarketMonitor:
         """Single monitoring cycle."""
         market = self._shared.current_market
         if market is None:
+            await self._rotation.discover_market()
             return
 
         time_remaining = market.time_remaining()
         if time_remaining <= 0:
+            await self._rotation.discover_market()
             return
+
+        # Periodic discovery during normal operation (every 5 ticks ≈ 5s)
+        self._discovery_counter += 1
+        if self._discovery_counter >= 5:
+            self._discovery_counter = 0
+            await self._rotation.discover_market()
 
         # Fetch market snapshot
         try:

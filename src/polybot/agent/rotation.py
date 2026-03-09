@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import statistics
 import time
@@ -18,22 +17,13 @@ from polybot.shared_state import CandleMicrostructure
 class RotationManager:
     """Discovers markets and handles candle transitions."""
 
-    def __init__(self, logger: logging.Logger | None = None) -> None:
+    def __init__(self, ctx: AgentContext, logger: logging.Logger | None = None) -> None:
+        self._ctx = ctx
         self._log = logger or logging.getLogger(__name__)
 
-    async def rotation_loop(self, ctx: AgentContext) -> None:
-        """Discovers markets and handles candle transitions (every 5s)."""
-        self._log.info("RotationLoop started")
-        while not ctx.shared.shutdown:
-            try:
-                await self.discover_market(ctx)
-            except Exception:
-                self._log.exception("RotationLoop error")
-            await asyncio.sleep(5.0)
-        self._log.info("RotationLoop stopped")
-
-    async def discover_market(self, ctx: AgentContext) -> CandleMarket | None:
+    async def discover_market(self) -> CandleMarket | None:
         """Discover the current candle market, handling rotation and outages."""
+        ctx = self._ctx
         new_market = await ctx.discovery.get_current_market()
         if new_market is None:
             new_market = await ctx.discovery.get_next_market()
@@ -92,7 +82,7 @@ class RotationManager:
                     ctx.current_market.slug,
                     new_market.slug,
                 )
-                await self.handle_market_transition(ctx)
+                await self._handle_market_transition()
 
         if ctx.current_market is None or new_market.condition_id != ctx.current_market.condition_id:
             ctx.current_market = new_market
@@ -138,9 +128,11 @@ class RotationManager:
 
         return ctx.current_market
 
-    async def handle_market_transition(self, ctx: AgentContext) -> None:
+    async def _handle_market_transition(self) -> None:
         """Handle transition between candle markets — resolve winner via BTC price."""
         from polybot.agent.state import StatePersistence
+
+        ctx = self._ctx
 
         # Pause other tasks during rotation
         ctx.shared.rotation_in_progress = True
@@ -290,7 +282,7 @@ class RotationManager:
             if ctx.shadow_portfolio is not None:
                 ctx.shadow_portfolio.reset_positions()
             # Save microstructure summary before clearing
-            self.save_candle_microstructure(ctx)
+            self._save_candle_microstructure()
 
             # Reset shared state for new candle
             ctx.shared.candle_open_btc = None
@@ -304,8 +296,9 @@ class RotationManager:
         finally:
             ctx.shared.rotation_in_progress = False
 
-    def save_candle_microstructure(self, ctx: AgentContext) -> None:
+    def _save_candle_microstructure(self) -> None:
         """Compute and save microstructure summary from current candle's prefilter history."""
+        ctx = self._ctx
         history = list(ctx.shared.prefilter_history)
         if len(history) < 10:
             return

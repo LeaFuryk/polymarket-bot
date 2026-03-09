@@ -114,7 +114,6 @@ class TradingAgent:
 
         # Orchestration managers (TradingAgent-only, not in ctx)
         self._state_persistence = StatePersistence(logger=self._log)
-        self._rotation_manager = RotationManager(logger=self._log)
         self._dashboard_assembler = DashboardAssembler(logger=self._log)
 
         # Build AgentContext — single source of truth for all sub-components
@@ -252,6 +251,8 @@ class TradingAgent:
 
         ctx.ai_decision.on_trade_callback = _on_trade
 
+        rotation_manager = RotationManager(ctx, logger=self._log)
+
         market_monitor = MarketMonitor(
             config=ctx.config,
             shared=ctx.shared,
@@ -260,6 +261,7 @@ class TradingAgent:
             portfolio=ctx.portfolio,
             resolution_tracker=ctx.resolution_tracker,
             ai_decision=ctx.ai_decision,
+            rotation_manager=rotation_manager,
             datastore=ctx.datastore,
             feature_config=ctx.feature_config if ctx.datastore else None,
             market_history=ctx.market_history,
@@ -281,7 +283,6 @@ class TradingAgent:
         tasks = [
             asyncio.create_task(market_monitor.run(), name="market_monitor"),
             asyncio.create_task(position_monitor.run(), name="position_monitor"),
-            asyncio.create_task(self._rotation_loop(), name="rotation_loop"),
             asyncio.create_task(self._dashboard_loop(), name="dashboard_loop"),
         ]
         if ctx.config.logging.ws_enabled:
@@ -308,10 +309,6 @@ class TradingAgent:
     def _handle_signal(self) -> None:
         self._log.info("Shutdown signal received")
         self._ctx.shared.shutdown = True
-
-    async def _rotation_loop(self) -> None:
-        """Delegates to RotationManager.rotation_loop."""
-        await self._rotation_manager.rotation_loop(self._ctx)
 
     async def _dashboard_loop(self) -> None:
         """Delegates to DashboardAssembler.dashboard_loop."""
