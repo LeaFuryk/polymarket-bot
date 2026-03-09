@@ -1,8 +1,8 @@
-"""AI decision task — event-driven, makes trades when triggered.
+"""AI decision service — callable by MarketMonitor and PositionMonitor.
 
-Waits on ai_trigger_event (entry opportunity) or exit_trigger_queue
-(stop-loss/take-profit). Contains the core decision logic extracted
-from the old _run_cycle().
+Called directly via ``evaluate_entry()`` and ``evaluate_exit()`` (no internal
+loop). An ``asyncio.Lock`` serialises concurrent calls so an exit waits for
+an in-progress entry to finish rather than being dropped.
 """
 
 from __future__ import annotations
@@ -142,6 +142,9 @@ class AIDecision:
         # Optional callback for WS trade event push
         self.on_trade_callback = None  # set by agent: Callable[[TradeRecord], Awaitable[None]]
 
+        # Serialise concurrent entry/exit calls
+        self._lock = asyncio.Lock()
+
         # Track sold sides per candle to block side-flips (sell A → buy B)
         self._sold_sides: dict[str, set[str]] = {}  # slug → {UP, DOWN}
         # Track bought sides per candle to prevent double-entry on same side
@@ -187,210 +190,201 @@ class AIDecision:
     def last_cycle_api_cost(self) -> float:
         return self._last_cycle_api_cost
 
-    async def run(self) -> None:
-        """Main loop — waits for triggers, makes decisions."""
-        logger.info("AIDecision task started")
-        while not self._shared.shutdown:
-            try:
-                # Wait for either AI trigger or exit trigger
-                trigger_type = await self._wait_for_trigger()
-                if trigger_type is None:
-                    continue
+    @property
+    def busy(self) -> bool:
+        """True when an entry/exit evaluation is in progress."""
+        return self._lock.locked()
 
-                if self._shared.rotation_in_progress:
-                    continue
-
-                if trigger_type == "entry":
-                    await self._handle_entry_trigger()
-                elif trigger_type == "exit":
-                    await self._handle_exit_trigger()
-
-            except Exception:
-                logger.exception("AIDecision error")
-                await asyncio.sleep(1)
-
-        logger.info("AIDecision task stopped")
-
-    async def _wait_for_trigger(self) -> str | None:
-        """Wait for an entry or exit trigger. Returns trigger type or None."""
-        # Check exit queue first (non-blocking)
-        try:
-            exit_signal = self._shared.exit_trigger_queue.get_nowait()
-            self._pending_exit = exit_signal
-            return "exit"
-        except asyncio.QueueEmpty:
-            pass
-
-        # Wait for entry trigger with timeout (so we can check exit queue periodically)
-        try:
-            await asyncio.wait_for(
-                self._shared.ai_trigger_event.wait(),
-                timeout=2.0,
-            )
-            self._shared.ai_trigger_event.clear()
-            return "entry"
-        except TimeoutError:
-            return None
-
-    async def _handle_entry_trigger(self) -> None:
+    async def evaluate_entry(self, trigger_reason: str) -> None:
         """Handle an entry opportunity trigger from the market monitor."""
-        # Record call time immediately to prevent MarketMonitor from
-        # re-triggering during the async Haiku/Sonnet call
-        self._record_ai_call_time()
+        async with self._lock:
+            if self._shared.rotation_in_progress:
+                return
 
-        self._last_screen_passed = None  # Reset per cycle
-        self._cycle_count += 1
-        cycle = self._cycle_count
-        logger.info("=== AI Decision Cycle %d (trigger: %s) ===", cycle, self._shared.ai_trigger_reason)
+            # Publish trigger reason for dashboard / WS
+            self._shared.ai_trigger_reason = trigger_reason
 
-        snapshot = self._shared.latest_snapshot
-        market = self._shared.current_market
-        if snapshot is None or market is None:
-            self.last_action = "SKIP (no data)"
-            return
+            # Record call time immediately to prevent MarketMonitor from
+            # re-triggering during the async Haiku/Sonnet call
+            self._record_ai_call_time()
 
-        time_remaining = market.time_remaining()
-        buffer = self._config.agent.resolution_buffer_seconds
-        if time_remaining < buffer:
-            self.last_action = f"SKIP ({time_remaining:.0f}s to resolution)"
-            return
+            self._last_screen_passed = None  # Reset per cycle
+            self._cycle_count += 1
+            cycle = self._cycle_count
+            logger.info("=== AI Decision Cycle %d (trigger: %s) ===", cycle, trigger_reason)
 
-        up_ob = snapshot.orderbook
-        down_ob = snapshot.down_orderbook
-        up_mid = up_ob.midpoint
-        down_mid = down_ob.midpoint
+            snapshot = self._shared.latest_snapshot
+            market = self._shared.current_market
+            if snapshot is None or market is None:
+                self.last_action = "SKIP (no data)"
+                return
 
-        # Mark-to-market
-        if up_mid is not None:
-            self._portfolio.mark_to_market(up_mid, down_mid)
-        portfolio_value = self._portfolio.total_value_at_market(up_mid or 0.5, down_mid)
-        self._risk.update_portfolio_peak(portfolio_value)
+            time_remaining = market.time_remaining()
+            buffer = self._config.agent.resolution_buffer_seconds
+            if time_remaining < buffer:
+                self.last_action = f"SKIP ({time_remaining:.0f}s to resolution)"
+                return
 
-        # Check pending limit order fills
-        limit_fills = self._orderbook.check_fills(up_ob)
-        for fill in limit_fills:
-            self._portfolio.apply_fill(fill, TokenSide.UP)
-            pnl = 0.0
-            if fill.side.value == "SELL":
-                pnl = (fill.fill_price - self._portfolio.up_position.avg_entry_price) * fill.size
-            self._risk.record_trade(pnl, fill.fee_amount)
-            logger.info("Limit fill: %s %.2f @ %.4f", fill.side.value, fill.size, fill.fill_price)
+            up_ob = snapshot.orderbook
+            down_ob = snapshot.down_orderbook
+            up_mid = up_ob.midpoint
+            down_mid = down_ob.midpoint
 
-        # Pre-trade risk checks
-        pre_checks = self._risk.pre_trade_checks(snapshot)
-        pre_failed = [c for c in pre_checks if not c.passed]
-        if pre_failed:
-            reasons = "; ".join(c.reason for c in pre_failed)
-            logger.warning("Pre-trade risk blocked: %s", reasons)
-            self.last_action = "BLOCKED (pre-trade)"
-            self.last_risk_status = reasons
-            self._log_cycle(cycle, snapshot, risk_blocked=True, risk_reason=reasons)
-            return
+            # Mark-to-market
+            if up_mid is not None:
+                self._portfolio.mark_to_market(up_mid, down_mid)
+            portfolio_value = self._portfolio.total_value_at_market(up_mid or 0.5, down_mid)
+            self._risk.update_portfolio_peak(portfolio_value)
 
-        await self._run_ai_decision(cycle, snapshot, market, time_remaining, portfolio_value)
+            # Check pending limit order fills
+            limit_fills = self._orderbook.check_fills(up_ob)
+            for fill in limit_fills:
+                self._portfolio.apply_fill(fill, TokenSide.UP)
+                pnl = 0.0
+                if fill.side.value == "SELL":
+                    pnl = (fill.fill_price - self._portfolio.up_position.avg_entry_price) * fill.size
+                self._risk.record_trade(pnl, fill.fee_amount)
+                logger.info("Limit fill: %s %.2f @ %.4f", fill.side.value, fill.size, fill.fill_price)
 
-    async def _handle_exit_trigger(self) -> None:
+            # Pre-trade risk checks
+            pre_checks = self._risk.pre_trade_checks(snapshot)
+            pre_failed = [c for c in pre_checks if not c.passed]
+            if pre_failed:
+                reasons = "; ".join(c.reason for c in pre_failed)
+                logger.warning("Pre-trade risk blocked: %s", reasons)
+                self.last_action = "BLOCKED (pre-trade)"
+                self.last_risk_status = reasons
+                self._log_cycle(cycle, snapshot, risk_blocked=True, risk_reason=reasons)
+                return
+
+            await self._run_ai_decision(cycle, snapshot, market, time_remaining, portfolio_value)
+
+    async def evaluate_exit(self, exit_signal: dict) -> None:
         """Handle a stop-loss/take-profit exit trigger from position monitor."""
-        exit_signal = self._pending_exit
-        self._cycle_count += 1
-        cycle = self._cycle_count
-        token_side_str = exit_signal.get("token_side", "up")
-        reason = exit_signal.get("reason", "unknown")
-        pnl_pct = exit_signal.get("pnl_pct", 0.0)
-        logger.info(
-            "=== AI Exit Decision Cycle %d (SL/TP: %s %s, P&L=%.1f%%) ===",
-            cycle,
-            token_side_str,
-            reason,
-            pnl_pct * 100,
-        )
+        async with self._lock:
+            if self._shared.rotation_in_progress:
+                return
 
-        # Exit trigger cooldown: skip if on cooldown and not a true emergency (> -30%)
-        # Reversal retracement bypasses cooldown — it's time-sensitive
-        trigger_type = exit_signal.get("trigger_type", "")
-        cooldown = self._config.monitor.ai_cooldown_seconds
-        elapsed = time.time() - self._shared.ai_last_call_time
-        if elapsed < cooldown and pnl_pct > -0.30 and trigger_type != "reversal_retracement":
+            self._cycle_count += 1
+            cycle = self._cycle_count
+            token_side_str = exit_signal.get("token_side", "up")
+            reason = exit_signal.get("reason", "unknown")
+            pnl_pct = exit_signal.get("pnl_pct", 0.0)
             logger.info(
-                "Exit trigger on cooldown (%.0fs < %.0fs, pnl=%.1f%% > -30%%) — skipping",
-                elapsed,
-                cooldown,
+                "=== AI Exit Decision Cycle %d (SL/TP: %s %s, P&L=%.1f%%) ===",
+                cycle,
+                token_side_str,
+                reason,
                 pnl_pct * 100,
             )
-            return
 
-        snapshot = self._shared.latest_snapshot
-        market = self._shared.current_market
-        if snapshot is None or market is None:
-            return
+            # Exit trigger cooldown: skip if on cooldown and not a true emergency (> -30%)
+            # Reversal retracement bypasses cooldown — it's time-sensitive
+            trigger_type = exit_signal.get("trigger_type", "")
+            cooldown = self._config.monitor.ai_cooldown_seconds
+            elapsed = time.time() - self._shared.ai_last_call_time
+            if elapsed < cooldown and pnl_pct > -0.30 and trigger_type != "reversal_retracement":
+                logger.info(
+                    "Exit trigger on cooldown (%.0fs < %.0fs, pnl=%.1f%% > -30%%) — skipping",
+                    elapsed,
+                    cooldown,
+                    pnl_pct * 100,
+                )
+                return
 
-        time_remaining = market.time_remaining()
+            snapshot = self._shared.latest_snapshot
+            market = self._shared.current_market
+            if snapshot is None or market is None:
+                return
 
-        # Guard against selling winners near expiry: if position is profitable
-        # and BTC direction matches position side and < 120s remaining, skip exit
-        if pnl_pct > 0 and time_remaining < 120 and trigger_type != "reversal_retracement":
-            btc_price_now = snapshot.btc_price.price_usd if snapshot.btc_price else None
-            candle_open = self._shared.candle_open_btc
-            if btc_price_now is not None and candle_open is not None:
-                btc_diff = btc_price_now - candle_open
-                btc_favors_up = btc_diff >= 0
-                position_is_up = token_side_str.lower() == "up"
-                direction_matches = (position_is_up and btc_favors_up) or (not position_is_up and not btc_favors_up)
-                if direction_matches:
-                    logger.info(
-                        "Skipping exit on winning %s position (P&L=%.1f%%, BTC %s$%.0f, "
-                        "%.0fs left) — let it ride to resolution",
-                        token_side_str,
-                        pnl_pct * 100,
-                        "+" if btc_diff >= 0 else "",
-                        btc_diff,
+            time_remaining = market.time_remaining()
+
+            # Guard against selling winners near expiry: if position is profitable
+            # and BTC direction matches position side and < 120s remaining, skip exit
+            if pnl_pct > 0 and time_remaining < 120 and trigger_type != "reversal_retracement":
+                btc_price_now = snapshot.btc_price.price_usd if snapshot.btc_price else None
+                candle_open = self._shared.candle_open_btc
+                if btc_price_now is not None and candle_open is not None:
+                    btc_diff = btc_price_now - candle_open
+                    btc_favors_up = btc_diff >= 0
+                    position_is_up = token_side_str.lower() == "up"
+                    direction_matches = (position_is_up and btc_favors_up) or (not position_is_up and not btc_favors_up)
+                    if direction_matches:
+                        logger.info(
+                            "Skipping exit on winning %s position (P&L=%.1f%%, BTC %s$%.0f, "
+                            "%.0fs left) — let it ride to resolution",
+                            token_side_str,
+                            pnl_pct * 100,
+                            "+" if btc_diff >= 0 else "",
+                            btc_diff,
+                            time_remaining,
+                        )
+                        return
+
+            up_ob = snapshot.orderbook
+            down_ob = snapshot.down_orderbook
+            up_mid = up_ob.midpoint
+            down_mid = down_ob.midpoint
+
+            if up_mid is not None:
+                self._portfolio.mark_to_market(up_mid, down_mid)
+            portfolio_value = self._portfolio.total_value_at_market(up_mid or 0.5, down_mid)
+
+            # Add exit context to the AI call
+            sold_up = token_side_str.lower() == "up"
+            opposite_side = "DOWN" if sold_up else "UP"
+
+            if trigger_type == "reversal_retracement":
+                # Single AI call: HOLD (keep position) or BUY opposite (auto-close + flip)
+                # Compute rich retracement analytics from per-second prefilter history
+                retracement_ctx = compute_retracement_context(
+                    list(self._shared.prefilter_history),
+                    token_side_str,
+                    snapshot,
+                )
+
+                opp_ob = snapshot.down_orderbook if sold_up else snapshot.orderbook
+                opp_ask = opp_ob.best_ask
+                opp_line = f"- {opposite_side} ask: ${opp_ask:.2f}\n" if opp_ask else ""
+                exit_context = (
+                    f"\n## REVERSAL RETRACEMENT — HOLD OR FLIP?\n"
+                    f"- Position: {token_side_str.upper()}\n"
+                    f"- Current P&L: {pnl_pct:+.1%}\n"
+                    f"{opp_line}"
+                    f"{retracement_ctx}\n"
+                    f"\n### Decision Guide\n"
+                    f"- The RETRACEMENT PATTERN is the signal — do NOT evaluate the current BTC move as a standalone entry.\n"
+                    f"- Zero crossing (BTC moved to opposite side) = strong flip signal.\n"
+                    f"- Accelerating retreat + time since peak > 30s = likely real reversal.\n"
+                    f"- Decelerating retreat or very recent peak = likely pullback, consider HOLD.\n"
+                    f"- **HOLD** = keep position open, stop-loss remains active.\n"
+                    f"- **BUY {opposite_side}** = close {token_side_str.upper()} and flip to {opposite_side}.\n"
+                )
+                # Set flag so anti-hedge auto-closes current position instead of blocking
+                self._reversal_flip_side = token_side_str.lower()
+                self._contrarian_flip_active = True
+                try:
+                    await self._run_ai_decision(
+                        cycle,
+                        snapshot,
+                        market,
                         time_remaining,
+                        portfolio_value,
+                        extra_context=exit_context,
+                        # No forced_exit_side — AI chooses HOLD or BUY opposite
                     )
-                    return
+                finally:
+                    self._reversal_flip_side = None
+                    self._contrarian_flip_active = False
+            else:
+                exit_context = (
+                    f"\n## EXIT TRIGGER\n"
+                    f"- Token: {token_side_str.upper()}\n"
+                    f"- Reason: {reason}\n"
+                    f"- Current P&L: {pnl_pct:+.1%}\n"
+                    f"- Action needed: Evaluate whether to SELL this position NOW.\n"
+                )
 
-        up_ob = snapshot.orderbook
-        down_ob = snapshot.down_orderbook
-        up_mid = up_ob.midpoint
-        down_mid = down_ob.midpoint
-
-        if up_mid is not None:
-            self._portfolio.mark_to_market(up_mid, down_mid)
-        portfolio_value = self._portfolio.total_value_at_market(up_mid or 0.5, down_mid)
-
-        # Add exit context to the AI call
-        sold_up = token_side_str.lower() == "up"
-        opposite_side = "DOWN" if sold_up else "UP"
-
-        if trigger_type == "reversal_retracement":
-            # Single AI call: HOLD (keep position) or BUY opposite (auto-close + flip)
-            # Compute rich retracement analytics from per-second prefilter history
-            retracement_ctx = compute_retracement_context(
-                list(self._shared.prefilter_history),
-                token_side_str,
-                snapshot,
-            )
-
-            opp_ob = snapshot.down_orderbook if sold_up else snapshot.orderbook
-            opp_ask = opp_ob.best_ask
-            opp_line = f"- {opposite_side} ask: ${opp_ask:.2f}\n" if opp_ask else ""
-            exit_context = (
-                f"\n## REVERSAL RETRACEMENT — HOLD OR FLIP?\n"
-                f"- Position: {token_side_str.upper()}\n"
-                f"- Current P&L: {pnl_pct:+.1%}\n"
-                f"{opp_line}"
-                f"{retracement_ctx}\n"
-                f"\n### Decision Guide\n"
-                f"- The RETRACEMENT PATTERN is the signal — do NOT evaluate the current BTC move as a standalone entry.\n"
-                f"- Zero crossing (BTC moved to opposite side) = strong flip signal.\n"
-                f"- Accelerating retreat + time since peak > 30s = likely real reversal.\n"
-                f"- Decelerating retreat or very recent peak = likely pullback, consider HOLD.\n"
-                f"- **HOLD** = keep position open, stop-loss remains active.\n"
-                f"- **BUY {opposite_side}** = close {token_side_str.upper()} and flip to {opposite_side}.\n"
-            )
-            # Set flag so anti-hedge auto-closes current position instead of blocking
-            self._reversal_flip_side = token_side_str.lower()
-            self._contrarian_flip_active = True
-            try:
                 await self._run_ai_decision(
                     cycle,
                     snapshot,
@@ -398,45 +392,24 @@ class AIDecision:
                     time_remaining,
                     portfolio_value,
                     extra_context=exit_context,
-                    # No forced_exit_side — AI chooses HOLD or BUY opposite
-                )
-            finally:
-                self._reversal_flip_side = None
-                self._contrarian_flip_active = False
-        else:
-            exit_context = (
-                f"\n## EXIT TRIGGER\n"
-                f"- Token: {token_side_str.upper()}\n"
-                f"- Reason: {reason}\n"
-                f"- Current P&L: {pnl_pct:+.1%}\n"
-                f"- Action needed: Evaluate whether to SELL this position NOW.\n"
-            )
-
-            await self._run_ai_decision(
-                cycle,
-                snapshot,
-                market,
-                time_remaining,
-                portfolio_value,
-                extra_context=exit_context,
-                forced_exit_side=token_side_str,
-            )
-
-            # Safeguard #3: Record stop-loss exit for cooldown warning
-            if trigger_type == "stop_loss":
-                self._shared.last_stop_loss = StopLossRecord(
-                    token_side=token_side_str,
-                    pnl_pct=pnl_pct,
-                    timestamp=time.time(),
+                    forced_exit_side=token_side_str,
                 )
 
-            # --- Contrarian flip (post-SL only) ---
-            # After SL, if position closed and BTC confirms reversal,
-            # trigger a second AI call for the opposite side.
-            if trigger_type == "stop_loss":
-                pos = self._portfolio.up_position if sold_up else self._portfolio.down_position
-                if pos.shares <= 0:
-                    await self._try_contrarian_flip(token_side_str, pnl_pct, trigger_type)
+                # Safeguard #3: Record stop-loss exit for cooldown warning
+                if trigger_type == "stop_loss":
+                    self._shared.last_stop_loss = StopLossRecord(
+                        token_side=token_side_str,
+                        pnl_pct=pnl_pct,
+                        timestamp=time.time(),
+                    )
+
+                # --- Contrarian flip (post-SL only) ---
+                # After SL, if position closed and BTC confirms reversal,
+                # trigger a second AI call for the opposite side.
+                if trigger_type == "stop_loss":
+                    pos = self._portfolio.up_position if sold_up else self._portfolio.down_position
+                    if pos.shares <= 0:
+                        await self._try_contrarian_flip(token_side_str, pnl_pct, trigger_type)
 
     async def _try_contrarian_flip(
         self,

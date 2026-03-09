@@ -17,6 +17,7 @@ from polybot.config import AppConfig
 
 if TYPE_CHECKING:
     from polybot.datastore import DataStore, MarketHistoryStore
+    from polybot.tasks.ai_decision import AIDecision
 from polybot.indicators import (
     FeatureConfig,
     SessionContext,
@@ -42,6 +43,7 @@ class MarketMonitor:
         prefilter: PreFilter,
         portfolio: Portfolio,
         resolution_tracker: ResolutionTracker,
+        ai_decision: AIDecision,
         datastore: DataStore | None = None,
         feature_config: FeatureConfig | None = None,
         market_history: MarketHistoryStore | None = None,
@@ -53,6 +55,7 @@ class MarketMonitor:
         self._prefilter = prefilter
         self._portfolio = portfolio
         self._resolution_tracker = resolution_tracker
+        self._ai_decision = ai_decision
         self._datastore = datastore
         self._feature_config = feature_config
         self._market_history = market_history
@@ -215,8 +218,8 @@ class MarketMonitor:
             gate_status = f"ADAPTIVE: {adaptive_reason}"
         elif cooldown_active:
             gate_status = f"COOLDOWN: {cooldown_remaining:.0f}s remaining"
-        elif self._shared.ai_trigger_event.is_set():
-            gate_status = "AI PENDING (waiting for previous decision)"
+        elif self._ai_decision.busy:
+            gate_status = "AI BUSY (waiting for previous decision)"
 
         self._shared.monitor_status = {
             "timestamp": now,
@@ -249,25 +252,25 @@ class MarketMonitor:
             "gate_status": gate_status,
         }
 
-        if should_trigger and not self._shared.ai_trigger_event.is_set():
+        if should_trigger and not self._ai_decision.busy:
             if not cooldown_active:
                 if self._adaptive_enabled and self._adaptive_entry is not None:
-                    self._shared.ai_trigger_reason = (
+                    reason = (
                         f"adaptive btc_thresh=${self._adaptive_entry.btc_threshold:.0f}, "
                         f"max_entry=${self._adaptive_entry.max_entry_price:.2f}, "
                         f"min_ask=${min_ask:.2f} ({best_side}), "
                         f"btc_move=${btc_move:+.0f}"
                     )
                 else:
-                    self._shared.ai_trigger_reason = (
+                    reason = (
                         f"R/R={best_rr:.2f} ({best_side}), "
                         f"prefilter={'PASS' if prefilter_passed else 'SKIP'}, "
                         f"btc_move=${btc_move:+.0f}"
                     )
-                self._shared.ai_trigger_event.set()
+                asyncio.create_task(self._ai_decision.evaluate_entry(reason))
                 logger.info(
                     "AI triggered: %s (cooldown=%.0fs elapsed)",
-                    self._shared.ai_trigger_reason,
+                    reason,
                     elapsed,
                 )
 

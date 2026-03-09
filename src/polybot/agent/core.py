@@ -216,20 +216,7 @@ class TradingAgent:
         # Resolve any pending bets from previous sessions
         await self._state_persistence.resolve_pending_bets(ctx)
 
-        # Create task objects
-        market_monitor = MarketMonitor(
-            config=ctx.config,
-            shared=ctx.shared,
-            market_data=ctx.market_data,
-            prefilter=ctx.prefilter,
-            portfolio=ctx.portfolio,
-            resolution_tracker=ctx.resolution_tracker,
-            datastore=ctx.datastore,
-            feature_config=ctx.feature_config if ctx.datastore else None,
-            market_history=ctx.market_history,
-            adaptive_entry=ctx.adaptive_entry,
-        )
-
+        # Create task objects — AIDecision first (monitors reference it)
         ctx.ai_decision = AIDecision(
             config=ctx.config,
             shared=ctx.shared,
@@ -265,10 +252,25 @@ class TradingAgent:
 
         ctx.ai_decision.on_trade_callback = _on_trade
 
+        market_monitor = MarketMonitor(
+            config=ctx.config,
+            shared=ctx.shared,
+            market_data=ctx.market_data,
+            prefilter=ctx.prefilter,
+            portfolio=ctx.portfolio,
+            resolution_tracker=ctx.resolution_tracker,
+            ai_decision=ctx.ai_decision,
+            datastore=ctx.datastore,
+            feature_config=ctx.feature_config if ctx.datastore else None,
+            market_history=ctx.market_history,
+            adaptive_entry=ctx.adaptive_entry,
+        )
+
         ctx.position_monitor = PositionMonitor(
             config=ctx.config,
             shared=ctx.shared,
             portfolio=ctx.portfolio,
+            ai_decision=ctx.ai_decision,
         )
 
         # Start WebSocket server
@@ -278,7 +280,6 @@ class TradingAgent:
         # Launch all tasks concurrently
         tasks = [
             asyncio.create_task(market_monitor.run(), name="market_monitor"),
-            asyncio.create_task(ctx.ai_decision.run(), name="ai_decision"),
             asyncio.create_task(ctx.position_monitor.run(), name="position_monitor"),
             asyncio.create_task(self._rotation_loop(), name="rotation_loop"),
             asyncio.create_task(self._dashboard_loop(), name="dashboard_loop"),
