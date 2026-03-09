@@ -202,14 +202,11 @@ class TradingAgent:
         if ctx.config.logging.ws_enabled:
             await ctx.ws_server.start()
 
-        # Launch all tasks concurrently
+        # Launch monitor tasks (datastore writers self-start in open())
         tasks = [
             asyncio.create_task(market_monitor.run(), name="market_monitor"),
             asyncio.create_task(position_monitor.run(), name="position_monitor"),
         ]
-        if ctx.datastore is not None:
-            tasks.append(asyncio.create_task(ctx.datastore.writer_loop(), name="datastore_writer"))
-        tasks.append(asyncio.create_task(ctx.market_history.writer_loop(), name="market_history_writer"))
 
         try:
             # Wait until shutdown
