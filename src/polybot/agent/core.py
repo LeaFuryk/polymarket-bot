@@ -8,14 +8,12 @@ import signal
 
 from polybot.agent.dashboard import (
     assemble_dashboard_data,
-    load_iteration_summaries,
     sync_from_ai_decision,
     write_dashboard_json,
 )
 from polybot.agent.factory import ContextFactory
-from polybot.agent.helpers import setup_logging
+from polybot.agent.helpers import load_startup_data, resolve_pending_bets, setup_logging
 from polybot.agent.rotation import RotationManager
-from polybot.agent.state import StatePersistence
 from polybot.config import AppConfig
 from polybot.tasks.ai_decision import AIDecision
 from polybot.tasks.market_monitor import MarketMonitor
@@ -28,12 +26,12 @@ class TradingAgent:
     def __init__(self, config: AppConfig, logger: logging.Logger | None = None) -> None:
         self._log = logger or logging.getLogger(__name__)
 
+        # Load persisted state before building context
+        startup_data = load_startup_data(config, log=self._log)
+
         # Build AgentContext via factory (all sub-component wiring)
         factory = ContextFactory(config, logger=self._log)
-        self._ctx = factory.build()
-
-        # Orchestration managers (TradingAgent-only, not in ctx)
-        self._state_persistence = StatePersistence(logger=self._log)
+        self._ctx = factory.build(startup_data)
 
         # Snapshot builder (closure called lazily at runtime, self._ctx exists by then)
         def _build_initial_snapshot() -> str:
@@ -44,11 +42,6 @@ class TradingAgent:
             return make_message(MSG_SNAPSHOT, data)
 
         self._ctx.ws_server._initial_snapshot_builder = _build_initial_snapshot
-
-        # Restore persisted state (populates ctx.historical_resolutions/trades)
-        self._state_persistence.load_agent_state(self._ctx)
-        # Load archived iteration summaries for dashboard
-        self._ctx.iteration_summaries = load_iteration_summaries(log=self._log)
 
     async def run(self) -> None:
         """Main entry point — launches concurrent tasks."""
@@ -100,7 +93,7 @@ class TradingAgent:
         await ctx.adaptive_entry.bootstrap_from_binance()
 
         # Resolve any pending bets from previous sessions
-        await self._state_persistence.resolve_pending_bets(ctx)
+        await resolve_pending_bets(ctx, log=self._log)
 
         # Create task objects — AIDecision first (monitors reference it)
         ctx.ai_decision = AIDecision(

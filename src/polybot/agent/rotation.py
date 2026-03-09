@@ -130,7 +130,7 @@ class RotationManager:
 
     async def _handle_market_transition(self) -> None:
         """Handle transition between candle markets — resolve winner via BTC price."""
-        from polybot.agent.state import StatePersistence
+        from polybot.agent.helpers import save_agent_state
 
         ctx = self._ctx
 
@@ -247,7 +247,7 @@ class RotationManager:
                     ctx.recent_resolutions[:] = ctx.recent_resolutions[-20:]
 
                 ctx.resolutions_since_reflection += 1
-                StatePersistence(logger=self._log).save_agent_state(ctx)
+                save_agent_state(ctx, log=self._log)
 
                 # Adaptive reflection: faster when losing, normal when profitable
                 recent_pnl = sum(r.total_pnl for r in ctx.recent_resolutions[-5:])
