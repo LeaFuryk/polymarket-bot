@@ -5,6 +5,7 @@ from __future__ import annotations
 from unittest.mock import patch
 
 from polybot.agent.context import AgentContext
+from polybot.agent.helpers import StartupData
 from polybot.config import AppConfig
 
 # All classes constructed inside ContextFactory.build()
@@ -33,7 +34,6 @@ _PATCHES = [
     f"{_FACTORY_MODULE}.DataStore",
     f"{_FACTORY_MODULE}.MarketHistoryStore",
     f"{_FACTORY_MODULE}.SharedState",
-    f"{_FACTORY_MODULE}.StatePersistence",
 ]
 
 
@@ -60,7 +60,7 @@ class TestContextFactory:
         try:
             config = AppConfig()
             factory = ContextFactory(config)
-            ctx = factory.build()
+            ctx = factory.build(StartupData())
 
             assert isinstance(ctx, AgentContext)
         finally:
@@ -74,7 +74,7 @@ class TestContextFactory:
         try:
             config = AppConfig()
             factory = ContextFactory(config)
-            ctx = factory.build()
+            ctx = factory.build(StartupData())
 
             assert ctx.config is config
             assert ctx.chainlink_ws is mocks["ChainlinkWSFeed"].return_value
@@ -102,13 +102,44 @@ class TestContextFactory:
             for p in patchers:
                 p.stop()
 
+    def test_build_populates_startup_data(self):
+        from polybot.agent.factory import ContextFactory
+
+        mocks, patchers = _apply_patches()
+        try:
+            config = AppConfig()
+            factory = ContextFactory(config)
+            sd = StartupData(
+                resolutions_since_reflection=5,
+                knowledge_state={"key": "val"},
+                historical_resolutions=[{"slug": "a"}],
+                historical_trades=[{"action": "BUY"}],
+                iteration_summaries=[{"iter": 1}],
+                iteration_label="iter_003",
+            )
+            ctx = factory.build(sd)
+
+            assert ctx.resolutions_since_reflection == 5
+            assert ctx.historical_resolutions == [{"slug": "a"}]
+            assert ctx.historical_trades == [{"action": "BUY"}]
+            assert ctx.iteration_summaries == [{"iter": 1}]
+            # Knowledge state loaded
+            mocks["KnowledgeManager"].return_value.load_state.assert_called_once_with({"key": "val"})
+            # Iteration label used for MarketHistoryStore
+            mocks["MarketHistoryStore"].assert_called_once()
+            call_kwargs = mocks["MarketHistoryStore"].call_args
+            assert call_kwargs[1].get("iteration") == "iter_003" or call_kwargs[0][1] == "iter_003"
+        finally:
+            for p in patchers:
+                p.stop()
+
     def test_build_sim_mode_no_live_engine(self):
         from polybot.agent.factory import ContextFactory
 
         mocks, patchers = _apply_patches()
         try:
             config = AppConfig()  # default mode is not "live"
-            ctx = ContextFactory(config).build()
+            ctx = ContextFactory(config).build(StartupData())
 
             assert ctx.live_mode is False
             assert ctx.live_engine is None
@@ -126,7 +157,7 @@ class TestContextFactory:
         patchers.append(live_engine_patch)
         try:
             config = AppConfig(trading={"mode": "live"})
-            ctx = ContextFactory(config).build()
+            ctx = ContextFactory(config).build(StartupData())
 
             assert ctx.live_mode is True
             assert ctx.live_engine is mock_live.return_value
@@ -141,7 +172,7 @@ class TestContextFactory:
         mocks, patchers = _apply_patches()
         try:
             config = AppConfig(logging={"sqlite_enabled": False})
-            ctx = ContextFactory(config).build()
+            ctx = ContextFactory(config).build(StartupData())
 
             assert ctx.datastore is None
             mocks["DataStore"].assert_not_called()
@@ -155,7 +186,7 @@ class TestContextFactory:
         mocks, patchers = _apply_patches()
         try:
             config = AppConfig(logging={"sqlite_enabled": True})
-            ctx = ContextFactory(config).build()
+            ctx = ContextFactory(config).build(StartupData())
 
             assert ctx.datastore is mocks["DataStore"].return_value
         finally:

@@ -8,7 +8,7 @@ from pathlib import Path
 from polybot import __version__
 from polybot.adaptive_entry import AdaptiveEntryTracker
 from polybot.agent.context import AgentContext
-from polybot.agent.state import StatePersistence
+from polybot.agent.helpers import StartupData, compute_iteration_label
 from polybot.calibration import ConfidenceCalibrator
 from polybot.config import AppConfig
 from polybot.datastore import DataStore, MarketHistoryStore
@@ -45,7 +45,7 @@ class ContextFactory:
         self._config = config
         self._log = logger or logging.getLogger(__name__)
 
-    def build(self) -> AgentContext:
+    def build(self, startup_data: StartupData | None = None) -> AgentContext:
         """Create all components and return a populated AgentContext."""
         config = self._config
 
@@ -99,7 +99,7 @@ class ContextFactory:
             datastore = DataStore(config.logging.sqlite_db_path)
 
         # Persistent market history store (never deleted by archive)
-        iteration_label = StatePersistence.compute_iteration_label()
+        iteration_label = startup_data.iteration_label if startup_data else compute_iteration_label()
         market_history = MarketHistoryStore(
             config.logging.market_history_db_path,
             iteration=iteration_label,
@@ -107,7 +107,13 @@ class ContextFactory:
 
         shared = SharedState()
 
-        return AgentContext(
+        # Pre-populate from startup data
+        sd = startup_data or StartupData()
+
+        if sd.knowledge_state:
+            knowledge_manager.load_state(sd.knowledge_state)
+
+        ctx = AgentContext(
             config=config,
             chainlink_ws=chainlink_ws,
             discovery=discovery,
@@ -137,3 +143,10 @@ class ContextFactory:
             bot_version=__version__,
             state_path=Path(config.logging.log_dir) / "agent_state.json",
         )
+
+        ctx.resolutions_since_reflection = sd.resolutions_since_reflection
+        ctx.historical_resolutions = sd.historical_resolutions
+        ctx.historical_trades = sd.historical_trades
+        ctx.iteration_summaries = sd.iteration_summaries
+
+        return ctx
