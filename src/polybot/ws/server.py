@@ -56,12 +56,9 @@ class DashboardWSServer:
         """Build a full dashboard snapshot message for newly connected clients."""
         if self._ctx is None:
             return None
-        from polybot.agent.dashboard import assemble_dashboard_data
-        from polybot.ws.protocol import MSG_SNAPSHOT, make_message
+        from polybot.agent.dashboard import build_snapshot_message
 
-        data = assemble_dashboard_data(self._ctx, log=self._logger)
-        data["ws_clients"] = self._broadcaster.client_count
-        return make_message(MSG_SNAPSHOT, data)
+        return build_snapshot_message(self._ctx, log=self._logger)
 
     async def _handler(self, ws: WebSocketServerProtocol, path: str = "") -> None:
         """Handle a single WebSocket client connection."""
