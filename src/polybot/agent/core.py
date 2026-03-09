@@ -48,14 +48,13 @@ from polybot.tasks.ai_decision import AIDecision
 from polybot.tasks.market_monitor import MarketMonitor
 from polybot.tasks.position_monitor import PositionMonitor
 
-logger = logging.getLogger(__name__)
-
 
 class TradingAgent:
     """Orchestrator — launches concurrent tasks for market monitoring, AI decisions, and position management."""
 
-    def __init__(self, config: AppConfig) -> None:
+    def __init__(self, config: AppConfig, logger: logging.Logger | None = None) -> None:
         self._config = config
+        self._log = logger or logging.getLogger(__name__)
 
         # Sub-components
         self._chainlink_ws = ChainlinkWSFeed(config.api.polymarket_rtds_url)
@@ -75,7 +74,7 @@ class TradingAgent:
         if self._live_mode:
             self._live_engine = LiveExecutionEngine(config.trading, config.api)
             self._shadow_portfolio = Portfolio(config.agent.initial_cash)
-            logger.warning(
+            self._log.warning(
                 "LIVE TRADING MODE — real CLOB orders will be placed%s",
                 " (DRY RUN)" if config.trading.dry_run else "",
             )
@@ -165,9 +164,9 @@ class TradingAgent:
         self._position_monitor: PositionMonitor | None = None
 
         # State persistence, rotation manager, and dashboard assembler
-        self._state_persistence = StatePersistence(logger=logger)
-        self._rotation_manager = RotationManager(logger=logger)
-        self._dashboard_assembler = DashboardAssembler(logger=logger)
+        self._state_persistence = StatePersistence(logger=self._log)
+        self._rotation_manager = RotationManager(logger=self._log)
+        self._dashboard_assembler = DashboardAssembler(logger=self._log)
 
         # Build AgentContext — typed container for extracted modules
         self._state_path = Path(config.logging.log_dir) / "agent_state.json"
@@ -210,12 +209,12 @@ class TradingAgent:
         # Restore persisted state (populates ctx.historical_resolutions/trades)
         self._state_persistence.load_agent_state(self._ctx)
         # Load archived iteration summaries for dashboard
-        self._ctx.iteration_summaries = load_iteration_summaries(log=logger)
+        self._ctx.iteration_summaries = load_iteration_summaries(log=self._log)
 
     async def run(self) -> None:
         """Main entry point — launches concurrent tasks."""
         setup_logging(self._config)
-        logger.info("TradingAgent starting — v%s, cash=%.2f", self._bot_version, self._config.agent.initial_cash)
+        self._log.info("TradingAgent starting — v%s, cash=%.2f", self._bot_version, self._config.agent.initial_cash)
 
         loop = asyncio.get_running_loop()
         for sig in (signal.SIGINT, signal.SIGTERM):
@@ -232,18 +231,18 @@ class TradingAgent:
         if self._live_mode and self._live_engine:
             tc = self._config.trading
             if not tc.private_key:
-                logger.critical("LIVE MODE: no private_key configured — aborting")
+                self._log.critical("LIVE MODE: no private_key configured — aborting")
                 return
             if not (tc.api_key and tc.api_secret and tc.api_passphrase):
-                logger.critical("LIVE MODE: missing API credentials — run scripts/generate_api_key.py first")
+                self._log.critical("LIVE MODE: missing API credentials — run scripts/generate_api_key.py first")
                 return
             initial_balance = await self._live_engine.sync_balance()
             if initial_balance <= 0 and not tc.dry_run:
-                logger.critical(
+                self._log.critical(
                     "LIVE MODE: wallet balance is $%.2f — aborting (fund wallet or use dry_run=true)", initial_balance
                 )
                 return
-            logger.info(
+            self._log.info(
                 "LIVE MODE: wallet balance $%.2f, max_order=$%.0f, kill_switch=-$%.0f, dry_run=%s",
                 initial_balance,
                 tc.max_order_size_usd,
@@ -348,7 +347,7 @@ class TradingAgent:
                 await asyncio.sleep(0.5)
 
             # Signal all tasks to stop
-            logger.info("Shutdown: waiting for tasks to complete...")
+            self._log.info("Shutdown: waiting for tasks to complete...")
             for task in tasks:
                 task.cancel()
             await asyncio.gather(*tasks, return_exceptions=True)
@@ -356,7 +355,7 @@ class TradingAgent:
             await self._shutdown_components()
 
     def _handle_signal(self) -> None:
-        logger.info("Shutdown signal received")
+        self._log.info("Shutdown signal received")
         self._shared.shutdown = True
 
     async def _rotation_loop(self) -> None:
@@ -373,28 +372,28 @@ class TradingAgent:
 
     async def _balance_sync_loop(self) -> None:
         """Periodically syncs wallet balance and checks kill switch (live mode only)."""
-        logger.info("BalanceSyncLoop started")
+        self._log.info("BalanceSyncLoop started")
         while not self._shared.shutdown:
             try:
                 if self._live_engine:
                     balance = await self._live_engine.sync_balance()
                     killed = self._live_engine.check_kill_switch(self._ctx.session_resolution_pnl)
                     if killed:
-                        logger.critical("Kill switch triggered — initiating shutdown")
+                        self._log.critical("Kill switch triggered — initiating shutdown")
                         self._shared.shutdown = True
                         break
-                    logger.debug("Wallet balance: $%.2f", balance)
+                    self._log.debug("Wallet balance: $%.2f", balance)
             except Exception:
-                logger.exception("BalanceSyncLoop error")
+                self._log.exception("BalanceSyncLoop error")
             await asyncio.sleep(60.0)
-        logger.info("BalanceSyncLoop stopped")
+        self._log.info("BalanceSyncLoop stopped")
 
     def _assemble_dashboard_data(self) -> dict:
         """Backward-compatible wrapper — delegates to DashboardAssembler."""
         return self._dashboard_assembler.assemble_dashboard_data(self._ctx)
 
     async def _shutdown_components(self) -> None:
-        logger.info("Shutting down components...")
+        self._log.info("Shutting down components...")
         await self._ws_server.stop()
         await self._chainlink_ws.stop()
         if self._datastore is not None:
@@ -405,8 +404,8 @@ class TradingAgent:
         self._trade_log.close()
         cancelled = self._orderbook.cancel_all()
         if cancelled:
-            logger.info("Cancelled %d pending limit orders", cancelled)
-        logger.info(
+            self._log.info("Cancelled %d pending limit orders", cancelled)
+        self._log.info(
             "Final state — cash=%.2f up_shares=%.2f down_shares=%.2f total=%.2f",
             self._portfolio.cash,
             self._portfolio.up_position.shares,
