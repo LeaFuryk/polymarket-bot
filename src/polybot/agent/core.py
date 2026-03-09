@@ -138,8 +138,13 @@ class TradingAgent:
 
         ctx.ai_decision.on_trade_callback = _on_trade
 
-        # Wire on_cycle_complete: sync dashboard state + broadcast snapshot
+        # Wire on_cycle_complete: sync dashboard state + broadcast snapshot + balance sync
+        _last_balance_sync = 0.0
+
         async def _on_cycle_complete():
+            nonlocal _last_balance_sync
+            import time
+
             from polybot.ws.protocol import MSG_SNAPSHOT, make_message
 
             sync_from_ai_decision(ctx)
@@ -149,6 +154,21 @@ class TradingAgent:
                 data["ws_clients"] = ctx.ws_broadcaster.client_count
                 await ctx.ws_broadcaster.broadcast(make_message(MSG_SNAPSHOT, data))
                 await ctx.ws_broadcaster.broadcast(ctx.ws_broadcaster.build_status_update(ctx))
+
+            # Live mode: sync wallet balance (at most every 60s) and check kill switch
+            if ctx.live_mode and ctx.live_engine:
+                now = time.monotonic()
+                if now - _last_balance_sync >= 60.0:
+                    _last_balance_sync = now
+                    try:
+                        balance = await ctx.live_engine.sync_balance()
+                        self._log.debug("Wallet balance: $%.2f", balance)
+                    except Exception:
+                        self._log.debug("Balance sync failed", exc_info=True)
+                killed = ctx.live_engine.check_kill_switch(ctx.session_resolution_pnl)
+                if killed:
+                    self._log.critical("Kill switch triggered — initiating shutdown")
+                    ctx.shared.shutdown = True
 
         ctx.ai_decision.on_cycle_complete = _on_cycle_complete
 
@@ -187,8 +207,6 @@ class TradingAgent:
             asyncio.create_task(market_monitor.run(), name="market_monitor"),
             asyncio.create_task(position_monitor.run(), name="position_monitor"),
         ]
-        if ctx.live_mode and ctx.live_engine:
-            tasks.append(asyncio.create_task(self._balance_sync_loop(), name="balance_sync"))
         if ctx.datastore is not None:
             tasks.append(asyncio.create_task(ctx.datastore.writer_loop(), name="datastore_writer"))
         tasks.append(asyncio.create_task(ctx.market_history.writer_loop(), name="market_history_writer"))
@@ -209,24 +227,6 @@ class TradingAgent:
     def _handle_signal(self) -> None:
         self._log.info("Shutdown signal received")
         self._ctx.shared.shutdown = True
-
-    async def _balance_sync_loop(self) -> None:
-        """Periodically syncs wallet balance and checks kill switch (live mode only)."""
-        self._log.info("BalanceSyncLoop started")
-        while not self._ctx.shared.shutdown:
-            try:
-                if self._ctx.live_engine:
-                    balance = await self._ctx.live_engine.sync_balance()
-                    killed = self._ctx.live_engine.check_kill_switch(self._ctx.session_resolution_pnl)
-                    if killed:
-                        self._log.critical("Kill switch triggered — initiating shutdown")
-                        self._ctx.shared.shutdown = True
-                        break
-                    self._log.debug("Wallet balance: $%.2f", balance)
-            except Exception:
-                self._log.exception("BalanceSyncLoop error")
-            await asyncio.sleep(60.0)
-        self._log.info("BalanceSyncLoop stopped")
 
     async def _shutdown_components(self) -> None:
         ctx = self._ctx
