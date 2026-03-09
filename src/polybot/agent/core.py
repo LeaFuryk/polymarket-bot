@@ -18,6 +18,7 @@ from polybot.config import AppConfig
 from polybot.tasks.ai_decision import AIDecision
 from polybot.tasks.market_monitor import MarketMonitor
 from polybot.tasks.position_monitor import PositionMonitor
+from polybot.ws.server import DashboardWSServer
 
 
 class TradingAgent:
@@ -33,15 +34,12 @@ class TradingAgent:
         factory = ContextFactory(config, startup_data, logger=self._log)
         self._ctx = factory.build()
 
-        # Snapshot builder (closure called lazily at runtime, self._ctx exists by then)
-        def _build_initial_snapshot() -> str:
-            from polybot.ws.protocol import MSG_SNAPSHOT, make_message
-
-            data = assemble_dashboard_data(self._ctx, log=self._log)
-            data["ws_clients"] = self._ctx.ws_broadcaster.client_count
-            return make_message(MSG_SNAPSHOT, data)
-
-        self._ctx.ws_server._initial_snapshot_builder = _build_initial_snapshot
+        # WebSocket server — lifecycle owned by TradingAgent, not shared context
+        self._ws_server = DashboardWSServer(
+            broadcaster=self._ctx.ws_broadcaster,
+            port=config.logging.ws_port,
+            ctx=self._ctx,
+        )
 
     async def run(self) -> None:
         """Main entry point — launches concurrent tasks."""
@@ -193,7 +191,7 @@ class TradingAgent:
 
         # Start WebSocket server
         if ctx.config.logging.ws_enabled:
-            await ctx.ws_server.start()
+            await self._ws_server.start()
 
         # Launch monitor tasks (datastore writers self-start in open())
         tasks = [
@@ -221,7 +219,7 @@ class TradingAgent:
     async def _shutdown_components(self) -> None:
         ctx = self._ctx
         self._log.info("Shutting down components...")
-        await ctx.ws_server.stop()
+        await self._ws_server.stop()
         await ctx.chainlink_ws.stop()
         if ctx.datastore is not None:
             await ctx.datastore.close()
