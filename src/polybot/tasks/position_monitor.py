@@ -20,6 +20,7 @@ from polybot.shared_state import EntryContext, SharedState
 from polybot.simulator.portfolio import Portfolio
 
 if TYPE_CHECKING:
+    from polybot.agent.context import AgentContext
     from polybot.tasks.ai_decision import AIDecision
 
 logger = logging.getLogger(__name__)
@@ -34,11 +35,13 @@ class PositionMonitor:
         shared: SharedState,
         portfolio: Portfolio,
         ai_decision: AIDecision,
+        ctx: AgentContext | None = None,
     ) -> None:
         self._config = config
         self._shared = shared
         self._portfolio = portfolio
         self._ai_decision = ai_decision
+        self._ctx = ctx
         self._interval = config.monitor.position_monitor_interval
         self._stop_loss_pct = config.monitor.stop_loss_pct
         self._take_profit_pct = config.monitor.take_profit_pct
@@ -62,6 +65,7 @@ class PositionMonitor:
 
             try:
                 await self._tick()
+                await self._broadcast_updates()
             except Exception:
                 logger.debug("PositionMonitor tick error", exc_info=True)
 
@@ -103,6 +107,14 @@ class PositionMonitor:
         else:
             self._shared.position_pnl_pct.pop("down", None)
             self._triggered.pop("down", None)
+
+    async def _broadcast_updates(self) -> None:
+        """Push position update to WS clients."""
+        if self._ctx is None:
+            return
+        ws = self._ctx.ws_broadcaster
+        if ws and ws.has_clients:
+            await ws.broadcast(ws.build_position_update(self._ctx))
 
     # --- BTC Velocity Helper ---
 

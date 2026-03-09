@@ -160,9 +160,9 @@ class TestEnrichIterationSummary:
         assert callable(enrich_iteration_summary)
 
     def test_compute_market_trend_no_data(self):
-        from polybot.agent.dashboard import DashboardAssembler
+        from polybot.agent.dashboard import compute_market_trend
 
-        assert DashboardAssembler.compute_market_trend(None) == {}
+        assert compute_market_trend(None) == {}
 
 
 class TestStatePersistence:

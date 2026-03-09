@@ -141,6 +141,8 @@ class AIDecision:
 
         # Optional callback for WS trade event push
         self.on_trade_callback = None  # set by agent: Callable[[TradeRecord], Awaitable[None]]
+        # Optional callback fired after every entry/exit evaluation completes
+        self.on_cycle_complete = None  # set by agent: Callable[[], Awaitable[None]]
 
         # Serialise concurrent entry/exit calls
         self._lock = asyncio.Lock()
@@ -258,6 +260,9 @@ class AIDecision:
                 return
 
             await self._run_ai_decision(cycle, snapshot, market, time_remaining, portfolio_value)
+
+            if self.on_cycle_complete is not None:
+                await self.on_cycle_complete()
 
     async def evaluate_exit(self, exit_signal: dict) -> None:
         """Handle a stop-loss/take-profit exit trigger from position monitor."""
@@ -410,6 +415,9 @@ class AIDecision:
                     pos = self._portfolio.up_position if sold_up else self._portfolio.down_position
                     if pos.shares <= 0:
                         await self._try_contrarian_flip(token_side_str, pnl_pct, trigger_type)
+
+            if self.on_cycle_complete is not None:
+                await self.on_cycle_complete()
 
     async def _try_contrarian_flip(
         self,
