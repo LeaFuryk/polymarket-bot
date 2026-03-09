@@ -304,7 +304,7 @@ class TestStatePersistence:
 class TestRotationManager:
     """Tests for RotationManager."""
 
-    def test_import_from_package(self):
+    def test_import_from_module(self):
         from polybot.agent.rotation import RotationManager
 
         assert RotationManager.__name__ == "RotationManager"
@@ -312,17 +312,16 @@ class TestRotationManager:
     def test_save_candle_microstructure_skips_short_history(self):
         from polybot.agent.rotation import RotationManager
 
-        rm = RotationManager()
         ctx = MagicMock()
         ctx.shared.prefilter_history = [MagicMock() for _ in range(5)]  # < 10
-        rm.save_candle_microstructure(ctx)
+        rm = RotationManager(ctx)
+        rm._save_candle_microstructure()
         # Should not append anything
         ctx.shared.microstructure_history.append.assert_not_called()
 
     def test_save_candle_microstructure_computes_summary(self):
         from polybot.agent.rotation import RotationManager
 
-        rm = RotationManager()
         ctx = MagicMock()
 
         # Create 15 prefilter snapshots
@@ -336,7 +335,8 @@ class TestRotationManager:
         ctx.shared.prefilter_history = snapshots
         ctx.shared.microstructure_history = []
 
-        rm.save_candle_microstructure(ctx)
+        rm = RotationManager(ctx)
+        rm._save_candle_microstructure()
         assert len(ctx.shared.microstructure_history) == 1
         summary = ctx.shared.microstructure_history[0]
         assert summary.avg_spread_up == pytest.approx(0.02)
@@ -348,7 +348,6 @@ class TestRotationManager:
     async def test_discover_market_increments_failures(self):
         from polybot.agent.rotation import RotationManager
 
-        rm = RotationManager()
         ctx = MagicMock()
         ctx.discovery.get_current_market = AsyncMock(return_value=None)
         ctx.discovery.get_next_market = AsyncMock(return_value=None)
@@ -356,7 +355,8 @@ class TestRotationManager:
         ctx.outage_start = None
         ctx.current_market = None
 
-        result = await rm.discover_market(ctx)
+        rm = RotationManager(ctx)
+        result = await rm.discover_market()
         assert ctx.discovery_failures == 1
         assert result is None
 
@@ -364,7 +364,6 @@ class TestRotationManager:
     async def test_discover_market_outage_detection(self):
         from polybot.agent.rotation import RotationManager
 
-        rm = RotationManager()
         ctx = MagicMock()
         ctx.discovery.get_current_market = AsyncMock(return_value=None)
         ctx.discovery.get_next_market = AsyncMock(return_value=None)
@@ -372,6 +371,7 @@ class TestRotationManager:
         ctx.outage_start = None
         ctx.current_market = None
 
-        await rm.discover_market(ctx)
+        rm = RotationManager(ctx)
+        await rm.discover_market()
         assert ctx.discovery_failures == 3
         assert ctx.outage_start is not None  # outage detected at threshold
