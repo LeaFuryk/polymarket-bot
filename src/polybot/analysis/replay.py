@@ -5,10 +5,10 @@ simulate limit order fillability, overlay live order telemetry, and analyze
 post-cancel price recovery.
 
 Usage:
-    polybot-replay --slug btc-updown-5m           # Latest candle matching slug
-    polybot-replay --slug btc-updown-5m --all     # All candles for slug
-    polybot-replay --slug btc-updown-5m --candle-id 15
-    polybot-replay --slug btc-updown-5m --ttl 5   # Counterfactual: 5s TTL
+    polybot-replay --slug will-bitcoin-go-up-5-min           # Latest candle matching slug
+    polybot-replay --slug will-bitcoin-go-up-5-min --all     # All candles for slug
+    polybot-replay --slug will-bitcoin-go-up-5-min --candle-id 15
+    polybot-replay --slug will-bitcoin-go-up-5-min --ttl 5   # Counterfactual: 5s TTL
 """
 
 from __future__ import annotations
@@ -683,7 +683,7 @@ def main() -> None:
         "--slug",
         type=str,
         required=True,
-        help="Market slug (partial match OK, e.g. 'btc-updown-5m')",
+        help="Market slug (partial match OK, e.g. 'will-bitcoin-go-up-5-min')",
     )
     parser.add_argument(
         "--candle-id",

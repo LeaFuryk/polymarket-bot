@@ -9,7 +9,7 @@ from __future__ import annotations
 
 # -- Market -------------------------------------------------------------------
 DEFAULT_CONDITION_ID: str = "0x"
-DEFAULT_SERIES_SLUG: str = "btc-updown-5m"
+DEFAULT_SERIES_SLUG: str = "will-bitcoin-go-up-5-min"
 
 # -- API endpoints ------------------------------------------------------------
 DEFAULT_POLYMARKET_HOST: str = "https://clob.polymarket.com"
