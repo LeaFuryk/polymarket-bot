@@ -266,7 +266,7 @@ class TradingAgent:
             adaptive_entry=ctx.adaptive_entry,
         )
 
-        ctx.position_monitor = PositionMonitor(
+        position_monitor = PositionMonitor(
             config=ctx.config,
             shared=ctx.shared,
             portfolio=ctx.portfolio,
@@ -280,7 +280,7 @@ class TradingAgent:
         # Launch all tasks concurrently
         tasks = [
             asyncio.create_task(market_monitor.run(), name="market_monitor"),
-            asyncio.create_task(ctx.position_monitor.run(), name="position_monitor"),
+            asyncio.create_task(position_monitor.run(), name="position_monitor"),
             asyncio.create_task(self._rotation_loop(), name="rotation_loop"),
             asyncio.create_task(self._dashboard_loop(), name="dashboard_loop"),
         ]

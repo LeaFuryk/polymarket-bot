@@ -69,10 +69,6 @@ class PositionMonitor:
 
         logger.info("PositionMonitor stopped")
 
-    def reset_triggers(self) -> None:
-        """Reset triggered state on candle rotation."""
-        self._triggered.clear()
-
     async def _tick(self) -> None:
         """Check P&L on open positions."""
         snapshot = self._shared.latest_snapshot

@@ -35,7 +35,6 @@ if TYPE_CHECKING:
     from polybot.simulator.orderbook import SimulatedOrderBook
     from polybot.simulator.portfolio import Portfolio
     from polybot.tasks.ai_decision import AIDecision
-    from polybot.tasks.position_monitor import PositionMonitor
     from polybot.ws.broadcaster import DashboardBroadcaster
     from polybot.ws.server import DashboardWSServer
 
@@ -78,7 +77,6 @@ class AgentContext:
 
     # Task objects (set during run())
     ai_decision: AIDecision | None = None
-    position_monitor: PositionMonitor | None = None
 
     # Datastores
     datastore: DataStore | None = None

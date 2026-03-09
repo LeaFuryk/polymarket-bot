@@ -289,9 +289,6 @@ class RotationManager:
             ctx.portfolio.reset_positions()
             if ctx.shadow_portfolio is not None:
                 ctx.shadow_portfolio.reset_positions()
-            if ctx.position_monitor:
-                ctx.position_monitor.reset_triggers()
-
             # Save microstructure summary before clearing
             self.save_candle_microstructure(ctx)
 
