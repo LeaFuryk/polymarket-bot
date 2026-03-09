@@ -30,7 +30,6 @@ _PATCHES = [
     f"{_FACTORY_MODULE}.KnowledgeManager",
     f"{_FACTORY_MODULE}.FeatureConfig",
     f"{_FACTORY_MODULE}.DashboardBroadcaster",
-    f"{_FACTORY_MODULE}.DashboardWSServer",
     f"{_FACTORY_MODULE}.DataStore",
     f"{_FACTORY_MODULE}.MarketHistoryStore",
     f"{_FACTORY_MODULE}.SharedState",
@@ -96,7 +95,6 @@ class TestContextFactory:
             assert ctx.feature_config is mocks["FeatureConfig"].return_value
             assert ctx.shared is mocks["SharedState"].return_value
             assert ctx.ws_broadcaster is mocks["DashboardBroadcaster"].return_value
-            assert ctx.ws_server is mocks["DashboardWSServer"].return_value
             assert ctx.market_history is mocks["MarketHistoryStore"].return_value
         finally:
             for p in patchers:

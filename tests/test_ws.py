@@ -277,8 +277,8 @@ class TestServer:
         broadcaster = DashboardBroadcaster()
         server = DashboardWSServer(broadcaster, port=18765)
 
-        # Set initial snapshot builder
-        server._initial_snapshot_builder = lambda: make_message("snapshot", {"test": True})
+        # Override snapshot builder to return test data (no real ctx needed)
+        server._build_initial_snapshot = lambda: make_message("snapshot", {"test": True})
 
         await server.start()
         try:
@@ -299,7 +299,6 @@ class TestServer:
 
         broadcaster = DashboardBroadcaster()
         server = DashboardWSServer(broadcaster, port=18766)
-        server._initial_snapshot_builder = None
 
         await server.start()
         try:

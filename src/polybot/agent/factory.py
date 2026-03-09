@@ -30,7 +30,6 @@ from polybot.simulator.engine import ExecutionSimulator
 from polybot.simulator.orderbook import SimulatedOrderBook
 from polybot.simulator.portfolio import Portfolio
 from polybot.ws.broadcaster import DashboardBroadcaster
-from polybot.ws.server import DashboardWSServer
 
 
 class ContextFactory:
@@ -93,12 +92,8 @@ class ContextFactory:
         knowledge_manager = KnowledgeManager(config.logging.knowledge_dir, config.ai)
         feature_config = FeatureConfig(Path(config.logging.knowledge_dir).parent / "feature_config.json")
 
-        # WebSocket dashboard server
+        # WebSocket dashboard broadcaster (server owned by TradingAgent)
         ws_broadcaster = DashboardBroadcaster()
-        ws_server = DashboardWSServer(
-            broadcaster=ws_broadcaster,
-            port=config.logging.ws_port,
-        )
 
         # SQLite analytics store
         datastore: DataStore | None = None
@@ -141,7 +136,6 @@ class ContextFactory:
             live_engine=live_engine,
             shadow_portfolio=shadow_portfolio,
             ws_broadcaster=ws_broadcaster,
-            ws_server=ws_server,
             datastore=datastore,
             market_history=market_history,
             bot_version=__version__,
