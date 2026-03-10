@@ -13,12 +13,6 @@ from polybot.market_data.constants import (
     CANDLE_INTERVAL_SECONDS,
     CHAINLINK_DECIMALS,
     CHAINLINK_LATEST_ROUND_SELECTOR,
-    CHAINLINK_WS_BUCKET_SECONDS,
-    CHAINLINK_WS_DEFAULT_URL,
-    CHAINLINK_WS_PING_INTERVAL,
-    CHAINLINK_WS_RECONNECT_DELAY,
-    CHAINLINK_WS_STALE_THRESHOLD,
-    CHAINLINK_WS_WATCHDOG_INTERVAL,
     COINGECKO_REFRESH_INTERVAL,
     GAMMA_API_BASE,
     PRICE_HISTORY_SIZE,
@@ -49,24 +43,6 @@ class TestConstants:
 
     def test_coingecko_refresh(self):
         assert COINGECKO_REFRESH_INTERVAL == 300
-
-    def test_ws_stale_threshold(self):
-        assert CHAINLINK_WS_STALE_THRESHOLD == 30.0
-
-    def test_ws_reconnect_delay(self):
-        assert CHAINLINK_WS_RECONNECT_DELAY == 5.0
-
-    def test_ws_ping_interval(self):
-        assert CHAINLINK_WS_PING_INTERVAL == 5.0
-
-    def test_ws_bucket_seconds(self):
-        assert CHAINLINK_WS_BUCKET_SECONDS == 300
-
-    def test_ws_default_url(self):
-        assert CHAINLINK_WS_DEFAULT_URL.startswith("wss://")
-
-    def test_ws_watchdog_interval(self):
-        assert CHAINLINK_WS_WATCHDOG_INTERVAL == 10.0
 
     def test_price_history_size(self):
         assert PRICE_HISTORY_SIZE == 60
@@ -127,87 +103,6 @@ class TestParseIsoTimestamp:
         d = self._make_discovery()
         result = d._parse_iso_timestamp("not-a-date")
         assert result == 0.0
-
-
-# ── ChainlinkWSFeed ──────────────────────────────────────────────────
-
-
-class TestChainlinkWSFeed:
-    """Test ChainlinkWSFeed pure methods."""
-
-    def _make_feed(self, **kwargs):
-        from polybot.market_data.chainlink_ws import ChainlinkWSFeed
-
-        return ChainlinkWSFeed(**kwargs)
-
-    def test_default_url(self):
-        feed = self._make_feed()
-        assert feed._url == CHAINLINK_WS_DEFAULT_URL
-
-    def test_custom_url(self):
-        feed = self._make_feed(url="wss://custom.example.com")
-        assert feed._url == "wss://custom.example.com"
-
-    def test_injectable_logger(self):
-        custom_logger = logging.getLogger("test.chainlink")
-        feed = self._make_feed(logger=custom_logger)
-        assert feed._log is custom_logger
-
-    def test_default_logger(self):
-        feed = self._make_feed()
-        assert feed._log.name == "polybot.market_data.chainlink_ws"
-
-    def test_price_none_when_no_data(self):
-        feed = self._make_feed()
-        assert feed.price is None
-
-    def test_price_none_when_stale(self):
-        feed = self._make_feed()
-        feed._price = 50000.0
-        feed._last_update = time.time() - CHAINLINK_WS_STALE_THRESHOLD - 1
-        assert feed.price is None
-
-    def test_price_returns_when_fresh(self):
-        feed = self._make_feed()
-        feed._price = 50000.0
-        feed._last_update = time.time()
-        assert feed.price == 50000.0
-
-    def test_is_active_false_when_disconnected(self):
-        feed = self._make_feed()
-        feed._connected = False
-        assert feed.is_active is False
-
-    def test_record_tick_creates_bucket(self):
-        feed = self._make_feed()
-        now = time.time()
-        feed._record_tick(50000.0, now)
-        assert feed._current_bucket is not None
-        assert feed._current_bucket["open"] == 50000.0
-
-    def test_record_tick_updates_ohlc(self):
-        feed = self._make_feed()
-        now = time.time()
-        feed._record_tick(50000.0, now)
-        feed._record_tick(51000.0, now + 1)
-        feed._record_tick(49000.0, now + 2)
-        assert feed._current_bucket["high"] == 51000.0
-        assert feed._current_bucket["low"] == 49000.0
-        assert feed._current_bucket["close"] == 49000.0
-
-    def test_extract_price_payload_data(self):
-        feed = self._make_feed()
-        msg = {"payload": {"data": [{"value": "50000.5", "timestamp": 1234}]}}
-        assert feed._extract_price(msg) == 50000.5
-
-    def test_extract_price_direct_value(self):
-        feed = self._make_feed()
-        msg = {"value": "42000.0"}
-        assert feed._extract_price(msg) == 42000.0
-
-    def test_extract_price_returns_none_on_empty(self):
-        feed = self._make_feed()
-        assert feed._extract_price({}) is None
 
 
 # ── Injectable logger tests across modules ────────────────────────────
@@ -280,11 +175,6 @@ class TestPackageExports:
         from polybot.market_data import BtcPriceFeed
 
         assert BtcPriceFeed is not None
-
-    def test_import_chainlink_ws_feed(self):
-        from polybot.market_data import ChainlinkWSFeed
-
-        assert ChainlinkWSFeed is not None
 
     def test_import_market_discovery(self):
         from polybot.market_data import MarketDiscovery

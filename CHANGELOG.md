@@ -7,6 +7,17 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Refactored
+- **`agent/core`** — Reduced from 415 to 137 lines. Removed callback indirection (`on_trade_callback`, `on_cycle_complete`), parallelized startup network calls with `asyncio.gather`, simplified task construction to single-line `ctx`-based constructors.
+- **`tasks/ai_decision`** — Accepts `AgentContext` instead of 22 individual params. Owns dashboard sync and WS broadcast directly instead of via callbacks. Broadcasts trade events via `ws_broadcaster` reference.
+- **`tasks/market_monitor`** — Accepts `AgentContext` instead of 12 individual params.
+- **`tasks/position_monitor`** — Accepts `AgentContext` instead of 5 individual params.
+- **`agent/context`** — Removed `ai_decision` and `chainlink_ws` fields, breaking circular dependencies.
+- **`agent/rotation`** — Receives `ai_decision` as explicit constructor param instead of reading from context.
+
+### Removed
+- **`market_data/chainlink_ws`** — Deleted entire Chainlink WebSocket feed module (346 lines) and all references across 13 files. Chainlink RPC cross-reference for price divergence retained.
+
 ### Added
 - **Execution repricing with drift guard** — After AI returns a decision, fetches fresh orderbook and reprices limit orders to current market. BUY orders skip when price drifts >5% (chasing protection). SELL orders always reprice (exits must go through). Spread guard rejects BUY orders when submit-time spread >5%. Fresh OB passed through to avoid double-fetch. Telemetry fields `reprice_from` and `drift_pct` on `LiveOrderResult` for monitoring.
 - **Partial fill fallback** — When CLOB status is `LIVE` but `size_matched > 0`, constructs fill from `make_fill_from_balance()` instead of returning None. Fixes iter_035 non-fill #1 (37/40 shares matched but not captured).

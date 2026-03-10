@@ -52,8 +52,7 @@ All overrides use the `POLYBOT_` prefix:
 
 | Variable | Section | Field | Type |
 |---|---|---|---|
-| `POLYBOT_MARKET_CONDITION_ID` | market | condition_id | str |
-| `POLYBOT_MARKET_TOKEN_ID` | market | token_id | str |
+| `POLYBOT_MARKET_SERIES_SLUG` | market | series_slug | str |
 | `POLYBOT_AI_API_KEY` | ai | api_key | str |
 | `POLYBOT_AI_MODEL` | ai | model | str |
 | `POLYBOT_AGENT_DECISION_INTERVAL` | agent | decision_interval | int |

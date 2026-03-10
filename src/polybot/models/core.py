@@ -69,7 +69,7 @@ class BtcPrice(BaseModel):
     change_24h_pct: float = 0.0
     chainlink_price: float | None = None  # On-chain Chainlink BTC/USD (resolution source)
     price_divergence: float | None = None  # Binance - Chainlink divergence ($)
-    price_source: str = "binance"  # "binance" | "chainlink_ws" | "coingecko"
+    price_source: str = "binance"  # "binance" | "coingecko"
 
 
 class BtcCandle(BaseModel):
@@ -82,7 +82,7 @@ class BtcCandle(BaseModel):
     close: float
     volume: float
     close_time: float
-    source: str = "binance"  # "binance" | "chainlink_ws"
+    source: str = "binance"
 
     @property
     def direction(self) -> str:

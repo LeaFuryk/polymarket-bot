@@ -23,26 +23,6 @@ BTC_CANDLE_WINDOW_SIZE: int = 200
 # CoinGecko 24h change refresh interval (seconds)
 COINGECKO_REFRESH_INTERVAL: int = 300
 
-# --- Chainlink WebSocket feed (chainlink_ws.py) ---
-
-# Price is considered stale if no update in this many seconds
-CHAINLINK_WS_STALE_THRESHOLD: float = 30.0
-
-# Reconnect delay on failure (seconds)
-CHAINLINK_WS_RECONNECT_DELAY: float = 5.0
-
-# Keepalive ping interval (seconds)
-CHAINLINK_WS_PING_INTERVAL: float = 5.0
-
-# 5-minute candle bucket width (seconds)
-CHAINLINK_WS_BUCKET_SECONDS: int = 300
-
-# Default WebSocket URL
-CHAINLINK_WS_DEFAULT_URL: str = "wss://ws-live-data.polymarket.com"
-
-# Staleness watchdog check interval (seconds)
-CHAINLINK_WS_WATCHDOG_INTERVAL: float = 10.0
-
 # --- Market data provider (provider.py) ---
 
 # Number of recent midpoints to keep in price history

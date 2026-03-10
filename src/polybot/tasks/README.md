@@ -63,9 +63,9 @@ Logging ──► build_trade_record(), build_decision_row()
 ## Module Responsibilities
 
 ### `ai_decision.py` (coordinator)
-- `AIDecision` class: manages trigger loop, state, execution
-- `_handle_entry_trigger()`: pre-trade risk checks, delegates to `_run_ai_decision()`
-- `_handle_exit_trigger()`: stop-loss/take-profit with cooldown, winner-near-expiry guard
+- `AIDecision` class: callable service (no loop), serialised by `asyncio.Lock`
+- `evaluate_entry(trigger_reason)`: pre-trade risk checks, delegates to `_run_ai_decision()`
+- `evaluate_exit(exit_signal)`: stop-loss/take-profit with cooldown, winner-near-expiry guard
 - `_try_contrarian_flip()`: post-exit opposite-side entry evaluation
 - `_auto_close_for_flip()`: position auto-close during reversal flips
 - `_run_ai_decision()`: the core pipeline (indicators → AI → guards → execute → log)

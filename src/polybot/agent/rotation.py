@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import statistics
 import time
@@ -11,6 +10,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from polybot.agent.context import AgentContext
     from polybot.models import CandleMarket
+    from polybot.tasks.ai_decision import AIDecision
 
 from polybot.shared_state import CandleMicrostructure
 
@@ -18,22 +18,19 @@ from polybot.shared_state import CandleMicrostructure
 class RotationManager:
     """Discovers markets and handles candle transitions."""
 
-    def __init__(self, logger: logging.Logger | None = None) -> None:
+    def __init__(
+        self,
+        ctx: AgentContext,
+        ai_decision: AIDecision | None = None,
+        logger: logging.Logger | None = None,
+    ) -> None:
+        self._ctx = ctx
+        self._ai_decision = ai_decision
         self._log = logger or logging.getLogger(__name__)
 
-    async def rotation_loop(self, ctx: AgentContext) -> None:
-        """Discovers markets and handles candle transitions (every 5s)."""
-        self._log.info("RotationLoop started")
-        while not ctx.shared.shutdown:
-            try:
-                await self.discover_market(ctx)
-            except Exception:
-                self._log.exception("RotationLoop error")
-            await asyncio.sleep(5.0)
-        self._log.info("RotationLoop stopped")
-
-    async def discover_market(self, ctx: AgentContext) -> CandleMarket | None:
+    async def discover_market(self) -> CandleMarket | None:
         """Discover the current candle market, handling rotation and outages."""
+        ctx = self._ctx
         new_market = await ctx.discovery.get_current_market()
         if new_market is None:
             new_market = await ctx.discovery.get_next_market()
@@ -92,7 +89,7 @@ class RotationManager:
                     ctx.current_market.slug,
                     new_market.slug,
                 )
-                await self.handle_market_transition(ctx)
+                await self._handle_market_transition()
 
         if ctx.current_market is None or new_market.condition_id != ctx.current_market.condition_id:
             ctx.current_market = new_market
@@ -138,9 +135,11 @@ class RotationManager:
 
         return ctx.current_market
 
-    async def handle_market_transition(self, ctx: AgentContext) -> None:
+    async def _handle_market_transition(self) -> None:
         """Handle transition between candle markets — resolve winner via BTC price."""
-        from polybot.agent.state import StatePersistence
+        from polybot.agent.helpers import save_agent_state
+
+        ctx = self._ctx
 
         # Pause other tasks during rotation
         ctx.shared.rotation_in_progress = True
@@ -225,10 +224,10 @@ class RotationManager:
                     )
 
                 # Sync stats to AI decision task
-                if ctx.ai_decision:
-                    ctx.ai_decision.session_wins = ctx.session_wins
-                    ctx.ai_decision.session_losses = ctx.session_losses
-                    ctx.ai_decision.session_resolution_pnl = ctx.session_resolution_pnl
+                if self._ai_decision:
+                    self._ai_decision.session_wins = ctx.session_wins
+                    self._ai_decision.session_losses = ctx.session_losses
+                    self._ai_decision.session_resolution_pnl = ctx.session_resolution_pnl
 
                 # Sync stats to SharedState for indicator computation in MarketMonitor
                 ctx.shared.session_wins = ctx.session_wins
@@ -255,7 +254,7 @@ class RotationManager:
                     ctx.recent_resolutions[:] = ctx.recent_resolutions[-20:]
 
                 ctx.resolutions_since_reflection += 1
-                StatePersistence(logger=self._log).save_agent_state(ctx)
+                save_agent_state(ctx, log=self._log)
 
                 # Adaptive reflection: faster when losing, normal when profitable
                 recent_pnl = sum(r.total_pnl for r in ctx.recent_resolutions[-5:])
@@ -277,8 +276,8 @@ class RotationManager:
                     if reflection_cost > 0:
                         ctx.portfolio.cash -= reflection_cost
                         ctx.total_api_cost += reflection_cost
-                        if ctx.ai_decision:
-                            ctx.ai_decision.total_api_cost = ctx.total_api_cost
+                        if self._ai_decision:
+                            self._ai_decision.total_api_cost = ctx.total_api_cost
                         self._log.info(
                             "Reflection API cost: $%.4f (session total: $%.4f)",
                             reflection_cost,
@@ -289,18 +288,8 @@ class RotationManager:
             ctx.portfolio.reset_positions()
             if ctx.shadow_portfolio is not None:
                 ctx.shadow_portfolio.reset_positions()
-            if ctx.position_monitor:
-                ctx.position_monitor.reset_triggers()
-
-            # Clear exit trigger queue
-            while not ctx.shared.exit_trigger_queue.empty():
-                try:
-                    ctx.shared.exit_trigger_queue.get_nowait()
-                except asyncio.QueueEmpty:
-                    break
-
             # Save microstructure summary before clearing
-            self.save_candle_microstructure(ctx)
+            self._save_candle_microstructure()
 
             # Reset shared state for new candle
             ctx.shared.candle_open_btc = None
@@ -314,8 +303,9 @@ class RotationManager:
         finally:
             ctx.shared.rotation_in_progress = False
 
-    def save_candle_microstructure(self, ctx: AgentContext) -> None:
+    def _save_candle_microstructure(self) -> None:
         """Compute and save microstructure summary from current candle's prefilter history."""
+        ctx = self._ctx
         history = list(ctx.shared.prefilter_history)
         if len(history) < 10:
             return
