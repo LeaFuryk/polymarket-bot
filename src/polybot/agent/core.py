@@ -88,7 +88,7 @@ class TradingAgent:
         )
 
         # Create task objects — AIDecision first (monitors reference it)
-        ctx.ai_decision = AIDecision(
+        ai_decision = AIDecision(
             config=ctx.config,
             shared=ctx.shared,
             decision_engine=ctx.decision_engine,
@@ -114,14 +114,14 @@ class TradingAgent:
         )
 
         if ctx.datastore is not None:
-            ctx.ai_decision._datastore = ctx.datastore
+            ai_decision._datastore = ctx.datastore
 
         # Wire up WS trade event push
         async def _on_trade(record):
             if ctx.ws_broadcaster.has_clients:
                 await ctx.ws_broadcaster.broadcast(ctx.ws_broadcaster.build_trade_event(record))
 
-        ctx.ai_decision.on_trade_callback = _on_trade
+        ai_decision.on_trade_callback = _on_trade
 
         # Wire on_cycle_complete: sync dashboard state + broadcast snapshot + balance sync
         _last_balance_sync = 0.0
@@ -130,11 +130,11 @@ class TradingAgent:
             nonlocal _last_balance_sync
             import time
 
-            sync_from_ai_decision(ctx)
-            write_dashboard_json(ctx, log=self._log)
+            sync_from_ai_decision(ctx, ai_decision)
+            write_dashboard_json(ctx, ai_decision=ai_decision, log=self._log)
             if ctx.ws_broadcaster and ctx.ws_broadcaster.has_clients:
-                await ctx.ws_broadcaster.broadcast(build_snapshot_message(ctx, log=self._log))
-                await ctx.ws_broadcaster.broadcast(ctx.ws_broadcaster.build_status_update(ctx))
+                await ctx.ws_broadcaster.broadcast(build_snapshot_message(ctx, ai_decision=ai_decision, log=self._log))
+                await ctx.ws_broadcaster.broadcast(ctx.ws_broadcaster.build_status_update(ctx, ai_decision=ai_decision))
 
             # Live mode: sync wallet balance (at most every 60s) and check kill switch
             if ctx.live_mode and ctx.live_engine:
@@ -151,9 +151,9 @@ class TradingAgent:
                     self._log.critical("Kill switch triggered — initiating shutdown")
                     ctx.shared.shutdown = True
 
-        ctx.ai_decision.on_cycle_complete = _on_cycle_complete
+        ai_decision.on_cycle_complete = _on_cycle_complete
 
-        rotation_manager = RotationManager(ctx, logger=self._log)
+        rotation_manager = RotationManager(ctx, ai_decision=ai_decision, logger=self._log)
 
         market_monitor = MarketMonitor(
             config=ctx.config,
@@ -162,7 +162,7 @@ class TradingAgent:
             prefilter=ctx.prefilter,
             portfolio=ctx.portfolio,
             resolution_tracker=ctx.resolution_tracker,
-            ai_decision=ctx.ai_decision,
+            ai_decision=ai_decision,
             rotation_manager=rotation_manager,
             datastore=ctx.datastore,
             feature_config=ctx.feature_config if ctx.datastore else None,
@@ -175,7 +175,7 @@ class TradingAgent:
             config=ctx.config,
             shared=ctx.shared,
             portfolio=ctx.portfolio,
-            ai_decision=ctx.ai_decision,
+            ai_decision=ai_decision,
             ctx=ctx,
         )
 

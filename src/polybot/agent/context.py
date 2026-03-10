@@ -33,7 +33,6 @@ if TYPE_CHECKING:
     from polybot.simulator.engine import ExecutionSimulator
     from polybot.simulator.orderbook import SimulatedOrderBook
     from polybot.simulator.portfolio import Portfolio
-    from polybot.tasks.ai_decision import AIDecision
     from polybot.ws.broadcaster import DashboardBroadcaster
 
 
@@ -70,9 +69,6 @@ class AgentContext:
 
     # WebSocket dashboard
     ws_broadcaster: DashboardBroadcaster | None = None
-
-    # Task objects (set during run())
-    ai_decision: AIDecision | None = None
 
     # Datastores
     datastore: DataStore | None = None
