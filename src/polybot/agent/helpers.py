@@ -279,37 +279,6 @@ def compute_iteration_label() -> str:
     return f"iter_{last_num + 1:03d}"
 
 
-def setup_logging(config: AppConfig) -> None:
-    """Configure the root logger with a file handler and optional console handler.
-
-    Creates the log directory if needed.  Console output is suppressed when the
-    Rich dashboard is enabled (it owns stdout).
-    """
-    log_dir = Path(config.logging.log_dir)
-    log_dir.mkdir(parents=True, exist_ok=True)
-
-    root = logging.getLogger()
-    root.setLevel(logging.INFO)
-
-    fmt = logging.Formatter(
-        "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-    )
-
-    # File handler
-    fh = logging.FileHandler(log_dir / "polybot.log")
-    fh.setLevel(logging.DEBUG)
-    fh.setFormatter(fmt)
-    root.addHandler(fh)
-
-    # Console handler (only if dashboard is off — dashboard replaces stdout)
-    if not config.logging.dashboard_enabled:
-        ch = logging.StreamHandler()
-        ch.setLevel(logging.INFO)
-        ch.setFormatter(fmt)
-        root.addHandler(ch)
-
-
 def compute_pnl_from_trades(trades: list[dict], winner: str) -> float:
     """Reconstruct PnL for a candle from its logged trades.
 

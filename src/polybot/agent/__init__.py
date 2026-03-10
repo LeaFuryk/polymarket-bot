@@ -13,8 +13,8 @@ from polybot.agent.helpers import (
     compute_pnl_from_trades,
     enrich_iteration_summary,
     load_startup_data,
-    setup_logging,
 )
+from polybot.logging import setup_logging
 
 __all__ = [
     "AgentContext",
