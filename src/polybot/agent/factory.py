@@ -18,7 +18,6 @@ from polybot.exit_tracker import ExitTracker
 from polybot.indicators import FeatureConfig
 from polybot.knowledge import KnowledgeManager
 from polybot.logging.trade_log import TradeLog
-from polybot.market_data.chainlink_ws import ChainlinkWSFeed
 from polybot.market_data.discovery import MarketDiscovery
 from polybot.market_data.provider import MarketDataProvider
 from polybot.ml_scorer import MLScorer
@@ -55,9 +54,8 @@ class ContextFactory:
         config = self._config
         sd = self._startup_data
 
-        chainlink_ws = ChainlinkWSFeed(config.api.polymarket_rtds_url)
         discovery = MarketDiscovery(config)
-        market_data = MarketDataProvider(config, chainlink_ws=chainlink_ws)
+        market_data = MarketDataProvider(config)
         decision_engine = DecisionEngine(config.ai)
         execution_sim = ExecutionSimulator(config.simulator)
         orderbook = SimulatedOrderBook(config.simulator)
@@ -114,7 +112,6 @@ class ContextFactory:
 
         ctx = AgentContext(
             config=config,
-            chainlink_ws=chainlink_ws,
             discovery=discovery,
             market_data=market_data,
             decision_engine=decision_engine,

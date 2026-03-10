@@ -122,7 +122,6 @@ def assemble_dashboard_data(ctx: AgentContext, log: logging.Logger | None = None
             "price_divergence": snapshot.btc_price.price_divergence,
             "price_source": snapshot.btc_price.price_source,
             "candle_sources": {
-                "chainlink": sum(1 for c in snapshot.btc_candles if c.source == "chainlink_ws"),
                 "binance": sum(1 for c in snapshot.btc_candles if c.source == "binance"),
                 "total": len(snapshot.btc_candles),
             },
