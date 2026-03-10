@@ -5,11 +5,6 @@ from __future__ import annotations
 import asyncio
 import signal
 
-from polybot.agent.dashboard import (
-    build_snapshot_message,
-    sync_from_ai_decision,
-    write_dashboard_json,
-)
 from polybot.agent.factory import ContextFactory
 from polybot.agent.helpers import load_startup_data, resolve_pending_bets
 from polybot.agent.rotation import RotationManager
@@ -89,36 +84,6 @@ class TradingAgent:
 
         # Create task objects — AIDecision first (monitors reference it)
         ai_decision = AIDecision(ctx)
-
-        # Wire on_cycle_complete: sync dashboard state + broadcast snapshot + balance sync
-        _last_balance_sync = 0.0
-
-        async def _on_cycle_complete():
-            nonlocal _last_balance_sync
-            import time
-
-            sync_from_ai_decision(ctx, ai_decision)
-            write_dashboard_json(ctx, ai_decision=ai_decision, log=self._log)
-            if ctx.ws_broadcaster and ctx.ws_broadcaster.has_clients:
-                await ctx.ws_broadcaster.broadcast(build_snapshot_message(ctx, ai_decision=ai_decision, log=self._log))
-                await ctx.ws_broadcaster.broadcast(ctx.ws_broadcaster.build_status_update(ctx, ai_decision=ai_decision))
-
-            # Live mode: sync wallet balance (at most every 60s) and check kill switch
-            if ctx.live_mode and ctx.live_engine:
-                now = time.monotonic()
-                if now - _last_balance_sync >= 60.0:
-                    _last_balance_sync = now
-                    try:
-                        balance = await ctx.live_engine.sync_balance()
-                        self._log.debug("Wallet balance: $%.2f", balance)
-                    except Exception:
-                        self._log.debug("Balance sync failed", exc_info=True)
-                killed = ctx.live_engine.check_kill_switch(ctx.session_resolution_pnl)
-                if killed:
-                    self._log.critical("Kill switch triggered — initiating shutdown")
-                    ctx.shared.shutdown = True
-
-        ai_decision.on_cycle_complete = _on_cycle_complete
 
         rotation_manager = RotationManager(ctx, ai_decision=ai_decision, logger=self._log)
 

@@ -103,8 +103,10 @@ class AIDecision:
         self._recent_trades = ctx.recent_trades
         self._session_trades = ctx.session_trades
         self._pending_ml_features = ctx.pending_ml_features
-        # Optional callback fired after every entry/exit evaluation completes
-        self.on_cycle_complete = None  # set by agent: Callable[[], Awaitable[None]]
+
+        # Keep ctx reference for cycle-complete dashboard/live sync
+        self._ctx = ctx
+        self._last_balance_sync: float = 0.0
 
         # Serialise concurrent entry/exit calls
         self._lock = asyncio.Lock()
@@ -158,6 +160,37 @@ class AIDecision:
     def busy(self) -> bool:
         """True when an entry/exit evaluation is in progress."""
         return self._lock.locked()
+
+    async def _on_cycle_complete(self) -> None:
+        """Sync dashboard state and broadcast updates after each evaluation."""
+        from polybot.agent.dashboard import (
+            build_snapshot_message,
+            sync_from_ai_decision,
+            write_dashboard_json,
+        )
+
+        ctx = self._ctx
+        sync_from_ai_decision(ctx, self)
+        write_dashboard_json(ctx, ai_decision=self, log=logger)
+
+        if ctx.ws_broadcaster and ctx.ws_broadcaster.has_clients:
+            await ctx.ws_broadcaster.broadcast(build_snapshot_message(ctx, ai_decision=self, log=logger))
+            await ctx.ws_broadcaster.broadcast(ctx.ws_broadcaster.build_status_update(ctx, ai_decision=self))
+
+        # Live mode: sync wallet balance (at most every 60s) and check kill switch
+        if ctx.live_mode and ctx.live_engine:
+            now = time.monotonic()
+            if now - self._last_balance_sync >= 60.0:
+                self._last_balance_sync = now
+                try:
+                    balance = await ctx.live_engine.sync_balance()
+                    logger.debug("Wallet balance: $%.2f", balance)
+                except Exception:
+                    logger.debug("Balance sync failed", exc_info=True)
+            killed = ctx.live_engine.check_kill_switch(ctx.session_resolution_pnl)
+            if killed:
+                logger.critical("Kill switch triggered — initiating shutdown")
+                ctx.shared.shutdown = True
 
     async def evaluate_entry(self, trigger_reason: str) -> None:
         """Handle an entry opportunity trigger from the market monitor."""
@@ -222,9 +255,7 @@ class AIDecision:
                 return
 
             await self._run_ai_decision(cycle, snapshot, market, time_remaining, portfolio_value)
-
-            if self.on_cycle_complete is not None:
-                await self.on_cycle_complete()
+            await self._on_cycle_complete()
 
     async def evaluate_exit(self, exit_signal: dict) -> None:
         """Handle a stop-loss/take-profit exit trigger from position monitor."""
@@ -378,8 +409,7 @@ class AIDecision:
                     if pos.shares <= 0:
                         await self._try_contrarian_flip(token_side_str, pnl_pct, trigger_type)
 
-            if self.on_cycle_complete is not None:
-                await self.on_cycle_complete()
+            await self._on_cycle_complete()
 
     async def _try_contrarian_flip(
         self,
