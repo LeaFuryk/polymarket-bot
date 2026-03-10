@@ -15,7 +15,7 @@ from polybot.agent.factory import ContextFactory
 from polybot.agent.helpers import load_startup_data, resolve_pending_bets
 from polybot.agent.rotation import RotationManager
 from polybot.config import AppConfig
-from polybot.logging import setup_logging
+from polybot.logging import create_logger
 from polybot.tasks.ai_decision import AIDecision
 from polybot.tasks.market_monitor import MarketMonitor
 from polybot.tasks.position_monitor import PositionMonitor
@@ -26,8 +26,7 @@ class TradingAgent:
     """Orchestrator — launches concurrent tasks for market monitoring, AI decisions, and position management."""
 
     def __init__(self, config: AppConfig, logger: logging.Logger | None = None) -> None:
-        setup_logging(config)
-        self._log = logger or logging.getLogger(__name__)
+        self._log = create_logger(config, __name__, logger)
 
         # Load persisted state before building context
         startup_data = load_startup_data(config, log=self._log)
