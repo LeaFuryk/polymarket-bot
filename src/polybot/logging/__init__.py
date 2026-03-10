@@ -23,11 +23,25 @@ __all__ = [
     "RESOLUTION_LOG_PREFIX",
     "TRADE_LOG_PREFIX",
     "TradeLog",
-    "setup_logging",
+    "create_logger",
 ]
 
 
-def setup_logging(config: AppConfig) -> None:
+def create_logger(
+    config: AppConfig,
+    name: str = __name__,
+    logger: logging.Logger | None = None,
+) -> logging.Logger:
+    """Set up root logging handlers and return a logger.
+
+    Configures file and optional console handlers on the root logger, then
+    returns *logger* if provided or a new logger for *name*.
+    """
+    _setup_logging(config)
+    return logger or logging.getLogger(name)
+
+
+def _setup_logging(config: AppConfig) -> None:
     """Configure the root logger with a file handler and optional console handler.
 
     Creates the log directory if needed.  Console output is suppressed when the
