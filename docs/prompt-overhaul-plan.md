@@ -730,11 +730,167 @@ Stream arrives: {"action":"BUY","token_side":"down","confidence":0.78,"size":50,
 - `src/polybot/decision_engine/schemas.py` — reorder properties, add `eager_input_streaming`
 - `src/polybot/tasks/ai_decision.py` — consume streaming result, fire order on partial
 
-### Phase 6: Fine-tuning (future)
+### Phase 6: Fine-tuning data collection
 
-Once enough data is collected (1000+ resolved decisions):
-- Export (snapshot → correct_decision) pairs as fine-tuning dataset
-- Fine-tune Sonnet on historical data — bakes domain knowledge into weights
-- Shrink system prompt further (model already knows indicator meanings)
-- `decision_history` still useful even with fine-tuning (recent self-calibration)
-- Retrain monthly to avoid model drift as market regimes shift
+**Goal:** Capture every AI decision as a raw prompt→response→outcome triplet for future SFT and DPO fine-tuning.
+
+**Why raw text, not structured fields:** For fine-tuning an LLM, parsed fields (indicators, confidence scores) are useless — you need the **exact text** the model saw and produced. Structured fields like `action` and `confidence` are useful for filtering and analytics, but the training data is the messages array and the raw response.
+
+---
+
+#### TrainingStore — persistent SQLite for fine-tuning data
+
+Single table `training_samples`, one row per AI decision call. Stores the full prompt→response→outcome triplet:
+
+```sql
+CREATE TABLE IF NOT EXISTS training_samples (
+    sample_id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    iteration         TEXT    NOT NULL DEFAULT '',
+    slug              TEXT    NOT NULL,
+    condition_id      TEXT    NOT NULL,
+    timestamp         REAL    NOT NULL,
+
+    -- Raw prompt/response (the actual fine-tuning data)
+    messages_json     TEXT    NOT NULL,   -- full messages array sent to API
+    response_json     TEXT    NOT NULL,   -- model's raw tool_use response
+    model             TEXT    NOT NULL,   -- model ID used (e.g. claude-sonnet-4-6)
+
+    -- Parsed decision (for filtering/analytics, not training)
+    action            TEXT    NOT NULL,
+    token_side        TEXT,
+    confidence        REAL,
+
+    -- Outcome (backfilled at resolution)
+    winner            TEXT,
+    resolution_pnl    REAL,
+
+    -- API telemetry
+    ai_cost           REAL,
+    ai_latency_ms     REAL
+);
+```
+
+**Key design decisions:**
+
+- `messages_json` stores the **complete messages array** including system prompt, user snapshot, pre-filled tool calls — exactly what was sent to the API. This is the "prompt" half of the training pair.
+- `response_json` stores the **raw model response** — the tool_use block with action, reasoning, etc. This is the "completion" half of the training pair.
+- Parsed fields (`action`, `token_side`, `confidence`) are denormalized for filtering (e.g. "show me all losing BUY decisions with confidence > 0.7") but are **not used for training**.
+- Outcome columns (`winner`, `resolution_pnl`) start NULL, backfilled when the candle resolves.
+- `model` field tracks which model produced the response — important when switching between models or comparing fine-tuned vs base.
+- `iteration` links to the candle iteration for joining with other tables.
+
+---
+
+#### Training data usage
+
+**SFT (Supervised Fine-Tuning):**
+
+Train on prompt→response pairs from profitable trades only:
+
+```sql
+SELECT messages_json, response_json
+FROM training_samples
+WHERE resolution_pnl > 0 AND action != 'HOLD'
+```
+
+Export as JSONL where each line is `{"messages": <messages_json>, "completion": <response_json>}`. The model learns to produce responses that led to profitable outcomes given the same market conditions.
+
+**DPO (Direct Preference Optimization):**
+
+Pair winning and losing responses for similar market conditions:
+
+```sql
+-- Find conditions with both winning and losing decisions across sessions
+-- Pair them: chosen = winning response, rejected = losing response
+SELECT
+    w.messages_json AS prompt,
+    w.response_json AS chosen,
+    l.response_json AS rejected
+FROM training_samples w
+JOIN training_samples l
+    ON w.slug = l.slug
+    AND w.condition_id = l.condition_id
+    AND w.resolution_pnl > 0
+    AND l.resolution_pnl <= 0
+```
+
+DPO teaches the model to prefer winning responses over losing ones when presented with the same market snapshot. This is more powerful than SFT alone because it explicitly shows the model what NOT to do.
+
+**Filtering HOLDs:**
+
+All decisions are recorded (BUY, SELL, HOLD) so the model learns the full decision space. When building training sets:
+- SFT on profitable trades: filter `action != 'HOLD' AND resolution_pnl > 0`
+- SFT on good HOLDs: filter `action = 'HOLD'` where the market was choppy (trains the model to know when NOT to trade)
+- DPO: pair profitable actions vs unprofitable actions on the same `condition_id`
+
+---
+
+#### Implementation sequence
+
+Phase 6 depends on Phase 2 (new prompts) being done first — the prompt format determines what gets stored in `messages_json`. Steps:
+
+1. **`TrainingStore` class** — `src/polybot/datastore/training_store.py`
+   - Same lazy writer pattern as existing stores (`DecisionStore`, `SnapshotStore`)
+   - `record_sample(row: TrainingSampleRow)` — queue row for batch insert
+   - `resolve_samples(slug: str, winner: str, pnl: float)` — backfill outcome columns
+   - `export_sft(min_pnl: float = 0.0) → Iterator[dict]` — yield training pairs
+   - `flush()` / `close()` — same lifecycle as other stores
+
+2. **`TrainingSampleRow` dataclass** — `src/polybot/datastore/rows.py`
+   - Mirrors the SQL schema above
+   - `messages_json` and `response_json` stored as serialized JSON strings
+
+3. **Config** — add to `LoggingConfig`:
+   - `finetune_enabled: bool = False` — master switch, off by default
+   - `training_db_path: str = "logs/training.db"` — separate DB from main polybot.db
+
+4. **Wire into lifecycle** — `AgentContext`, factory, and core open/close:
+   - `AgentContext.training_store: TrainingStore | None`
+   - Factory creates store only if `finetune_enabled`
+   - Agent `close()` flushes and closes the store
+
+5. **Capture in decision engine** — `src/polybot/decision_engine/engine.py`:
+   - After API call, capture the full `messages` array (already built by `build_messages()`)
+   - Capture the raw `response.content` tool_use block
+   - Pass both to `ai_decision.py` as part of the decision result
+
+6. **Queue training row** — `src/polybot/tasks/ai_decision.py`:
+   - After receiving decision result, if training store is available:
+   - Build `TrainingSampleRow` with messages_json, response_json, parsed fields, telemetry
+   - `training_store.record_sample(row)`
+
+7. **Backfill outcomes** — `src/polybot/tasks/rotation.py`:
+   - At candle resolution, call `training_store.resolve_samples(slug, winner, pnl)`
+   - Updates all unresolved rows for that slug with the outcome
+
+---
+
+#### Volume estimate
+
+| Metric | Value |
+|--------|-------|
+| AI calls per candle | ~12 (multiple snapshots evaluated per 5-min candle) |
+| Candles per hour | 12 |
+| Rows per day | ~3,456 (12 × 12 × 24) |
+| Row size | ~5-10 KB (dominated by `messages_json` with trajectory) |
+| Daily storage | ~17-35 MB |
+| Monthly storage | ~500 MB - 1 GB |
+| Training threshold | ~1,000 resolved decisions (3-7 days of data) |
+
+SQLite handles this volume easily. The separate `training.db` file keeps fine-tuning data isolated from operational data and can be copied off for training without affecting the bot.
+
+---
+
+#### Relationship to decision_history (Phase 1b)
+
+`decision_history` (Phase 1b) and `TrainingStore` (Phase 6) serve different purposes:
+
+| | decision_history | TrainingStore |
+|---|---|---|
+| **Purpose** | Real-time self-calibration during trading | Offline fine-tuning dataset |
+| **Content** | Compressed input/output/result (8 fields) | Full messages array + raw response |
+| **Size per entry** | ~75 tokens | ~5-10 KB |
+| **Retention** | Rolling 100 in JSONL | All rows, never deleted |
+| **When used** | Every AI call (injected into snapshot) | After collecting 1000+ samples |
+
+They're complementary: `decision_history` helps the base model calibrate in-session, while `TrainingStore` captures the raw data needed to fine-tune a model that calibrates better out of the box.
