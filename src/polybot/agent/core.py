@@ -13,6 +13,7 @@ from polybot.logging import create_logger
 from polybot.tasks.ai_decision import AIDecision
 from polybot.tasks.market_monitor import MarketMonitor
 from polybot.tasks.position_monitor import PositionMonitor
+from polybot.ws.broadcaster import DashboardBroadcaster
 from polybot.ws.server import DashboardWSServer
 
 
@@ -30,8 +31,9 @@ class TradingAgent:
         self._ctx = factory.build()
 
         # WebSocket server — lifecycle owned by TradingAgent, not shared context
+        broadcaster = self._ctx.ws_broadcaster or DashboardBroadcaster()
         self._ws_server = DashboardWSServer(
-            broadcaster=self._ctx.ws_broadcaster,
+            broadcaster=broadcaster,
             port=config.logging.ws_port,
             ctx=self._ctx,
         )
@@ -50,7 +52,8 @@ class TradingAgent:
         if ctx.datastore is not None:
             ctx.datastore.open()
         # Open persistent market history store
-        ctx.market_history.open()
+        if ctx.market_history is not None:
+            ctx.market_history.open()
 
         # Live trading startup validation
         if ctx.live_mode and ctx.live_engine:
@@ -121,7 +124,8 @@ class TradingAgent:
         await self._ws_server.stop()
         if ctx.datastore is not None:
             await ctx.datastore.close()
-        await ctx.market_history.close()
+        if ctx.market_history is not None:
+            await ctx.market_history.close()
         await ctx.discovery.close()
         await ctx.market_data.close()
         ctx.trade_log.close()

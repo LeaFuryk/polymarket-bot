@@ -558,7 +558,7 @@ def load_iteration_summaries(log: logging.Logger | None = None) -> list[dict]:
     """
     _log = log or logging.getLogger(__name__)
     archive_dir = Path.cwd() / "archive"
-    summaries = []
+    summaries: list[dict] = []
     if not archive_dir.exists():
         return summaries
     for summary_path in sorted(archive_dir.glob("*/summary.json")):
