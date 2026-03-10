@@ -45,7 +45,7 @@ class TradingAgent:
         for sig in (signal.SIGINT, signal.SIGTERM):
             loop.add_signal_handler(sig, self._handle_signal)
 
-        # TODO: This will refactore to a single store which contains data specifically oriented for finetuning
+        # TODO: This will refactor to a single store which contains data specifically oriented for finetuning
         # Open SQLite analytics store
         if ctx.datastore is not None:
             ctx.datastore.open()
@@ -84,32 +84,9 @@ class TradingAgent:
 
         # Create task objects — AIDecision first (monitors reference it)
         ai_decision = AIDecision(ctx)
-
         rotation_manager = RotationManager(ctx, ai_decision=ai_decision, logger=self._log)
-
-        market_monitor = MarketMonitor(
-            config=ctx.config,
-            shared=ctx.shared,
-            market_data=ctx.market_data,
-            prefilter=ctx.prefilter,
-            portfolio=ctx.portfolio,
-            resolution_tracker=ctx.resolution_tracker,
-            ai_decision=ai_decision,
-            rotation_manager=rotation_manager,
-            datastore=ctx.datastore,
-            feature_config=ctx.feature_config if ctx.datastore else None,
-            market_history=ctx.market_history,
-            adaptive_entry=ctx.adaptive_entry,
-            ctx=ctx,
-        )
-
-        position_monitor = PositionMonitor(
-            config=ctx.config,
-            shared=ctx.shared,
-            portfolio=ctx.portfolio,
-            ai_decision=ai_decision,
-            ctx=ctx,
-        )
+        market_monitor = MarketMonitor(ctx, ai_decision=ai_decision, rotation_manager=rotation_manager)
+        position_monitor = PositionMonitor(ctx, ai_decision=ai_decision)
 
         # Start WebSocket server
         if ctx.config.logging.ws_enabled:

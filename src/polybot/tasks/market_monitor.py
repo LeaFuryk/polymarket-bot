@@ -12,24 +12,15 @@ import logging
 import time
 from typing import TYPE_CHECKING
 
-from polybot.adaptive_entry import AdaptiveEntryTracker
-from polybot.config import AppConfig
-
 if TYPE_CHECKING:
     from polybot.agent.context import AgentContext
     from polybot.agent.rotation import RotationManager
-    from polybot.datastore import DataStore, MarketHistoryStore
     from polybot.tasks.ai_decision import AIDecision
 from polybot.indicators import (
-    FeatureConfig,
     SessionContext,
     compute_indicators,
 )
-from polybot.market_data.provider import MarketDataProvider
-from polybot.prefilter import PreFilter
-from polybot.resolution import ResolutionTracker
-from polybot.shared_state import PreFilterSnapshot, SharedState
-from polybot.simulator.portfolio import Portfolio
+from polybot.shared_state import PreFilterSnapshot
 
 logger = logging.getLogger(__name__)
 
@@ -39,37 +30,27 @@ class MarketMonitor:
 
     def __init__(
         self,
-        config: AppConfig,
-        shared: SharedState,
-        market_data: MarketDataProvider,
-        prefilter: PreFilter,
-        portfolio: Portfolio,
-        resolution_tracker: ResolutionTracker,
+        ctx: AgentContext,
         ai_decision: AIDecision,
         rotation_manager: RotationManager,
-        datastore: DataStore | None = None,
-        feature_config: FeatureConfig | None = None,
-        market_history: MarketHistoryStore | None = None,
-        adaptive_entry: AdaptiveEntryTracker | None = None,
-        ctx: AgentContext | None = None,
     ) -> None:
-        self._config = config
-        self._shared = shared
-        self._market_data = market_data
-        self._prefilter = prefilter
-        self._portfolio = portfolio
-        self._resolution_tracker = resolution_tracker
+        self._config = ctx.config
+        self._shared = ctx.shared
+        self._market_data = ctx.market_data
+        self._prefilter = ctx.prefilter
+        self._portfolio = ctx.portfolio
+        self._resolution_tracker = ctx.resolution_tracker
         self._ai_decision = ai_decision
         self._rotation = rotation_manager
-        self._datastore = datastore
-        self._feature_config = feature_config
-        self._market_history = market_history
-        self._adaptive_entry = adaptive_entry
+        self._datastore = ctx.datastore
+        self._feature_config = ctx.feature_config if ctx.datastore else None
+        self._market_history = ctx.market_history
+        self._adaptive_entry = ctx.adaptive_entry
         self._ctx = ctx
-        self._interval = config.monitor.market_monitor_interval
-        self._rr_threshold = config.monitor.rr_trigger_threshold
-        self._cooldown = config.monitor.ai_cooldown_seconds
-        self._adaptive_enabled = config.monitor.adaptive_entry_enabled
+        self._interval = ctx.config.monitor.market_monitor_interval
+        self._rr_threshold = ctx.config.monitor.rr_trigger_threshold
+        self._cooldown = ctx.config.monitor.ai_cooldown_seconds
+        self._adaptive_enabled = ctx.config.monitor.adaptive_entry_enabled
         self._discovery_counter = 0
 
     async def run(self) -> None:
