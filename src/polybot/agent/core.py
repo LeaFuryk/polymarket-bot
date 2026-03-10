@@ -80,14 +80,12 @@ class TradingAgent:
                 tc.dry_run,
             )
 
-        # Load BTC 5-min candle history
-        await ctx.market_data.btc_feed.load_candle_history(200)
-
-        # Bootstrap adaptive entry from Binance if insufficient history
-        await ctx.adaptive_entry.bootstrap_from_binance()
-
-        # Resolve any pending bets from previous sessions
-        await resolve_pending_bets(ctx, log=self._log)
+        # Parallel startup: all three are independent network calls
+        await asyncio.gather(
+            ctx.market_data.btc_feed.load_candle_history(200),
+            ctx.adaptive_entry.bootstrap_from_binance(),
+            resolve_pending_bets(ctx, log=self._log),
+        )
 
         # Create task objects — AIDecision first (monitors reference it)
         ctx.ai_decision = AIDecision(
