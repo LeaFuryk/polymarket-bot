@@ -88,33 +88,7 @@ class TradingAgent:
         )
 
         # Create task objects — AIDecision first (monitors reference it)
-        ai_decision = AIDecision(
-            config=ctx.config,
-            shared=ctx.shared,
-            decision_engine=ctx.decision_engine,
-            execution_sim=ctx.execution_sim,
-            orderbook=ctx.orderbook,
-            portfolio=ctx.portfolio,
-            risk=ctx.risk,
-            trade_log=ctx.trade_log,
-            prefilter=ctx.prefilter,
-            calibrator=ctx.calibrator,
-            exit_tracker=ctx.exit_tracker,
-            ml_scorer=ctx.ml_scorer,
-            knowledge_manager=ctx.knowledge_manager,
-            feature_config=ctx.feature_config,
-            resolution_tracker=ctx.resolution_tracker,
-            adaptive_entry=ctx.adaptive_entry,
-            recent_resolutions=ctx.recent_resolutions,
-            recent_trades=ctx.recent_trades,
-            session_trades=ctx.session_trades,
-            pending_ml_features=ctx.pending_ml_features,
-            live_engine=ctx.live_engine,
-            shadow_portfolio=ctx.shadow_portfolio,
-        )
-
-        if ctx.datastore is not None:
-            ai_decision._datastore = ctx.datastore
+        ai_decision = AIDecision(ctx)
 
         # Wire up WS trade event push
         async def _on_trade(record):
