@@ -95,14 +95,14 @@ class AIDecision:
         # Optional SQLite analytics
         self._datastore = ctx.datastore
 
+        # WebSocket dashboard broadcaster
+        self._ws_broadcaster = ctx.ws_broadcaster
+
         # Shared mutable state from agent
         self._recent_resolutions = ctx.recent_resolutions
         self._recent_trades = ctx.recent_trades
         self._session_trades = ctx.session_trades
         self._pending_ml_features = ctx.pending_ml_features
-
-        # Optional callback for WS trade event push
-        self.on_trade_callback = None  # set by agent: Callable[[TradeRecord], Awaitable[None]]
         # Optional callback fired after every entry/exit evaluation completes
         self.on_cycle_complete = None  # set by agent: Callable[[], Awaitable[None]]
 
@@ -1096,10 +1096,10 @@ class AIDecision:
         self._session_trades.append(record)
 
         # Push trade event to WS clients
-        if self.on_trade_callback is not None:
+        if self._ws_broadcaster and self._ws_broadcaster.has_clients:
             try:
-                import asyncio
-
-                asyncio.get_event_loop().create_task(self.on_trade_callback(record))
+                asyncio.get_event_loop().create_task(
+                    self._ws_broadcaster.broadcast(self._ws_broadcaster.build_trade_event(record))
+                )
             except Exception:
-                logger.debug("on_trade_callback failed", exc_info=True)
+                logger.debug("WS trade broadcast failed", exc_info=True)
