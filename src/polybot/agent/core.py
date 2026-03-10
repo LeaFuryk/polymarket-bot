@@ -50,10 +50,10 @@ class TradingAgent:
         for sig in (signal.SIGINT, signal.SIGTERM):
             loop.add_signal_handler(sig, self._handle_signal)
 
+        # TODO: This will refactore to a single store which contains data specifically oriented for finetuning
         # Open SQLite analytics store
         if ctx.datastore is not None:
             ctx.datastore.open()
-
         # Open persistent market history store
         ctx.market_history.open()
 
@@ -79,9 +79,6 @@ class TradingAgent:
                 tc.max_session_loss_usd,
                 tc.dry_run,
             )
-
-        # Start Chainlink WebSocket feed (primary BTC price — matches resolution)
-        await ctx.chainlink_ws.start()
 
         # Load BTC 5-min candle history
         await ctx.market_data.btc_feed.load_candle_history(200)
@@ -215,7 +212,6 @@ class TradingAgent:
         ctx = self._ctx
         self._log.info("Shutting down components...")
         await self._ws_server.stop()
-        await ctx.chainlink_ws.stop()
         if ctx.datastore is not None:
             await ctx.datastore.close()
         await ctx.market_history.close()

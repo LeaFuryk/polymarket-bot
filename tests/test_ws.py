@@ -202,7 +202,7 @@ class TestBroadcaster:
         snapshot.down_orderbook.midpoint = 0.55
         snapshot.btc_price.price_usd = 85000.0
         snapshot.btc_price.chainlink_price = 85001.0
-        snapshot.btc_price.price_source = "chainlink_ws"
+        snapshot.btc_price.price_source = "binance"
         ctx.shared.latest_snapshot = snapshot
 
         msg = b.build_market_update(ctx)

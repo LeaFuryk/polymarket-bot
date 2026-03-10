@@ -37,7 +37,6 @@ class BtcPriceFeed:
         self,
         api_config: ApiConfig,
         cache_ttl: float = BTC_PRICE_CACHE_TTL,
-        chainlink_ws=None,
         logger: logging.Logger | None = None,
     ) -> None:
         self._log = logger or logging.getLogger(__name__)
@@ -53,10 +52,6 @@ class BtcPriceFeed:
         # Separate cache for 24h change from CoinGecko (updates less frequently)
         self._24h_change_pct: float = 0.0
         self._24h_change_time: float = 0.0
-        # Chainlink WS feed (cross-reference only — too unreliable for primary use)
-        from polybot.market_data.chainlink_ws import ChainlinkWSFeed
-
-        self._chainlink_ws: ChainlinkWSFeed | None = chainlink_ws
 
     @property
     def candles(self) -> list[BtcCandle]:
@@ -301,19 +296,13 @@ class BtcPriceFeed:
             self._log.error("All BTC price sources failed")
             return self._cache  # return stale cache
 
-        # Cross-reference: Chainlink WS (if active) or RPC for divergence display
+        # Cross-reference: Chainlink RPC for divergence display
         chainlink_display = None
         divergence = None
-        if self._chainlink_ws and self._chainlink_ws.is_active:
-            cl_price = self._chainlink_ws.price
-            if cl_price:
-                chainlink_display = cl_price
-                divergence = price_usd - cl_price
-        else:
-            chainlink_rpc = await self._fetch_chainlink_price()
-            if chainlink_rpc:
-                chainlink_display = chainlink_rpc
-                divergence = price_usd - chainlink_rpc
+        chainlink_rpc = await self._fetch_chainlink_price()
+        if chainlink_rpc:
+            chainlink_display = chainlink_rpc
+            divergence = price_usd - chainlink_rpc
 
         if divergence is not None:
             self._log.debug(

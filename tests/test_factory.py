@@ -11,7 +11,6 @@ from polybot.config import AppConfig
 # All classes constructed inside ContextFactory.build()
 _FACTORY_MODULE = "polybot.agent.factory"
 _PATCHES = [
-    f"{_FACTORY_MODULE}.ChainlinkWSFeed",
     f"{_FACTORY_MODULE}.MarketDiscovery",
     f"{_FACTORY_MODULE}.MarketDataProvider",
     f"{_FACTORY_MODULE}.DecisionEngine",
@@ -76,7 +75,6 @@ class TestContextFactory:
             ctx = factory.build()
 
             assert ctx.config is config
-            assert ctx.chainlink_ws is mocks["ChainlinkWSFeed"].return_value
             assert ctx.discovery is mocks["MarketDiscovery"].return_value
             assert ctx.market_data is mocks["MarketDataProvider"].return_value
             assert ctx.decision_engine is mocks["DecisionEngine"].return_value

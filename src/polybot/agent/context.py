@@ -22,7 +22,6 @@ if TYPE_CHECKING:
     from polybot.indicators import FeatureConfig
     from polybot.knowledge import KnowledgeManager
     from polybot.logging.trade_log import TradeLog
-    from polybot.market_data.chainlink_ws import ChainlinkWSFeed
     from polybot.market_data.discovery import MarketDiscovery
     from polybot.market_data.provider import MarketDataProvider
     from polybot.ml_scorer import MLScorer
@@ -46,7 +45,6 @@ class AgentContext:
     config: AppConfig
 
     # Sub-components
-    chainlink_ws: ChainlinkWSFeed
     discovery: MarketDiscovery
     market_data: MarketDataProvider
     decision_engine: DecisionEngine
