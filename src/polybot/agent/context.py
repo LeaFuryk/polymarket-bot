@@ -22,7 +22,6 @@ if TYPE_CHECKING:
     from polybot.indicators import FeatureConfig
     from polybot.knowledge import KnowledgeManager
     from polybot.logging.trade_log import TradeLog
-    from polybot.market_data.chainlink_ws import ChainlinkWSFeed
     from polybot.market_data.discovery import MarketDiscovery
     from polybot.market_data.provider import MarketDataProvider
     from polybot.ml_scorer import MLScorer
@@ -34,10 +33,7 @@ if TYPE_CHECKING:
     from polybot.simulator.engine import ExecutionSimulator
     from polybot.simulator.orderbook import SimulatedOrderBook
     from polybot.simulator.portfolio import Portfolio
-    from polybot.tasks.ai_decision import AIDecision
-    from polybot.tasks.position_monitor import PositionMonitor
     from polybot.ws.broadcaster import DashboardBroadcaster
-    from polybot.ws.server import DashboardWSServer
 
 
 @dataclass
@@ -48,7 +44,6 @@ class AgentContext:
     config: AppConfig
 
     # Sub-components
-    chainlink_ws: ChainlinkWSFeed
     discovery: MarketDiscovery
     market_data: MarketDataProvider
     decision_engine: DecisionEngine
@@ -74,11 +69,6 @@ class AgentContext:
 
     # WebSocket dashboard
     ws_broadcaster: DashboardBroadcaster | None = None
-    ws_server: DashboardWSServer | None = None
-
-    # Task objects (set during run())
-    ai_decision: AIDecision | None = None
-    position_monitor: PositionMonitor | None = None
 
     # Datastores
     datastore: DataStore | None = None

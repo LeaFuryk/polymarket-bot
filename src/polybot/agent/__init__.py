@@ -2,18 +2,28 @@
 
 from polybot.agent.context import AgentContext
 from polybot.agent.core import TradingAgent
-from polybot.agent.dashboard import DashboardAssembler, enrich_iteration_summary
-from polybot.agent.helpers import compute_pnl_from_trades, setup_logging
-from polybot.agent.rotation import RotationManager
-from polybot.agent.state import StatePersistence
+from polybot.agent.dashboard import (
+    assemble_dashboard_data,
+    sync_from_ai_decision,
+    write_dashboard_json,
+)
+from polybot.agent.factory import ContextFactory
+from polybot.agent.helpers import (
+    StartupData,
+    compute_pnl_from_trades,
+    enrich_iteration_summary,
+    load_startup_data,
+)
 
 __all__ = [
     "AgentContext",
-    "DashboardAssembler",
-    "RotationManager",
-    "StatePersistence",
+    "ContextFactory",
+    "StartupData",
     "TradingAgent",
+    "assemble_dashboard_data",
     "compute_pnl_from_trades",
     "enrich_iteration_summary",
-    "setup_logging",
+    "load_startup_data",
+    "sync_from_ai_decision",
+    "write_dashboard_json",
 ]

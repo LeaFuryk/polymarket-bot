@@ -19,13 +19,10 @@ class ConfigLoader:
 
     # Maps POLYBOT_* env vars to (section_name, attribute, type).
     _ENV_MAP: dict[str, tuple[str, str, type]] = {
-        "POLYBOT_MARKET_CONDITION_ID": ("market", "condition_id", str),
-        "POLYBOT_MARKET_TOKEN_ID": ("market", "token_id", str),
+        "POLYBOT_MARKET_SERIES_SLUG": ("market", "series_slug", str),
         "POLYBOT_AI_API_KEY": ("ai", "api_key", str),
         "POLYBOT_AI_MODEL": ("ai", "model", str),
-        "POLYBOT_AGENT_DECISION_INTERVAL": ("agent", "decision_interval", int),
         "POLYBOT_AGENT_INITIAL_CASH": ("agent", "initial_cash", float),
-        "POLYBOT_AGENT_MAX_CYCLES": ("agent", "max_cycles", int),
         "POLYBOT_AGENT_MIN_CONFIDENCE": ("agent", "min_confidence", float),
         "POLYBOT_RISK_DAILY_LOSS_LIMIT_PCT": ("risk", "daily_loss_limit_pct", float),
         "POLYBOT_KNOWLEDGE_DIR": ("logging", "knowledge_dir", str),

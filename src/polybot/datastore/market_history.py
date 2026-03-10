@@ -5,12 +5,9 @@ from __future__ import annotations
 import asyncio
 import logging
 import sqlite3
-import time
 from pathlib import Path
 
 from polybot.datastore.constants import (
-    FLUSH_BATCH_SIZE,
-    FLUSH_INTERVAL_SECONDS,
     JOURNAL_MODE,
     SYNCHRONOUS_MODE,
 )
@@ -92,6 +89,7 @@ class MarketHistoryStore:
         self._current_candle_id: int | None = None
         self._pending_items: list[MarketSnapshotRow] = []
         self._logger = logger or _default_logger
+        self._writer_task: asyncio.Task | None = None
 
     @property
     def current_candle_id(self) -> int | None:
@@ -109,6 +107,13 @@ class MarketHistoryStore:
         self._logger.info("MarketHistoryStore opened: %s (iteration=%s)", self._db_path, self._iteration)
 
     async def close(self) -> None:
+        if self._writer_task is not None:
+            self._writer_task.cancel()
+            try:
+                await self._writer_task
+            except asyncio.CancelledError:
+                pass
+            self._writer_task = None
         if self._conn is None:
             return
         await self._flush()
@@ -182,7 +187,13 @@ class MarketHistoryStore:
 
     # --- Non-blocking queue API ---
 
+    def _ensure_writer(self) -> None:
+        """Start the writer task lazily on first enqueue."""
+        if self._writer_task is None or self._writer_task.done():
+            self._writer_task = asyncio.create_task(self._writer_loop(), name="market_history_writer")
+
     def queue_snapshot(self, row: MarketSnapshotRow) -> None:
+        self._ensure_writer()
         try:
             self._queue.put_nowait(row)
         except asyncio.QueueFull:
@@ -190,40 +201,19 @@ class MarketHistoryStore:
 
     # --- Background writer task ---
 
-    async def writer_loop(self) -> None:
-        self._logger.info("MarketHistoryStore writer_loop started")
-        last_flush = time.monotonic()
-
-        while True:
-            try:
+    async def _writer_loop(self) -> None:
+        """Drain queue and batch-insert every 0.5s."""
+        self._logger.info("MarketHistoryStore writer started")
+        try:
+            while True:
+                await asyncio.sleep(0.5)
                 try:
-                    item = await asyncio.wait_for(self._queue.get(), timeout=FLUSH_INTERVAL_SECONDS)
-                    self._pending_items.append(item)
-                except TimeoutError:
-                    pass
-                except asyncio.CancelledError:
-                    raise
-
-                while not self._queue.empty():
-                    try:
-                        item = self._queue.get_nowait()
-                        self._pending_items.append(item)
-                    except asyncio.QueueEmpty:
-                        break
-
-                now = time.monotonic()
-                elapsed = now - last_flush
-                if len(self._pending_items) >= FLUSH_BATCH_SIZE or elapsed >= FLUSH_INTERVAL_SECONDS:
                     await self._flush()
-                    last_flush = time.monotonic()
-
-            except asyncio.CancelledError:
-                await self._flush()
-                self._logger.info("MarketHistoryStore writer_loop stopped")
-                return
-            except Exception:
-                self._logger.exception("MarketHistoryStore writer_loop error")
-                await asyncio.sleep(1.0)
+                except Exception:
+                    self._logger.debug("MarketHistoryStore flush error", exc_info=True)
+        except asyncio.CancelledError:
+            await self._flush()
+            self._logger.info("MarketHistoryStore writer stopped")
 
     async def _flush(self) -> None:
         while not self._queue.empty():

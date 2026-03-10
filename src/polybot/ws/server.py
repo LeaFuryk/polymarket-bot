@@ -13,6 +13,8 @@ from polybot.ws.constants import DEFAULT_WS_HOST, DEFAULT_WS_PORT, PING_INTERVAL
 if TYPE_CHECKING:
     from websockets.server import WebSocketServerProtocol
 
+    from polybot.agent.context import AgentContext
+
 
 class DashboardWSServer:
     """Async WebSocket server for pushing live dashboard state to clients."""
@@ -23,13 +25,14 @@ class DashboardWSServer:
         host: str = DEFAULT_WS_HOST,
         port: int = DEFAULT_WS_PORT,
         logger: logging.Logger | None = None,
+        ctx: AgentContext | None = None,
     ) -> None:
         self._broadcaster = broadcaster
         self._host = host
         self._port = port
         self._logger = logger or logging.getLogger(__name__)
         self._server: websockets.WebSocketServer | None = None
-        self._initial_snapshot_builder = None  # set by agent
+        self._ctx = ctx
 
     async def start(self) -> None:
         """Start the WebSocket server."""
@@ -49,17 +52,25 @@ class DashboardWSServer:
             await self._server.wait_closed()
             self._logger.info("WS server stopped")
 
+    def _build_initial_snapshot(self) -> str | None:
+        """Build a full dashboard snapshot message for newly connected clients."""
+        if self._ctx is None:
+            return None
+        from polybot.agent.dashboard import build_snapshot_message
+
+        return build_snapshot_message(self._ctx, log=self._logger)
+
     async def _handler(self, ws: WebSocketServerProtocol, path: str = "") -> None:
         """Handle a single WebSocket client connection."""
         self._broadcaster.add_client(ws)
         try:
             # Send initial full snapshot on connect
-            if self._initial_snapshot_builder is not None:
-                try:
-                    snapshot_msg = self._initial_snapshot_builder()
+            try:
+                snapshot_msg = self._build_initial_snapshot()
+                if snapshot_msg is not None:
                     await ws.send(snapshot_msg)
-                except Exception:
-                    self._logger.debug("Failed to send initial snapshot", exc_info=True)
+            except Exception:
+                self._logger.debug("Failed to send initial snapshot", exc_info=True)
 
             # Keep connection alive — listen for client messages (unused for now)
             async for _msg in ws:

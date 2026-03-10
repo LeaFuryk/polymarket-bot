@@ -12,21 +12,15 @@ import logging
 import time
 from typing import TYPE_CHECKING
 
-from polybot.adaptive_entry import AdaptiveEntryTracker
-from polybot.config import AppConfig
-
 if TYPE_CHECKING:
-    from polybot.datastore import DataStore, MarketHistoryStore
+    from polybot.agent.context import AgentContext
+    from polybot.agent.rotation import RotationManager
+    from polybot.tasks.ai_decision import AIDecision
 from polybot.indicators import (
-    FeatureConfig,
     SessionContext,
     compute_indicators,
 )
-from polybot.market_data.provider import MarketDataProvider
-from polybot.prefilter import PreFilter
-from polybot.resolution import ResolutionTracker
-from polybot.shared_state import PreFilterSnapshot, SharedState
-from polybot.simulator.portfolio import Portfolio
+from polybot.shared_state import PreFilterSnapshot
 
 logger = logging.getLogger(__name__)
 
@@ -36,31 +30,28 @@ class MarketMonitor:
 
     def __init__(
         self,
-        config: AppConfig,
-        shared: SharedState,
-        market_data: MarketDataProvider,
-        prefilter: PreFilter,
-        portfolio: Portfolio,
-        resolution_tracker: ResolutionTracker,
-        datastore: DataStore | None = None,
-        feature_config: FeatureConfig | None = None,
-        market_history: MarketHistoryStore | None = None,
-        adaptive_entry: AdaptiveEntryTracker | None = None,
+        ctx: AgentContext,
+        ai_decision: AIDecision,
+        rotation_manager: RotationManager,
     ) -> None:
-        self._config = config
-        self._shared = shared
-        self._market_data = market_data
-        self._prefilter = prefilter
-        self._portfolio = portfolio
-        self._resolution_tracker = resolution_tracker
-        self._datastore = datastore
-        self._feature_config = feature_config
-        self._market_history = market_history
-        self._adaptive_entry = adaptive_entry
-        self._interval = config.monitor.market_monitor_interval
-        self._rr_threshold = config.monitor.rr_trigger_threshold
-        self._cooldown = config.monitor.ai_cooldown_seconds
-        self._adaptive_enabled = config.monitor.adaptive_entry_enabled
+        self._config = ctx.config
+        self._shared = ctx.shared
+        self._market_data = ctx.market_data
+        self._prefilter = ctx.prefilter
+        self._portfolio = ctx.portfolio
+        self._resolution_tracker = ctx.resolution_tracker
+        self._ai_decision = ai_decision
+        self._rotation = rotation_manager
+        self._datastore = ctx.datastore
+        self._feature_config = ctx.feature_config if ctx.datastore else None
+        self._market_history = ctx.market_history
+        self._adaptive_entry = ctx.adaptive_entry
+        self._ctx = ctx
+        self._interval = ctx.config.monitor.market_monitor_interval
+        self._rr_threshold = ctx.config.monitor.rr_trigger_threshold
+        self._cooldown = ctx.config.monitor.ai_cooldown_seconds
+        self._adaptive_enabled = ctx.config.monitor.adaptive_entry_enabled
+        self._discovery_counter = 0
 
     async def run(self) -> None:
         """Main loop — runs until shutdown."""
@@ -72,6 +63,7 @@ class MarketMonitor:
 
             try:
                 await self._tick()
+                await self._broadcast_updates()
             except Exception:
                 logger.exception("MarketMonitor tick error")
 
@@ -83,11 +75,19 @@ class MarketMonitor:
         """Single monitoring cycle."""
         market = self._shared.current_market
         if market is None:
+            await self._rotation.discover_market()
             return
 
         time_remaining = market.time_remaining()
         if time_remaining <= 0:
+            await self._rotation.discover_market()
             return
+
+        # Periodic discovery during normal operation (every 5 ticks ≈ 5s)
+        self._discovery_counter += 1
+        if self._discovery_counter >= 5:
+            self._discovery_counter = 0
+            await self._rotation.discover_market()
 
         # Fetch market snapshot
         try:
@@ -215,8 +215,8 @@ class MarketMonitor:
             gate_status = f"ADAPTIVE: {adaptive_reason}"
         elif cooldown_active:
             gate_status = f"COOLDOWN: {cooldown_remaining:.0f}s remaining"
-        elif self._shared.ai_trigger_event.is_set():
-            gate_status = "AI PENDING (waiting for previous decision)"
+        elif self._ai_decision.busy:
+            gate_status = "AI BUSY (waiting for previous decision)"
 
         self._shared.monitor_status = {
             "timestamp": now,
@@ -249,27 +249,36 @@ class MarketMonitor:
             "gate_status": gate_status,
         }
 
-        if should_trigger and not self._shared.ai_trigger_event.is_set():
+        if should_trigger and not self._ai_decision.busy:
             if not cooldown_active:
                 if self._adaptive_enabled and self._adaptive_entry is not None:
-                    self._shared.ai_trigger_reason = (
+                    reason = (
                         f"adaptive btc_thresh=${self._adaptive_entry.btc_threshold:.0f}, "
                         f"max_entry=${self._adaptive_entry.max_entry_price:.2f}, "
                         f"min_ask=${min_ask:.2f} ({best_side}), "
                         f"btc_move=${btc_move:+.0f}"
                     )
                 else:
-                    self._shared.ai_trigger_reason = (
+                    reason = (
                         f"R/R={best_rr:.2f} ({best_side}), "
                         f"prefilter={'PASS' if prefilter_passed else 'SKIP'}, "
                         f"btc_move=${btc_move:+.0f}"
                     )
-                self._shared.ai_trigger_event.set()
+                asyncio.create_task(self._ai_decision.evaluate_entry(reason))
                 logger.info(
                     "AI triggered: %s (cooldown=%.0fs elapsed)",
-                    self._shared.ai_trigger_reason,
+                    reason,
                     elapsed,
                 )
+
+    async def _broadcast_updates(self) -> None:
+        """Push lightweight market + status updates to WS clients."""
+        if self._ctx is None:
+            return
+        ws = self._ctx.ws_broadcaster
+        if ws and ws.has_clients:
+            await ws.broadcast(ws.build_market_update(self._ctx))
+            await ws.broadcast(ws.build_status_update(self._ctx))
 
     def _queue_snapshot(
         self,
