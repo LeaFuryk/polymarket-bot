@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -189,7 +190,7 @@ class TestStartupData:
         config = MagicMock()
         config.logging.log_dir = str(tmp_path)
 
-        data = load_startup_data(config)
+        data = load_startup_data(config, logging.getLogger("test"))
         assert data.resolutions_since_reflection == 0
         assert data.historical_resolutions == []
         assert data.historical_trades == []
@@ -210,7 +211,7 @@ class TestStartupData:
         config = MagicMock()
         config.logging.log_dir = str(tmp_path)
 
-        data = load_startup_data(config)
+        data = load_startup_data(config, logging.getLogger("test"))
         assert data.resolutions_since_reflection == 7
         assert data.knowledge_state == {"some": "data"}
 
@@ -281,7 +282,7 @@ class TestStartupData:
         config = MagicMock()
         config.logging.log_dir = str(tmp_path)
 
-        data = load_startup_data(config)
+        data = load_startup_data(config, logging.getLogger("test"))
         assert len(data.historical_resolutions) == 1
         assert data.historical_resolutions[0]["slug"] == "btc-5m-123"
         assert data.historical_resolutions[0]["pnl"] == 2.5

@@ -29,63 +29,62 @@ class StartupData:
     iteration_label: str = "iter_001"
 
 
-def load_startup_data(config: AppConfig, log: logging.Logger | None = None) -> StartupData:
+def load_startup_data(config: AppConfig, log: logging.Logger) -> StartupData:
     """Collect all persisted data from disk before AgentContext is built.
 
     Reads four sources and packs them into a single StartupData object:
       1. ``agent_state.json`` → resolutions_since_reflection, knowledge_state
-      2. ``resolutions_*.jsonl`` / ``trades_*.jsonl`` → historical_resolutions, historical_trades
-      3. ``archive/*/summary.json`` → iteration_summaries (enriched via enrich_iteration_summary)
-      4. ``archive/iter_*`` directory count → iteration_label (e.g. "iter_003")
+      2. ``resolutions_*.jsonl`` → historical_resolutions
+      3. ``trades_*.jsonl`` → historical_trades
+      4. ``archive/*/summary.json`` → iteration_summaries (enriched via enrich_iteration_summary)
+      5. ``archive/iter_*`` directory count → iteration_label (e.g. "iter_003")
 
     Returns:
         A fully-populated StartupData that ContextFactory.build() uses to
         pre-populate AgentContext fields and seed the KnowledgeManager.
     """
-    _log = log or logging.getLogger(__name__)
-    data = StartupData()
+    log_dir = Path(config.logging.log_dir)
+    resolutions_since_reflection, knowledge_state = _load_agent_state(log_dir, log)
 
-    # Load agent_state.json
-    state_path = Path(config.logging.log_dir) / "agent_state.json"
+    return StartupData(
+        resolutions_since_reflection=resolutions_since_reflection,
+        knowledge_state=knowledge_state,
+        historical_resolutions=_load_resolutions(log_dir, log),
+        historical_trades=_load_trades(log_dir, log),
+        iteration_summaries=load_iteration_summaries(log=log),
+        iteration_label=compute_iteration_label(),
+    )
+
+
+def _load_agent_state(log_dir: Path, log: logging.Logger) -> tuple[int, dict]:
+    """Load ``agent_state.json`` from the log directory.
+
+    Returns:
+        A tuple of (resolutions_since_reflection, knowledge_state).
+    """
+    state_path = log_dir / "agent_state.json"
     try:
         if state_path.exists():
             raw = json.loads(state_path.read_text())
-            data.resolutions_since_reflection = raw.get("resolutions_since_reflection", 0)
-            data.knowledge_state = raw.get("knowledge", {})
-            _log.info(
-                "Loaded agent state: resolutions_since_reflection=%d",
-                data.resolutions_since_reflection,
-            )
+            resolutions = raw.get("resolutions_since_reflection", 0)
+            knowledge = raw.get("knowledge", {})
+            log.info("Loaded agent state: resolutions_since_reflection=%d", resolutions)
+            return resolutions, knowledge
     except Exception:
-        _log.warning("Could not load agent state, starting fresh")
-
-    # Load JSONL history (resolutions + trades)
-    _load_history_from_logs(config, data, _log)
-
-    # Load archived iteration summaries
-    data.iteration_summaries = load_iteration_summaries(log=_log)
-
-    # Compute iteration label
-    data.iteration_label = compute_iteration_label()
-
-    return data
+        log.warning("Could not load agent state, starting fresh")
+    return 0, {}
 
 
-def _load_history_from_logs(config: AppConfig, data: StartupData, log: logging.Logger) -> None:
-    """Parse ``resolutions_*.jsonl`` and ``trades_*.jsonl`` from the log directory.
-
-    Appends normalised dicts to ``data.historical_resolutions`` and
-    ``data.historical_trades`` in chronological file order.
-    """
-    log_dir = Path(config.logging.log_dir)
-
+def _load_resolutions(log_dir: Path, log: logging.Logger) -> list[dict]:
+    """Parse ``resolutions_*.jsonl`` from the log directory."""
+    resolutions: list[dict] = []
     for res_file in sorted(log_dir.glob("resolutions_*.jsonl")):
         try:
             for line in res_file.read_text().strip().split("\n"):
                 if not line.strip():
                     continue
                 r = json.loads(line)
-                data.historical_resolutions.append(
+                resolutions.append(
                     {
                         "timestamp": datetime.fromtimestamp(r.get("timestamp", 0), tz=UTC).isoformat(),
                         "slug": r.get("slug", ""),
@@ -98,14 +97,21 @@ def _load_history_from_logs(config: AppConfig, data: StartupData, log: logging.L
                 )
         except Exception:
             log.debug("Could not load resolution file %s", res_file, exc_info=True)
+    if resolutions:
+        log.info("Loaded %d historical resolutions from logs", len(resolutions))
+    return resolutions
 
+
+def _load_trades(log_dir: Path, log: logging.Logger) -> list[dict]:
+    """Parse ``trades_*.jsonl`` from the log directory."""
+    trades: list[dict] = []
     for trade_file in sorted(log_dir.glob("trades_*.jsonl")):
         try:
             for line in trade_file.read_text().strip().split("\n"):
                 if not line.strip():
                     continue
                 t = json.loads(line)
-                data.historical_trades.append(
+                trades.append(
                     {
                         "timestamp": datetime.fromtimestamp(t.get("timestamp", 0), tz=UTC).isoformat(),
                         "cycle": t.get("cycle_number", 0),
@@ -134,11 +140,9 @@ def _load_history_from_logs(config: AppConfig, data: StartupData, log: logging.L
                 )
         except Exception:
             log.debug("Could not load trade file %s", trade_file, exc_info=True)
-
-    if data.historical_resolutions:
-        log.info("Loaded %d historical resolutions from logs", len(data.historical_resolutions))
-    if data.historical_trades:
-        log.info("Loaded %d historical trades from logs", len(data.historical_trades))
+    if trades:
+        log.info("Loaded %d historical trades from logs", len(trades))
+    return trades
 
 
 def save_agent_state(ctx: AgentContext, log: logging.Logger | None = None) -> None:
