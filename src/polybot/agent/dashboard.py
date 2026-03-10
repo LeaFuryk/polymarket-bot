@@ -197,13 +197,13 @@ def assemble_dashboard_data(
     all_trades = ctx.historical_trades + trades
     seen_slugs: set[str] = set()
     all_resolutions: list[dict] = []
-    for r in ctx.historical_resolutions + resolutions:
-        slug = r.get("slug", "")
+    for res in ctx.historical_resolutions + resolutions:
+        slug = res.get("slug", "")
         if slug and slug not in seen_slugs:
             seen_slugs.add(slug)
-            all_resolutions.append(r)
+            all_resolutions.append(res)
         elif not slug:
-            all_resolutions.append(r)
+            all_resolutions.append(res)
 
     all_time_pnl = sum(r.get("pnl", 0) for r in all_resolutions)
     all_time_wins = sum(1 for r in all_resolutions if r.get("pnl", 0) > 0.001)
@@ -458,7 +458,8 @@ def build_snapshot_message(
     from polybot.ws.protocol import MSG_SNAPSHOT, make_message
 
     data = assemble_dashboard_data(ctx, ai_decision=ai_decision, log=log)
-    data["ws_clients"] = ctx.ws_broadcaster.client_count
+    if ctx.ws_broadcaster is not None:
+        data["ws_clients"] = ctx.ws_broadcaster.client_count
     return make_message(MSG_SNAPSHOT, data)
 
 
