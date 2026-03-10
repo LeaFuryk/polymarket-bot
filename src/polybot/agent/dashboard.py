@@ -14,6 +14,7 @@ from polybot.tasks.prompt_context import compute_reversal_regime
 
 if TYPE_CHECKING:
     from polybot.agent.context import AgentContext
+    from polybot.tasks.ai_decision import AIDecision
 
 logger = logging.getLogger(__name__)
 
@@ -31,19 +32,17 @@ def _ml_model_dict(ctx: AgentContext) -> dict:
     }
 
 
-def sync_from_ai_decision(ctx: AgentContext) -> None:
+def sync_from_ai_decision(ctx: AgentContext, ai_decision: AIDecision) -> None:
     """Sync dashboard state from the AIDecision task."""
-    if ctx.ai_decision is None:
-        return
-    ctx.last_action = ctx.ai_decision.last_action
-    ctx.last_reasoning = ctx.ai_decision.last_reasoning
-    ctx.last_risk_status = ctx.ai_decision.last_risk_status
-    ctx.last_token_side = ctx.ai_decision.last_token_side
-    ctx.session_wins = ctx.ai_decision.session_wins
-    ctx.session_losses = ctx.ai_decision.session_losses
-    ctx.session_resolution_pnl = ctx.ai_decision.session_resolution_pnl
-    ctx.total_api_cost = ctx.ai_decision.total_api_cost
-    ctx.last_cycle_api_cost = ctx.ai_decision.last_cycle_api_cost
+    ctx.last_action = ai_decision.last_action
+    ctx.last_reasoning = ai_decision.last_reasoning
+    ctx.last_risk_status = ai_decision.last_risk_status
+    ctx.last_token_side = ai_decision.last_token_side
+    ctx.session_wins = ai_decision.session_wins
+    ctx.session_losses = ai_decision.session_losses
+    ctx.session_resolution_pnl = ai_decision.session_resolution_pnl
+    ctx.total_api_cost = ai_decision.total_api_cost
+    ctx.last_cycle_api_cost = ai_decision.last_cycle_api_cost
 
     # Sync adaptive entry signals → SharedState for dynamic SL/TP
     if ctx.adaptive_entry is not None:
@@ -87,7 +86,11 @@ def compute_market_trend(snapshot) -> dict:
     }
 
 
-def assemble_dashboard_data(ctx: AgentContext, log: logging.Logger | None = None) -> dict:
+def assemble_dashboard_data(
+    ctx: AgentContext,
+    ai_decision: AIDecision | None = None,
+    log: logging.Logger | None = None,
+) -> dict:
     """Assemble full dashboard state as a dict (used by both JSON writer and WS)."""
     _log = log or logger
     snapshot = ctx.shared.latest_snapshot
@@ -278,7 +281,7 @@ def assemble_dashboard_data(ctx: AgentContext, log: logging.Logger | None = None
             "portfolio_value": portfolio_value,
             "initial_cash": ctx.config.agent.initial_cash,
             "market_trading_pnl": ctx.portfolio.market_trading_pnl,
-            "cycles_run": ctx.ai_decision._cycle_count if ctx.ai_decision else 0,
+            "cycles_run": ai_decision._cycle_count if ai_decision else 0,
             "prefilter_skip_rate": ctx.prefilter.skip_rate,
             "prefilter_skipped": ctx.prefilter.total_skipped,
             "prefilter_checked": ctx.prefilter.total_checks,
@@ -356,15 +359,17 @@ def assemble_dashboard_data(ctx: AgentContext, log: logging.Logger | None = None
             **ctx.adaptive_entry.fakeout_stats,
         },
         "ensemble": {
-            "screen_calls": ctx.ai_decision._screen_calls,
-            "screen_passes": ctx.ai_decision._screen_passes,
-            "screen_pass_rate": round(ctx.ai_decision._screen_passes / max(1, ctx.ai_decision._screen_calls), 3),
-            "sonnet_trades": ctx.ai_decision._sonnet_trades,
-            "ml_sonnet_agree": ctx.ai_decision._ml_sonnet_agree,
-            "ml_sonnet_total": ctx.ai_decision._ml_sonnet_total,
-            "ml_sonnet_agree_rate": round(
-                ctx.ai_decision._ml_sonnet_agree / max(1, ctx.ai_decision._ml_sonnet_total), 3
-            ),
+            "screen_calls": ai_decision._screen_calls if ai_decision else 0,
+            "screen_passes": ai_decision._screen_passes if ai_decision else 0,
+            "screen_pass_rate": round(ai_decision._screen_passes / max(1, ai_decision._screen_calls), 3)
+            if ai_decision
+            else 0,
+            "sonnet_trades": ai_decision._sonnet_trades if ai_decision else 0,
+            "ml_sonnet_agree": ai_decision._ml_sonnet_agree if ai_decision else 0,
+            "ml_sonnet_total": ai_decision._ml_sonnet_total if ai_decision else 0,
+            "ml_sonnet_agree_rate": round(ai_decision._ml_sonnet_agree / max(1, ai_decision._ml_sonnet_total), 3)
+            if ai_decision
+            else 0,
         },
         "outage": {
             "is_down": ctx.outage_start is not None,
@@ -444,23 +449,31 @@ def assemble_dashboard_data(ctx: AgentContext, log: logging.Logger | None = None
     return data
 
 
-def build_snapshot_message(ctx: AgentContext, log: logging.Logger | None = None) -> str:
+def build_snapshot_message(
+    ctx: AgentContext,
+    ai_decision: AIDecision | None = None,
+    log: logging.Logger | None = None,
+) -> str:
     """Build a full WS snapshot message from the current dashboard state."""
     from polybot.ws.protocol import MSG_SNAPSHOT, make_message
 
-    data = assemble_dashboard_data(ctx, log=log)
+    data = assemble_dashboard_data(ctx, ai_decision=ai_decision, log=log)
     data["ws_clients"] = ctx.ws_broadcaster.client_count
     return make_message(MSG_SNAPSHOT, data)
 
 
-def write_dashboard_json(ctx: AgentContext, log: logging.Logger | None = None) -> None:
+def write_dashboard_json(
+    ctx: AgentContext,
+    ai_decision: AIDecision | None = None,
+    log: logging.Logger | None = None,
+) -> None:
     """Write dashboard_data.json for the web dashboard."""
     _log = log or logger
     try:
         dashboard_path = Path(ctx.config.logging.log_dir) / "dashboard_data.json"
         dashboard_path.parent.mkdir(parents=True, exist_ok=True)
 
-        data = assemble_dashboard_data(ctx, log=_log)
+        data = assemble_dashboard_data(ctx, ai_decision=ai_decision, log=_log)
         dashboard_path.write_text(json.dumps(data, indent=2) + "\n")
 
         # Write iterations sidecar for dashboard

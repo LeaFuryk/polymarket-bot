@@ -20,6 +20,7 @@ if TYPE_CHECKING:
     from websockets.server import WebSocketServerProtocol
 
     from polybot.agent.context import AgentContext
+    from polybot.tasks.ai_decision import AIDecision
 
 
 class DashboardBroadcaster:
@@ -100,7 +101,7 @@ class DashboardBroadcaster:
         }
         return make_message(MSG_POSITION, data)
 
-    def build_status_update(self, ctx: AgentContext) -> str:
+    def build_status_update(self, ctx: AgentContext, ai_decision: AIDecision | None = None) -> str:
         """Tech metrics: monitor, risk, latencies (every 2s)."""
         data = {
             "timestamp": time.time(),
@@ -129,8 +130,8 @@ class DashboardBroadcaster:
                 "checked": ctx.prefilter.total_checks,
             },
             "ensemble": {
-                "screen_calls": ctx.ai_decision._screen_calls if ctx.ai_decision else 0,
-                "screen_passes": ctx.ai_decision._screen_passes if ctx.ai_decision else 0,
+                "screen_calls": ai_decision._screen_calls if ai_decision else 0,
+                "screen_passes": ai_decision._screen_passes if ai_decision else 0,
             },
         }
         return make_message(MSG_STATUS, data)

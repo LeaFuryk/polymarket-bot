@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from polybot.agent.context import AgentContext
     from polybot.models import CandleMarket
+    from polybot.tasks.ai_decision import AIDecision
 
 from polybot.shared_state import CandleMicrostructure
 
@@ -17,8 +18,14 @@ from polybot.shared_state import CandleMicrostructure
 class RotationManager:
     """Discovers markets and handles candle transitions."""
 
-    def __init__(self, ctx: AgentContext, logger: logging.Logger | None = None) -> None:
+    def __init__(
+        self,
+        ctx: AgentContext,
+        ai_decision: AIDecision | None = None,
+        logger: logging.Logger | None = None,
+    ) -> None:
         self._ctx = ctx
+        self._ai_decision = ai_decision
         self._log = logger or logging.getLogger(__name__)
 
     async def discover_market(self) -> CandleMarket | None:
@@ -217,10 +224,10 @@ class RotationManager:
                     )
 
                 # Sync stats to AI decision task
-                if ctx.ai_decision:
-                    ctx.ai_decision.session_wins = ctx.session_wins
-                    ctx.ai_decision.session_losses = ctx.session_losses
-                    ctx.ai_decision.session_resolution_pnl = ctx.session_resolution_pnl
+                if self._ai_decision:
+                    self._ai_decision.session_wins = ctx.session_wins
+                    self._ai_decision.session_losses = ctx.session_losses
+                    self._ai_decision.session_resolution_pnl = ctx.session_resolution_pnl
 
                 # Sync stats to SharedState for indicator computation in MarketMonitor
                 ctx.shared.session_wins = ctx.session_wins
@@ -269,8 +276,8 @@ class RotationManager:
                     if reflection_cost > 0:
                         ctx.portfolio.cash -= reflection_cost
                         ctx.total_api_cost += reflection_cost
-                        if ctx.ai_decision:
-                            ctx.ai_decision.total_api_cost = ctx.total_api_cost
+                        if self._ai_decision:
+                            self._ai_decision.total_api_cost = ctx.total_api_cost
                         self._log.info(
                             "Reflection API cost: $%.4f (session total: $%.4f)",
                             reflection_cost,
