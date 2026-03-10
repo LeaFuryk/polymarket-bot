@@ -5,6 +5,7 @@ import sys
 
 from polybot.agent import TradingAgent
 from polybot.config import load_config
+from polybot.logging import create_logger
 
 
 def main() -> None:
@@ -19,6 +20,7 @@ def main() -> None:
         print("ERROR: Set a valid series_slug in config or POLYBOT_MARKET_SERIES_SLUG")
         sys.exit(1)
 
+    create_logger(config)
     agent = TradingAgent(config)
     asyncio.run(agent.run())
 

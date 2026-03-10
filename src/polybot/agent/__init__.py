@@ -14,7 +14,6 @@ from polybot.agent.helpers import (
     enrich_iteration_summary,
     load_startup_data,
 )
-from polybot.logging import create_logger
 
 __all__ = [
     "AgentContext",
@@ -25,7 +24,6 @@ __all__ = [
     "compute_pnl_from_trades",
     "enrich_iteration_summary",
     "load_startup_data",
-    "create_logger",
     "sync_from_ai_decision",
     "write_dashboard_json",
 ]
