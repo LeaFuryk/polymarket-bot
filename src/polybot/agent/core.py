@@ -90,13 +90,6 @@ class TradingAgent:
         # Create task objects — AIDecision first (monitors reference it)
         ai_decision = AIDecision(ctx)
 
-        # Wire up WS trade event push
-        async def _on_trade(record):
-            if ctx.ws_broadcaster.has_clients:
-                await ctx.ws_broadcaster.broadcast(ctx.ws_broadcaster.build_trade_event(record))
-
-        ai_decision.on_trade_callback = _on_trade
-
         # Wire on_cycle_complete: sync dashboard state + broadcast snapshot + balance sync
         _last_balance_sync = 0.0
 
