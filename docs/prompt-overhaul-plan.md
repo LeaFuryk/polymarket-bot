@@ -663,6 +663,73 @@ Before A/B testing, benchmark the new prompt with real API calls:
 - Clean up indicator text builders that are no longer needed
 - If screening disabled in Phase 4, remove screening prompt and Haiku call path
 
+### Phase 5b: Streaming early-action execution
+
+**Goal:** Fire orders as soon as `action` + `token_side` + `confidence` stream in, without waiting for `reasoning` to finish generating.
+
+**How it works:**
+
+The Anthropic API supports [fine-grained tool streaming](https://platform.claude.com/docs/en/agents-and-tools/tool-use/fine-grained-tool-streaming) — setting `eager_input_streaming: true` on the `make_decision` tool streams the JSON fields as they're generated, token by token.
+
+Since Claude generates tool JSON fields roughly in schema-property order, reordering the schema puts execution-critical fields first:
+
+```
+Stream arrives: {"action":"BUY","token_side":"down","confidence":0.78,"size":50,
+                  ↑ fire order here (all 4 execution fields received)
+                 "reasoning":"Strong downward momentum with...","hypothetical_direction":"down"}
+                  ↑ reasoning arrives later — log it, but order is already placed
+```
+
+**Schema field ordering (execution-critical first):**
+
+```json
+{
+  "properties": {
+    "action": { ... },
+    "token_side": { ... },
+    "confidence": { ... },
+    "size": { ... },
+    "reasoning": { ... },
+    "hypothetical_direction": { ... }
+  },
+  "required": ["action", "token_side", "confidence", "size", "reasoning", "hypothetical_direction"]
+}
+```
+
+**Implementation:**
+
+1. **Enable streaming on `make_decision` tool:**
+   ```python
+   {
+       "name": "make_decision",
+       "eager_input_streaming": True,
+       "input_schema": { ... }  # action, token_side, confidence, size first
+   }
+   ```
+
+2. **New streaming parser** — accumulates partial JSON chunks, attempts incremental parse after each chunk:
+   ```python
+   async for event in stream:
+       if event is input_json_delta:
+           buffer += event.partial_json
+           parsed = try_parse_partial(buffer)
+           if parsed and has_execution_fields(parsed) and not order_fired:
+               await fire_order(parsed)  # action, token_side, confidence, size
+               order_fired = True
+   # After stream completes: extract full decision (with reasoning)
+   ```
+
+3. **Confidence gate still applies** — order only fires once `confidence` field is fully parsed and passes `min_confidence`. If confidence is below gate, wait for stream to finish and return HOLD as usual.
+
+4. **Fallback on partial JSON** — if stream hits `max_tokens` or disconnects before execution fields arrive, treat as HOLD (same as current exception handling).
+
+**Latency savings:** Reasoning is typically 15-30 tokens (~0.5-1s of generation). On a 4-6s total call, this saves ~10-20% of wall-clock time on the execution path. The real win is that the order hits the CLOB while Claude is still writing the explanation.
+
+**Files touched:**
+- `src/polybot/decision_engine/engine.py` — streaming `decide()` variant
+- `src/polybot/decision_engine/schemas.py` — reorder properties, add `eager_input_streaming`
+- `src/polybot/tasks/ai_decision.py` — consume streaming result, fire order on partial
+
 ### Phase 6: Fine-tuning (future)
 
 Once enough data is collected (1000+ resolved decisions):
