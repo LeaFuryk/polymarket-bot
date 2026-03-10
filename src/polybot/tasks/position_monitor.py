@@ -15,9 +15,7 @@ import logging
 import time
 from typing import TYPE_CHECKING
 
-from polybot.config import AppConfig
-from polybot.shared_state import EntryContext, SharedState
-from polybot.simulator.portfolio import Portfolio
+from polybot.shared_state import EntryContext
 
 if TYPE_CHECKING:
     from polybot.agent.context import AgentContext
@@ -31,20 +29,17 @@ class PositionMonitor:
 
     def __init__(
         self,
-        config: AppConfig,
-        shared: SharedState,
-        portfolio: Portfolio,
+        ctx: AgentContext,
         ai_decision: AIDecision,
-        ctx: AgentContext | None = None,
     ) -> None:
-        self._config = config
-        self._shared = shared
-        self._portfolio = portfolio
+        self._config = ctx.config
+        self._shared = ctx.shared
+        self._portfolio = ctx.portfolio
         self._ai_decision = ai_decision
         self._ctx = ctx
-        self._interval = config.monitor.position_monitor_interval
-        self._stop_loss_pct = config.monitor.stop_loss_pct
-        self._take_profit_pct = config.monitor.take_profit_pct
+        self._interval = ctx.config.monitor.position_monitor_interval
+        self._stop_loss_pct = ctx.config.monitor.stop_loss_pct
+        self._take_profit_pct = ctx.config.monitor.take_profit_pct
 
         # Track which positions have already triggered (avoid re-triggering)
         self._triggered: dict[str, str] = {}  # token_side -> trigger_type
