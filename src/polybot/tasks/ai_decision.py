@@ -10,40 +10,26 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from typing import TYPE_CHECKING
 
-from polybot.adaptive_entry import AdaptiveEntryTracker
-from polybot.calibration import ConfidenceCalibrator
-from polybot.config import AppConfig
-from polybot.decision_engine.engine import DecisionEngine
-from polybot.execution.live import LiveExecutionEngine
-from polybot.exit_tracker import ExitTracker
 from polybot.indicators import (
-    FeatureConfig,
     SessionContext,
     compute_indicators,
     format_indicators,
 )
-from polybot.knowledge import KnowledgeManager
-from polybot.logging.trade_log import TradeLog
-from polybot.ml_scorer import MLScorer
 from polybot.models import (
     Action,
     CandleMarket,
     FeatureVector,
     OrderType,
-    ResolutionRecord,
     TokenSide,
-    TradeRecord,
     TradingDecision,
 )
-from polybot.prefilter import PreFilter
-from polybot.resolution import ResolutionTracker
-from polybot.risk.manager import RiskManager
-from polybot.shared_state import EntryContext, SharedState
+from polybot.shared_state import EntryContext
 from polybot.shared_state.stop_loss_record import StopLossRecord
-from polybot.simulator.engine import ExecutionSimulator
-from polybot.simulator.orderbook import SimulatedOrderBook
-from polybot.simulator.portfolio import Portfolio
+
+if TYPE_CHECKING:
+    from polybot.agent.context import AgentContext
 from polybot.tasks.context_builder import (
     append_section,
     build_chainlink_warning,
@@ -82,62 +68,38 @@ logger = logging.getLogger(__name__)
 class AIDecision:
     """Event-driven AI decision maker."""
 
-    def __init__(
-        self,
-        config: AppConfig,
-        shared: SharedState,
-        decision_engine: DecisionEngine,
-        execution_sim: ExecutionSimulator,
-        orderbook: SimulatedOrderBook,
-        portfolio: Portfolio,
-        risk: RiskManager,
-        trade_log: TradeLog,
-        prefilter: PreFilter,
-        calibrator: ConfidenceCalibrator,
-        exit_tracker: ExitTracker,
-        ml_scorer: MLScorer,
-        knowledge_manager: KnowledgeManager,
-        feature_config: FeatureConfig,
-        resolution_tracker: ResolutionTracker,
-        # Mutable state references from agent
-        recent_resolutions: list[ResolutionRecord],
-        recent_trades: list[TradeRecord],
-        session_trades: list[TradeRecord],
-        pending_ml_features: dict[str, dict[str, float]],
-        adaptive_entry: AdaptiveEntryTracker | None = None,
-        live_engine: LiveExecutionEngine | None = None,
-        shadow_portfolio: Portfolio | None = None,
-    ) -> None:
-        self._config = config
-        self._shared = shared
-        self._engine = decision_engine
-        self._exec_sim = execution_sim
-        self._orderbook = orderbook
-        self._portfolio = portfolio
-        self._risk = risk
-        self._trade_log = trade_log
-        self._prefilter = prefilter
-        self._calibrator = calibrator
-        self._exit_tracker = exit_tracker
-        self._ml_scorer = ml_scorer
-        self._knowledge = knowledge_manager
-        self._feature_config = feature_config
-        self._resolution_tracker = resolution_tracker
-        self._adaptive_entry = adaptive_entry
+    def __init__(self, ctx: AgentContext) -> None:
+        # Store context reference
+        self._config = ctx.config
+        self._shared = ctx.shared
+        self._engine = ctx.decision_engine
+        self._exec_sim = ctx.execution_sim
+        self._orderbook = ctx.orderbook
+        self._portfolio = ctx.portfolio
+        self._risk = ctx.risk
+        self._trade_log = ctx.trade_log
+        self._prefilter = ctx.prefilter
+        self._calibrator = ctx.calibrator
+        self._exit_tracker = ctx.exit_tracker
+        self._ml_scorer = ctx.ml_scorer
+        self._knowledge = ctx.knowledge_manager
+        self._feature_config = ctx.feature_config
+        self._resolution_tracker = ctx.resolution_tracker
+        self._adaptive_entry = ctx.adaptive_entry
 
         # Live trading engine (None in paper mode)
-        self._live_engine = live_engine
-        self._shadow_portfolio = shadow_portfolio
-        self._live_mode = live_engine is not None
+        self._live_engine = ctx.live_engine
+        self._shadow_portfolio = ctx.shadow_portfolio
+        self._live_mode = ctx.live_engine is not None
 
         # Optional SQLite analytics
-        self._datastore = None  # set by agent if sqlite_enabled
+        self._datastore = ctx.datastore
 
         # Shared mutable state from agent
-        self._recent_resolutions = recent_resolutions
-        self._recent_trades = recent_trades
-        self._session_trades = session_trades
-        self._pending_ml_features = pending_ml_features
+        self._recent_resolutions = ctx.recent_resolutions
+        self._recent_trades = ctx.recent_trades
+        self._session_trades = ctx.session_trades
+        self._pending_ml_features = ctx.pending_ml_features
 
         # Optional callback for WS trade event push
         self.on_trade_callback = None  # set by agent: Callable[[TradeRecord], Awaitable[None]]
