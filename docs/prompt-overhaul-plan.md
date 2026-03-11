@@ -656,6 +656,10 @@ Before A/B testing, benchmark the new prompt with real API calls:
 - Measure: does exposing ml_scorer weights/accuracy change AI behavior?
 - Measure: Sonnet latency with new prompts — if consistently <5s, disable screening
 
+### Phase 4b: Revisit `iteration_enricher.py`
+
+After the new data models are in place, revisit `src/polybot/agent/iteration_enricher.py`. This module exists because dashboard data is stored as raw flat lists and we re-derive analytics (calibration, exit analysis, trade stats, execution quality, resolution analysis, candle snapshots) on every load. With properly structured data models, most or all of this enrichment should be unnecessary — delete or radically simplify.
+
 ### Phase 5: Deprecate v1
 
 - Remove old prompt constants

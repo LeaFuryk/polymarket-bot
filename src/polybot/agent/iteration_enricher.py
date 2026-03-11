@@ -1,4 +1,13 @@
-"""Enriches archived iteration summaries with derived analytics from dashboard data."""
+"""Enriches archived iteration summaries with derived analytics from dashboard data.
+
+# TODO(prompt-rethink): REVISIT THIS ENTIRE FILE
+# This module exists because the dashboard data model is poorly structured —
+# it stores raw trades/resolutions as flat lists and we have to re-derive
+# analytics (calibration, exit analysis, trade stats, etc.) on every load.
+# After the prompt overhaul and data model redesign, most of this enrichment
+# should be unnecessary — the data should already be stored in the right shape.
+# Delete or radically simplify this file once the new models are in place.
+"""
 
 from __future__ import annotations
 
