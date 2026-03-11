@@ -62,15 +62,10 @@ class TestInjectableLoggers:
         b = DashboardBroadcaster(logger=custom)
         assert b._logger is custom
 
-    def test_server_default_logger(self):
-        b = DashboardBroadcaster()
-        s = DashboardWSServer(b)
-        assert s._logger.name == "polybot.ws.server"
-
-    def test_server_custom_logger(self):
+    def test_server_uses_provided_logger(self):
         custom = logging.getLogger("test.server")
         b = DashboardBroadcaster()
-        s = DashboardWSServer(b, logger=custom)
+        s = DashboardWSServer(b, ctx=MagicMock(), logger=custom)
         assert s._logger is custom
 
 
@@ -265,7 +260,7 @@ class TestServer:
     @pytest.mark.asyncio
     async def test_server_starts_and_stops(self):
         broadcaster = DashboardBroadcaster()
-        server = DashboardWSServer(broadcaster, port=0)  # port 0 = OS picks
+        server = DashboardWSServer(broadcaster, ctx=MagicMock(), logger=logging.getLogger("test"), port=0)
         await server.start()
         assert server._server is not None
         await server.stop()
@@ -275,7 +270,7 @@ class TestServer:
         import websockets
 
         broadcaster = DashboardBroadcaster()
-        server = DashboardWSServer(broadcaster, port=18765)
+        server = DashboardWSServer(broadcaster, ctx=MagicMock(), logger=logging.getLogger("test"), port=18765)
 
         # Override snapshot builder to return test data (no real ctx needed)
         server._build_initial_snapshot = lambda: make_message("snapshot", {"test": True})
@@ -298,7 +293,7 @@ class TestServer:
         import websockets
 
         broadcaster = DashboardBroadcaster()
-        server = DashboardWSServer(broadcaster, port=18766)
+        server = DashboardWSServer(broadcaster, ctx=MagicMock(), logger=logging.getLogger("test"), port=18766)
 
         await server.start()
         try:
