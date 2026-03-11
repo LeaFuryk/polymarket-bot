@@ -185,18 +185,18 @@ class TestStartupData:
         assert compute_iteration_label() == "iter_003"
 
     def test_load_startup_data_fresh(self, tmp_path):
-        from polybot.agent.helpers import load_startup_data
+        from polybot.agent.helpers import StartupLoader
 
         config = MagicMock()
         config.logging.log_dir = str(tmp_path)
 
-        data = load_startup_data(config, logging.getLogger("test"))
+        data = StartupLoader(config, logging.getLogger("test")).load()
         assert data.resolutions_since_reflection == 0
         assert data.historical_resolutions == []
         assert data.historical_trades == []
 
     def test_load_startup_data_from_file(self, tmp_path):
-        from polybot.agent.helpers import load_startup_data
+        from polybot.agent.helpers import StartupLoader
 
         state_file = tmp_path / "agent_state.json"
         state_file.write_text(
@@ -211,7 +211,7 @@ class TestStartupData:
         config = MagicMock()
         config.logging.log_dir = str(tmp_path)
 
-        data = load_startup_data(config, logging.getLogger("test"))
+        data = StartupLoader(config, logging.getLogger("test")).load()
         assert data.resolutions_since_reflection == 7
         assert data.knowledge_state == {"some": "data"}
 
@@ -232,7 +232,7 @@ class TestStartupData:
         assert data["knowledge"] == {"key": "val"}
 
     def test_load_history_from_logs(self, tmp_path):
-        from polybot.agent.helpers import load_startup_data
+        from polybot.agent.helpers import StartupLoader
 
         # Write a resolution log
         res_file = tmp_path / "resolutions_2024.jsonl"
@@ -282,7 +282,7 @@ class TestStartupData:
         config = MagicMock()
         config.logging.log_dir = str(tmp_path)
 
-        data = load_startup_data(config, logging.getLogger("test"))
+        data = StartupLoader(config, logging.getLogger("test")).load()
         assert len(data.historical_resolutions) == 1
         assert data.historical_resolutions[0]["slug"] == "btc-5m-123"
         assert data.historical_resolutions[0]["pnl"] == 2.5
