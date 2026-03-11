@@ -6,7 +6,7 @@ import asyncio
 import signal
 
 from polybot.agent.factory import ContextFactory
-from polybot.agent.helpers import load_startup_data, resolve_pending_bets
+from polybot.agent.helpers import StartupLoader, resolve_pending_bets
 from polybot.agent.rotation import RotationManager
 from polybot.config import AppConfig
 from polybot.logging import create_logger
@@ -24,7 +24,7 @@ class TradingAgent:
         self._log = create_logger(config)
 
         # Load persisted state before building context
-        startup_data = load_startup_data(config, log=self._log)
+        startup_data = StartupLoader(config, log=self._log).load()
 
         # Build AgentContext via factory (all sub-component wiring)
         factory = ContextFactory(config, startup_data, logger=self._log)

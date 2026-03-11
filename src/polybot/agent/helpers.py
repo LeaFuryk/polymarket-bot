@@ -10,12 +10,12 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from polybot.config import AppConfig
 from polybot.ml_scorer.constants import MIN_TRAINING_SAMPLES
 from polybot.utils import read_json, read_jsonl
 
 if TYPE_CHECKING:
     from polybot.agent.context import AgentContext
-    from polybot.config import AppConfig
 
 
 @dataclass
@@ -30,11 +30,6 @@ class StartupData:
     iteration_label: str = "iter_001"
 
 
-def load_startup_data(config: AppConfig, log: logging.Logger) -> StartupData:
-    """Convenience wrapper — delegates to :class:`StartupLoader`."""
-    return StartupLoader(Path(config.logging.log_dir), log).load()
-
-
 class StartupLoader:
     """Loads persisted state from disk before AgentContext is built.
 
@@ -46,8 +41,8 @@ class StartupLoader:
       5. ``archive/iter_*`` dirs    → iteration_label
     """
 
-    def __init__(self, log_dir: Path, log: logging.Logger) -> None:
-        self._log_dir = log_dir
+    def __init__(self, config: AppConfig, log: logging.Logger) -> None:
+        self._log_dir = Path(config.logging.log_dir)
         self._log = log
 
     def load(self) -> StartupData:
