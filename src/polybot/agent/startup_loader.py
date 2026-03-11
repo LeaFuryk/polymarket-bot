@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import logging
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -125,17 +124,14 @@ class StartupLoader:
         summaries: list[dict] = []
         if not archive_dir.exists():
             return summaries
-        for summary_path in sorted(archive_dir.glob("*/summary.json")):
-            try:
-                data = json.loads(summary_path.read_text())
-                iter_dir = summary_path.parent
-                dash_path = iter_dir / "logs" / "dashboard_data.json"
-                if dash_path.exists():
-                    dd = json.loads(dash_path.read_text())
-                    enrich_iteration_summary(data, dd, iter_dir)
-                summaries.append(data)
-            except Exception:
-                self._log.debug("Could not load summary: %s", summary_path, exc_info=True)
+        for iter_dir in sorted(d for d in archive_dir.iterdir() if d.is_dir()):
+            data = read_json(iter_dir, "summary.json", self._log)
+            if data is None:
+                continue
+            dd = read_json(iter_dir / "logs", "dashboard_data.json", self._log)
+            if dd is not None:
+                enrich_iteration_summary(data, dd, iter_dir)
+            summaries.append(data)
         if summaries:
             self._log.info("Loaded %d iteration summaries from archive", len(summaries))
         return summaries
