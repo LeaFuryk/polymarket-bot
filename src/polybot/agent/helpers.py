@@ -123,7 +123,7 @@ class StartupLoader:
 
     def _load_iteration_summaries(self) -> list[dict]:
         """Load and enrich all archived iteration summaries from ``archive/*/summary.json``."""
-        archive_dir = Path.cwd() / "archive"
+        archive_dir = self._log_dir.parent / "archive"
         summaries: list[dict] = []
         if not archive_dir.exists():
             return summaries
@@ -142,10 +142,9 @@ class StartupLoader:
             self._log.info("Loaded %d iteration summaries from archive", len(summaries))
         return summaries
 
-    @staticmethod
-    def _compute_iteration_label() -> str:
+    def _compute_iteration_label(self) -> str:
         """Determine the current iteration label from the ``archive/`` directory."""
-        archive_dir = Path.cwd() / "archive"
+        archive_dir = self._log_dir.parent / "archive"
         if not archive_dir.exists():
             return "iter_001"
         existing = sorted(d.name for d in archive_dir.iterdir() if d.is_dir() and d.name.startswith("iter_"))
