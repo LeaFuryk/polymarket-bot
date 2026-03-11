@@ -8,6 +8,9 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Refactored
+- **`agent/helpers`** — Decomposed `load_startup_data` into `StartupLoader` class (`startup_loader.py`) with focused private methods per data source. Extracted `enrich_iteration_summary` into `IterationSummaryEnricher` class (`iteration_enricher.py`) with per-section methods and `_extract` helper. Extracted generic `read_json`/`read_jsonl` into `polybot/utils.py`. Renamed `core.py` → `trading_agent.py`.
+- **`agent/context`** — Made `ws_broadcaster` and `market_history` required fields (always created by factory), removed unnecessary None guards across 7 files.
+- **`ws/server`** — Made `ctx` and `logger` required on `DashboardWSServer`, removed None guard in `_build_initial_snapshot`.
 - **`agent/core`** — Reduced from 415 to 137 lines. Removed callback indirection (`on_trade_callback`, `on_cycle_complete`), parallelized startup network calls with `asyncio.gather`, simplified task construction to single-line `ctx`-based constructors.
 - **`tasks/ai_decision`** — Accepts `AgentContext` instead of 22 individual params. Owns dashboard sync and WS broadcast directly instead of via callbacks. Broadcasts trade events via `ws_broadcaster` reference.
 - **`tasks/market_monitor`** — Accepts `AgentContext` instead of 12 individual params.
