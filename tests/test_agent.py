@@ -104,7 +104,7 @@ class TestEnrichIterationSummary:
     """Tests for enrich_iteration_summary."""
 
     def test_enriches_calibration(self):
-        from polybot.agent.helpers import enrich_iteration_summary
+        from polybot.agent.startup_loader import enrich_iteration_summary
 
         summary: dict = {}
         dd = {
@@ -117,7 +117,7 @@ class TestEnrichIterationSummary:
         assert summary["calibration"]["shadow_accuracy"] == 0.8
 
     def test_enriches_trade_analysis(self):
-        from polybot.agent.helpers import enrich_iteration_summary
+        from polybot.agent.startup_loader import enrich_iteration_summary
 
         summary: dict = {}
         dd = {
@@ -137,7 +137,7 @@ class TestEnrichIterationSummary:
         assert summary["trade_analysis"]["cheap_entries"] == 1
 
     def test_enriches_resolution_analysis(self):
-        from polybot.agent.helpers import enrich_iteration_summary
+        from polybot.agent.startup_loader import enrich_iteration_summary
 
         summary: dict = {}
         dd = {

@@ -7,7 +7,7 @@ from polybot.agent.dashboard import (
     write_dashboard_json,
 )
 from polybot.agent.factory import ContextFactory
-from polybot.agent.helpers import enrich_iteration_summary
+from polybot.agent.startup_loader import enrich_iteration_summary
 from polybot.agent.trading_agent import TradingAgent
 
 __all__ = [
