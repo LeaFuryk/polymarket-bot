@@ -104,7 +104,7 @@ class TestEnrichIterationSummary:
     """Tests for enrich_iteration_summary."""
 
     def test_enriches_calibration(self):
-        from polybot.agent.startup_loader import enrich_iteration_summary
+        from polybot.agent.iteration_enricher import IterationSummaryEnricher
 
         summary: dict = {}
         dd = {
@@ -112,12 +112,12 @@ class TestEnrichIterationSummary:
             "exit_analysis": {},
             "ml_model": {},
         }
-        enrich_iteration_summary(summary, dd)
+        IterationSummaryEnricher(summary, dd).enrich()
         assert summary["calibration"]["total_records"] == 10
         assert summary["calibration"]["shadow_accuracy"] == 0.8
 
     def test_enriches_trade_analysis(self):
-        from polybot.agent.startup_loader import enrich_iteration_summary
+        from polybot.agent.iteration_enricher import IterationSummaryEnricher
 
         summary: dict = {}
         dd = {
@@ -131,13 +131,13 @@ class TestEnrichIterationSummary:
             ],
             "resolutions": [],
         }
-        enrich_iteration_summary(summary, dd)
+        IterationSummaryEnricher(summary, dd).enrich()
         assert summary["trade_analysis"]["total_buys"] == 2
         assert summary["trade_analysis"]["total_holds"] == 1
         assert summary["trade_analysis"]["cheap_entries"] == 1
 
     def test_enriches_resolution_analysis(self):
-        from polybot.agent.startup_loader import enrich_iteration_summary
+        from polybot.agent.iteration_enricher import IterationSummaryEnricher
 
         summary: dict = {}
         dd = {
@@ -150,15 +150,15 @@ class TestEnrichIterationSummary:
                 {"slug": "b", "btc_move": -50.0, "pnl": -2.0},
             ],
         }
-        enrich_iteration_summary(summary, dd)
+        IterationSummaryEnricher(summary, dd).enrich()
         assert summary["resolution_analysis"]["total"] == 2
         assert summary["resolution_analysis"]["biggest_win"] == 5.0
         assert summary["resolution_analysis"]["biggest_loss"] == -2.0
 
     def test_import_from_package(self):
-        from polybot.agent import enrich_iteration_summary
+        from polybot.agent import IterationSummaryEnricher
 
-        assert callable(enrich_iteration_summary)
+        assert callable(IterationSummaryEnricher)
 
     def test_compute_market_trend_no_data(self):
         from polybot.agent.dashboard import compute_market_trend

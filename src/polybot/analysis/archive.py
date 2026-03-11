@@ -239,7 +239,7 @@ def _rebuild_iterations_json() -> int:
     This ensures the dashboard always reflects the latest archived iterations,
     even when the bot isn't running. Uses the same enrichment logic as the agent.
     """
-    from polybot.agent import enrich_iteration_summary
+    from polybot.agent import IterationSummaryEnricher
 
     summaries: list[dict] = []
     if not ARCHIVE_DIR.exists():
@@ -252,7 +252,7 @@ def _rebuild_iterations_json() -> int:
             dash_path = iter_dir / "logs" / "dashboard_data.json"
             if dash_path.exists():
                 dd = json.loads(dash_path.read_text())
-                enrich_iteration_summary(data, dd, iter_dir)
+                IterationSummaryEnricher(data, dd, iter_dir).enrich()
             summaries.append(data)
         except Exception:
             pass
