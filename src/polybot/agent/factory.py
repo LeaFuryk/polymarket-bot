@@ -8,7 +8,7 @@ from pathlib import Path
 from polybot import __version__
 from polybot.adaptive_entry import AdaptiveEntryTracker
 from polybot.agent.context import AgentContext
-from polybot.agent.helpers import StartupData
+from polybot.agent.startup_loader import StartupData
 from polybot.calibration import ConfidenceCalibrator
 from polybot.config import AppConfig
 from polybot.datastore import DataStore, MarketHistoryStore

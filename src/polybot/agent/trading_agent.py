@@ -6,8 +6,9 @@ import asyncio
 import signal
 
 from polybot.agent.factory import ContextFactory
-from polybot.agent.helpers import StartupLoader, resolve_pending_bets
+from polybot.agent.helpers import resolve_pending_bets
 from polybot.agent.rotation import RotationManager
+from polybot.agent.startup_loader import StartupLoader
 from polybot.config import AppConfig
 from polybot.logging import create_logger
 from polybot.tasks.ai_decision import AIDecision
