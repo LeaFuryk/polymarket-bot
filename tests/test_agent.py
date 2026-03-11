@@ -170,19 +170,19 @@ class TestStartupData:
     """Tests for StartupData and load_startup_data / save_agent_state."""
 
     def test_compute_iteration_label_no_archive(self, tmp_path, monkeypatch):
-        from polybot.agent.helpers import compute_iteration_label
+        from polybot.agent.helpers import StartupLoader
 
         monkeypatch.chdir(tmp_path)
-        assert compute_iteration_label() == "iter_001"
+        assert StartupLoader._compute_iteration_label() == "iter_001"
 
     def test_compute_iteration_label_with_existing(self, tmp_path, monkeypatch):
-        from polybot.agent.helpers import compute_iteration_label
+        from polybot.agent.helpers import StartupLoader
 
         monkeypatch.chdir(tmp_path)
         archive = tmp_path / "archive"
         (archive / "iter_001").mkdir(parents=True)
         (archive / "iter_002").mkdir(parents=True)
-        assert compute_iteration_label() == "iter_003"
+        assert StartupLoader._compute_iteration_label() == "iter_003"
 
     def test_load_startup_data_fresh(self, tmp_path):
         from polybot.agent.helpers import StartupLoader

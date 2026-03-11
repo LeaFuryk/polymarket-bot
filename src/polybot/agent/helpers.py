@@ -53,8 +53,8 @@ class StartupLoader:
             knowledge_state=knowledge,
             historical_resolutions=self._load_resolutions(),
             historical_trades=self._load_trades(),
-            iteration_summaries=load_iteration_summaries(log=self._log),
-            iteration_label=compute_iteration_label(),
+            iteration_summaries=self._load_iteration_summaries(),
+            iteration_label=self._compute_iteration_label(),
         )
 
     def _load_agent_state(self) -> tuple[int, dict]:
@@ -120,6 +120,39 @@ class StartupLoader:
         if trades:
             self._log.info("Loaded %d historical trades from logs", len(trades))
         return trades
+
+    def _load_iteration_summaries(self) -> list[dict]:
+        """Load and enrich all archived iteration summaries from ``archive/*/summary.json``."""
+        archive_dir = Path.cwd() / "archive"
+        summaries: list[dict] = []
+        if not archive_dir.exists():
+            return summaries
+        for summary_path in sorted(archive_dir.glob("*/summary.json")):
+            try:
+                data = json.loads(summary_path.read_text())
+                iter_dir = summary_path.parent
+                dash_path = iter_dir / "logs" / "dashboard_data.json"
+                if dash_path.exists():
+                    dd = json.loads(dash_path.read_text())
+                    enrich_iteration_summary(data, dd, iter_dir)
+                summaries.append(data)
+            except Exception:
+                self._log.debug("Could not load summary: %s", summary_path, exc_info=True)
+        if summaries:
+            self._log.info("Loaded %d iteration summaries from archive", len(summaries))
+        return summaries
+
+    @staticmethod
+    def _compute_iteration_label() -> str:
+        """Determine the current iteration label from the ``archive/`` directory."""
+        archive_dir = Path.cwd() / "archive"
+        if not archive_dir.exists():
+            return "iter_001"
+        existing = sorted(d.name for d in archive_dir.iterdir() if d.is_dir() and d.name.startswith("iter_"))
+        if not existing:
+            return "iter_001"
+        last_num = max(int(d.split("_")[1]) for d in existing)
+        return f"iter_{last_num + 1:03d}"
 
 
 def save_agent_state(ctx: AgentContext, log: logging.Logger | None = None) -> None:
@@ -241,23 +274,6 @@ async def _resolve_single_pending_bet(ctx: AgentContext, slug: str, trades: list
         btc_open,
         btc_close,
     )
-
-
-def compute_iteration_label() -> str:
-    """Determine the current iteration label from the ``archive/`` directory.
-
-    Scans ``archive/iter_*`` folders and returns the next sequential label
-    (e.g. ``"iter_003"`` when ``iter_001`` and ``iter_002`` exist).
-    Returns ``"iter_001"`` when no archive directory exists.
-    """
-    archive_dir = Path.cwd() / "archive"
-    if not archive_dir.exists():
-        return "iter_001"
-    existing = sorted(d.name for d in archive_dir.iterdir() if d.is_dir() and d.name.startswith("iter_"))
-    if not existing:
-        return "iter_001"
-    last_num = max(int(d.split("_")[1]) for d in existing)
-    return f"iter_{last_num + 1:03d}"
 
 
 def compute_pnl_from_trades(trades: list[dict], winner: str) -> float:
@@ -526,34 +542,3 @@ def enrich_iteration_summary(summary: dict, dd: dict, archive_dir: Path | None =
         }
     elif "trading_mode" not in summary:
         summary["trading_mode"] = dd.get("trading_mode", "paper")
-
-
-def load_iteration_summaries(log: logging.Logger | None = None) -> list[dict]:
-    """Load and enrich all archived iteration summaries from ``archive/*/summary.json``.
-
-    Each summary is enriched with its co-located ``dashboard_data.json`` via
-    ``enrich_iteration_summary()``.
-
-    Returns:
-        List of enriched summary dicts, sorted by archive folder name.
-    """
-    _log = log or logging.getLogger(__name__)
-    archive_dir = Path.cwd() / "archive"
-    summaries: list[dict] = []
-    if not archive_dir.exists():
-        return summaries
-    for summary_path in sorted(archive_dir.glob("*/summary.json")):
-        try:
-            data = json.loads(summary_path.read_text())
-            iter_dir = summary_path.parent
-            # Enrich with data from archived dashboard_data.json
-            dash_path = iter_dir / "logs" / "dashboard_data.json"
-            if dash_path.exists():
-                dd = json.loads(dash_path.read_text())
-                enrich_iteration_summary(data, dd, iter_dir)
-            summaries.append(data)
-        except Exception:
-            _log.debug("Could not load summary: %s", summary_path, exc_info=True)
-    if summaries:
-        _log.info("Loaded %d iteration summaries from archive", len(summaries))
-    return summaries
