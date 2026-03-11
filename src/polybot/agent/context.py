@@ -62,17 +62,19 @@ class AgentContext:
     feature_config: FeatureConfig
     shared: SharedState
 
+    # WebSocket dashboard
+    ws_broadcaster: DashboardBroadcaster
+
+    # Market history store
+    market_history: MarketHistoryStore
+
     # Live trading
     live_mode: bool = False
     live_engine: LiveExecutionEngine | None = None
     shadow_portfolio: Portfolio | None = None
 
-    # WebSocket dashboard
-    ws_broadcaster: DashboardBroadcaster | None = None
-
-    # Datastores
+    # Datastores (optional)
     datastore: DataStore | None = None
-    market_history: MarketHistoryStore | None = None
 
     # Current state
     current_market: CandleMarket | None = None
