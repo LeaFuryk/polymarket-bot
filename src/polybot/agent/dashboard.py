@@ -458,8 +458,7 @@ def build_snapshot_message(
     from polybot.ws.protocol import MSG_SNAPSHOT, make_message
 
     data = assemble_dashboard_data(ctx, ai_decision=ai_decision, log=log)
-    if ctx.ws_broadcaster is not None:
-        data["ws_clients"] = ctx.ws_broadcaster.client_count
+    data["ws_clients"] = ctx.ws_broadcaster.client_count
     return make_message(MSG_SNAPSHOT, data)
 
 
