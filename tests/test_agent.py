@@ -17,8 +17,8 @@ class TestAgentPackageImports:
 
         assert TradingAgent.__name__ == "TradingAgent"
 
-    def test_import_trading_agent_from_core(self):
-        from polybot.agent.core import TradingAgent
+    def test_import_trading_agent_from_module(self):
+        from polybot.agent.trading_agent import TradingAgent
 
         assert TradingAgent.__name__ == "TradingAgent"
 
@@ -170,7 +170,7 @@ class TestStartupData:
     """Tests for StartupData and load_startup_data / save_agent_state."""
 
     def test_compute_iteration_label_no_archive(self, tmp_path):
-        from polybot.agent.helpers import StartupLoader
+        from polybot.agent.startup_loader import StartupLoader
 
         config = MagicMock()
         config.logging.log_dir = str(tmp_path / "logs")
@@ -178,7 +178,7 @@ class TestStartupData:
         assert loader._compute_iteration_label() == "iter_001"
 
     def test_compute_iteration_label_with_existing(self, tmp_path):
-        from polybot.agent.helpers import StartupLoader
+        from polybot.agent.startup_loader import StartupLoader
 
         archive = tmp_path / "archive"
         (archive / "iter_001").mkdir(parents=True)
@@ -190,7 +190,7 @@ class TestStartupData:
         assert loader._compute_iteration_label() == "iter_003"
 
     def test_load_startup_data_fresh(self, tmp_path):
-        from polybot.agent.helpers import StartupLoader
+        from polybot.agent.startup_loader import StartupLoader
 
         config = MagicMock()
         config.logging.log_dir = str(tmp_path)
@@ -201,7 +201,7 @@ class TestStartupData:
         assert data.historical_trades == []
 
     def test_load_startup_data_from_file(self, tmp_path):
-        from polybot.agent.helpers import StartupLoader
+        from polybot.agent.startup_loader import StartupLoader
 
         state_file = tmp_path / "agent_state.json"
         state_file.write_text(
@@ -237,7 +237,7 @@ class TestStartupData:
         assert data["knowledge"] == {"key": "val"}
 
     def test_load_history_from_logs(self, tmp_path):
-        from polybot.agent.helpers import StartupLoader
+        from polybot.agent.startup_loader import StartupLoader
 
         # Write a resolution log
         res_file = tmp_path / "resolutions_2024.jsonl"

@@ -5,7 +5,7 @@ from __future__ import annotations
 from unittest.mock import patch
 
 from polybot.agent.context import AgentContext
-from polybot.agent.helpers import StartupData
+from polybot.agent.startup_loader import StartupData
 from polybot.config import AppConfig
 
 # All classes constructed inside ContextFactory.build()
