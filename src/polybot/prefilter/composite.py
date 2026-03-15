@@ -4,10 +4,6 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Sequence
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from polybot.indicators.results import IndicatorResults
 
 from polybot.models import MarketSnapshot
 from polybot.prefilter.constants import (
@@ -128,56 +124,6 @@ class PreFilter:
         )
 
         # Run filter pipeline — first skip wins
-        for f in self._filters:
-            should_skip, reason = f.check(
-                snapshot,
-                has_open_position=has_open_position,
-                streak=streak,
-                streak_direction=streak_dir,
-                btc_range=btc_range,
-                best_entry=best_entry,
-            )
-            if should_skip:
-                result.should_skip = True
-                result.reason = reason
-                self.total_skipped += 1
-                logger.info("Pre-filter SKIP: %s", reason)
-                return result
-
-        return result
-
-    def check_with_indicators(
-        self,
-        snapshot: MarketSnapshot,
-        indicator_results: IndicatorResults,
-        has_open_position: bool = False,
-    ) -> PreFilterResult:
-        """Run filter pipeline using pre-computed signals from IndicatorResults.
-
-        Same as :meth:`check` but reads streak, BTC range, and best entry
-        from a shared ``IndicatorResults`` instead of computing them here.
-        """
-        self.total_checks += 1
-
-        streak = int(indicator_results.get_value("Consecutive Streak", 0))
-        streak_dir = ""
-        streak_result = indicator_results.get("Consecutive Streak")
-        if streak_result is not None and streak > 0:
-            candles = snapshot.btc_candles
-            if candles:
-                streak_dir = candles[-1].direction
-        btc_range = indicator_results.get_value("BTC Range 30m", 0.0)
-        best_entry = indicator_results.get_value("Best Entry", 1.0)
-
-        result = PreFilterResult(
-            should_skip=False,
-            reason="",
-            consecutive_streak=streak,
-            streak_direction=streak_dir,
-            btc_range_30m=btc_range,
-            best_entry_price=best_entry,
-        )
-
         for f in self._filters:
             should_skip, reason = f.check(
                 snapshot,
