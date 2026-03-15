@@ -65,7 +65,6 @@ class MarketMonitor:
 
             try:
                 await self._tick()
-                await self._broadcast_updates()
             except Exception:
                 logger.exception("MarketMonitor tick error")
 
@@ -102,6 +101,9 @@ class MarketMonitor:
 
         # Evaluate AI trigger (always updates dashboard; only fires AI if all gates pass)
         self._evaluate_trigger(snapshot, pf_snapshot, pf_result, time_remaining)
+
+        # Broadcast fresh data to WS clients
+        await self._broadcast_updates()
 
     async def _ensure_market(self) -> bool:
         """Discovery/rotation guard. Returns True if ready to monitor."""
