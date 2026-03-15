@@ -14,7 +14,6 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from polybot.agent.context import AgentContext
-    from polybot.agent.rotation import RotationManager
     from polybot.indicators.results import IndicatorResults
     from polybot.tasks.ai_decision import AIDecision
 
@@ -32,7 +31,6 @@ class MarketMonitor:
         self,
         ctx: AgentContext,
         ai_decision: AIDecision,
-        rotation_manager: RotationManager,
     ) -> None:
         self._config = ctx.config
         self._shared = ctx.shared
@@ -41,7 +39,6 @@ class MarketMonitor:
         self._portfolio = ctx.portfolio
         self._resolution_tracker = ctx.resolution_tracker
         self._ai_decision = ai_decision
-        self._rotation = rotation_manager
         self._datastore = ctx.datastore
         self._feature_config = ctx.feature_config if ctx.datastore else None
         self._processor = ctx.processor
@@ -73,16 +70,16 @@ class MarketMonitor:
     async def _tick(self) -> None:
         """Single monitoring cycle.
 
-        Pipeline: fetch snapshot → rotation handling → compute indicators
-        → prefilter → evaluate AI trigger.
+        Pipeline: fetch snapshot → compute indicators → prefilter
+        → evaluate AI trigger.
+
+        Discovery, outage tracking, and rotation are handled inside
+        the provider and rotation manager — the monitor just consumes
+        the resulting snapshot.
         """
         snapshot = await self._market_data.get_snapshot()
-
         if snapshot is None:
-            self._rotation.record_discovery_failure()
             return
-
-        await self._rotation.handle_fetched_market()
 
         self._shared.latest_snapshot = snapshot
         self._shared.snapshot_timestamp = time.time()

@@ -6,6 +6,8 @@ import asyncio
 import logging
 import time
 from collections import deque
+from collections.abc import Callable, Coroutine
+from typing import TYPE_CHECKING
 
 from polybot.config import AppConfig
 from polybot.models import BetData, BtcData, CandleMarket, MarketSnapshot
@@ -17,12 +19,18 @@ from .constants import BTC_PRICE_CACHE_TTL, PRICE_HISTORY_SIZE
 from .discovery import MarketDiscovery
 from .polymarket_repository import PolymarketRepository
 
+if TYPE_CHECKING:
+    from polybot.ws.broadcaster import Broadcaster
+
 
 class MarketDataProvider:
     """Combines all market data sources into a single MarketSnapshot.
 
     Composes PolymarketRepository (orderbooks) and BtcRepository (price + candles),
     fetching them in parallel via asyncio.gather().
+
+    Detects market rotation (condition_id change) and fires the on_rotation
+    callback so the caller (RotationManager) can handle transition side effects.
     """
 
     def __init__(
@@ -44,6 +52,10 @@ class MarketDataProvider:
         self._price_history: deque[float] = deque(maxlen=PRICE_HISTORY_SIZE)
         self._btc_price_history: deque[float] = deque(maxlen=PRICE_HISTORY_SIZE)
 
+        self._prev_condition_id: str | None = None
+        self._on_rotation: Callable[[], Coroutine] | None = None
+        self._broadcaster: Broadcaster | None = None
+
     # --- Public properties ---
 
     @property
@@ -59,6 +71,33 @@ class MarketDataProvider:
     def rest_client(self) -> PolymarketRestClient:
         return self._polymarket.rest_client
 
+    # Outage state — delegated from the polymarket repo
+    @property
+    def discovery_failures(self) -> int:
+        return self._polymarket.discovery_failures
+
+    @property
+    def outage_start(self) -> float | None:
+        return self._polymarket.outage_start
+
+    @property
+    def outage_recovered(self) -> float | None:
+        return self._polymarket.outage_recovered
+
+    @property
+    def last_outage_duration(self) -> float:
+        return self._polymarket.last_outage_duration
+
+    # --- Wiring (called after construction) ---
+
+    def set_on_rotation(self, callback: Callable[[], Coroutine]) -> None:
+        """Register the callback fired when a market rotation is detected."""
+        self._on_rotation = callback
+
+    def set_broadcaster(self, broadcaster: Broadcaster) -> None:
+        """Register the WebSocket broadcaster for outage notifications."""
+        self._broadcaster = broadcaster
+
     def set_market(self, candle: CandleMarket) -> None:
         """Sync provider state for a new candle market."""
         self._polymarket.set_market(candle)
@@ -73,13 +112,24 @@ class MarketDataProvider:
         """Fetch Polymarket + BTC data in parallel, merge into MarketSnapshot.
 
         Returns None when market discovery fails (no active market found).
+        On market rotation (condition_id change), fires the on_rotation callback
+        before building the snapshot.
         """
         bet_data, btc_data = await asyncio.gather(
             self._polymarket.fetch(),
             self._btc_repo.fetch(),
         )
         if bet_data is None:
+            self._broadcast_outage()
             return None
+
+        # Detect rotation or first market
+        new_id = bet_data.market.condition_id
+        if self._prev_condition_id is None or new_id != self._prev_condition_id:
+            if self._on_rotation:
+                await self._on_rotation()
+            self._prev_condition_id = new_id
+
         return self._build_snapshot(bet_data, btc_data)
 
     def _build_snapshot(self, bet_data: BetData, btc_data: BtcData) -> MarketSnapshot:
@@ -110,3 +160,23 @@ class MarketDataProvider:
             btc_price_history=list(self._btc_price_history),
             btc_candles=btc_data.candles,
         )
+
+    def _broadcast_outage(self) -> None:
+        """Broadcast outage status to WS clients when discovery fails."""
+        if self._broadcaster is None or not self._broadcaster.has_clients:
+            return
+        if self._polymarket.outage_start is None:
+            return
+
+        from polybot.ws.protocol import MSG_MARKET, make_message
+
+        elapsed = time.time() - self._polymarket.outage_start
+        msg = make_message(
+            MSG_MARKET,
+            {
+                "outage": True,
+                "failures": self._polymarket.discovery_failures,
+                "outage_duration": round(elapsed, 1),
+            },
+        )
+        asyncio.create_task(self._broadcaster.broadcast(msg))

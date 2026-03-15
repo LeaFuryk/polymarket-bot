@@ -3,17 +3,26 @@
 from __future__ import annotations
 
 import logging
+import time
 
 from polybot.models import BetData, CandleMarket, OrderbookSnapshot
 
 from .client import PolymarketRestClient
 from .discovery import MarketDiscovery
 
+# Outage is declared after this many consecutive discovery failures.
+_OUTAGE_THRESHOLD: int = 3
+# Log an ongoing-outage warning every N failures (~60 s at 5 s tick rate).
+_OUTAGE_LOG_INTERVAL: int = 12
+# How long to show the "recovered" banner before clearing it.
+_RECOVERY_BANNER_TTL: float = 60.0
+
 
 class PolymarketRepository:
     """Wraps PolymarketRestClient + MarketDiscovery + WS cache.
 
-    Owns the current CandleMarket and handles lazy discovery.
+    Owns the current CandleMarket, handles lazy discovery, and tracks
+    discovery failures / outage state internally.
     """
 
     def __init__(
@@ -28,6 +37,12 @@ class PolymarketRepository:
         self._market: CandleMarket | None = None
         self._ws_orderbook: OrderbookSnapshot | None = None
         self._ws_last_price: float | None = None
+
+        # Outage tracking — owned by the repo, read by provider/dashboard
+        self.discovery_failures: int = 0
+        self.outage_start: float | None = None
+        self.outage_recovered: float | None = None
+        self.last_outage_duration: float = 0.0
 
     @property
     def market(self) -> CandleMarket | None:
@@ -45,11 +60,14 @@ class PolymarketRepository:
         """Fetch orderbooks for current market. Discovers market if needed.
 
         Returns None if no market is available (discovery failed or not set).
+        Tracks discovery failures and outage state internally.
         """
         if self._market is None or self._market.time_remaining() <= 0:
             self._market = await self._discover()
             if self._market is None:
+                self._record_failure()
                 return None
+            self._record_success()
 
         # Fetch UP orderbook (WS cache or REST)
         if self._ws_orderbook is not None:
@@ -94,3 +112,38 @@ class PolymarketRepository:
             self._ws_orderbook = orderbook
         if last_price is not None:
             self._ws_last_price = last_price
+
+    # --- Outage tracking (internal) ---
+
+    def _record_failure(self) -> None:
+        """Increment failure counter; start outage after threshold."""
+        self.discovery_failures += 1
+        if self.discovery_failures >= _OUTAGE_THRESHOLD and self.outage_start is None:
+            self.outage_start = time.time()
+            self._log.warning(
+                "Polymarket outage detected: %d consecutive discovery failures",
+                self.discovery_failures,
+            )
+        elif self.outage_start is not None and self.discovery_failures % _OUTAGE_LOG_INTERVAL == 0:
+            elapsed = time.time() - self.outage_start
+            self._log.warning(
+                "Polymarket outage ongoing: %.0fs elapsed (%d failures)",
+                elapsed,
+                self.discovery_failures,
+            )
+
+    def _record_success(self) -> None:
+        """Clear outage state on successful discovery."""
+        if self.outage_start is not None:
+            duration = time.time() - self.outage_start
+            self.last_outage_duration = duration
+            self.outage_recovered = time.time()
+            self._log.info(
+                "Polymarket outage recovered after %.0fs (%d failures)",
+                duration,
+                self.discovery_failures,
+            )
+        self.discovery_failures = 0
+        self.outage_start = None
+        if self.outage_recovered and time.time() - self.outage_recovered > _RECOVERY_BANNER_TTL:
+            self.outage_recovered = None
