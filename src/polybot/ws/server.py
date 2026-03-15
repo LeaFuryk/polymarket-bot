@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     from polybot.agent.context import AgentContext
 
 
-class DashboardWSServer:
+class WSServer:
     """Async WebSocket server for pushing live dashboard state to clients."""
 
     def __init__(

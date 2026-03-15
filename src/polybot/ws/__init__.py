@@ -17,14 +17,14 @@ from polybot.ws.protocol import (
     MSG_TRADE,
     make_message,
 )
-from polybot.ws.server import DashboardWSServer
+from polybot.ws.server import WSServer
 
 __all__ = [
     "ALL_TYPES",
     "Broadcaster",
     "DEFAULT_WS_HOST",
     "DEFAULT_WS_PORT",
-    "DashboardWSServer",
+    "WSServer",
     "MSG_MARKET",
     "MSG_POSITION",
     "MSG_RESOLUTION",

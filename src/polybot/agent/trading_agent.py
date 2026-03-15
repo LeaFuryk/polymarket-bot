@@ -14,7 +14,7 @@ from polybot.logging import create_logger
 from polybot.tasks.ai_decision import AIDecision
 from polybot.tasks.market_monitor import MarketMonitor
 from polybot.tasks.position_monitor import PositionMonitor
-from polybot.ws.server import DashboardWSServer
+from polybot.ws.server import WSServer
 
 
 class TradingAgent:
@@ -31,7 +31,7 @@ class TradingAgent:
         self._ctx = factory.build()
 
         # WebSocket server — lifecycle owned by TradingAgent, not shared context
-        self._ws_server = DashboardWSServer(
+        self._ws_server = WSServer(
             broadcaster=self._ctx.broadcaster,
             ctx=self._ctx,
             logger=self._log,
