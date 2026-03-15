@@ -16,6 +16,9 @@ if TYPE_CHECKING:
     from polybot.agent.context import AgentContext
     from polybot.agent.rotation import RotationManager
     from polybot.indicators.results import IndicatorResults
+    from polybot.market_data.btc_repository import BtcRepository
+    from polybot.market_data.polymarket_repository import PolymarketRepository
+    from polybot.models import BetData
     from polybot.tasks.ai_decision import AIDecision
 
 from polybot.indicators import SessionContext
@@ -37,6 +40,8 @@ class MarketMonitor:
         self._config = ctx.config
         self._shared = ctx.shared
         self._market_data = ctx.market_data
+        self._polymarket: PolymarketRepository = ctx.market_data.polymarket
+        self._btc_repo: BtcRepository = ctx.market_data.btc_repo
         self._prefilter = ctx.prefilter
         self._portfolio = ctx.portfolio
         self._resolution_tracker = ctx.resolution_tracker
@@ -52,7 +57,6 @@ class MarketMonitor:
         self._rr_threshold = ctx.config.monitor.rr_trigger_threshold
         self._cooldown = ctx.config.monitor.ai_cooldown_seconds
         self._adaptive_enabled = ctx.config.monitor.adaptive_entry_enabled
-        self._discovery_counter = 0
 
     async def run(self) -> None:
         """Main loop — runs until shutdown."""
@@ -74,15 +78,51 @@ class MarketMonitor:
     async def _tick(self) -> None:
         """Single monitoring cycle.
 
-        Pipeline: ensure market → fetch snapshot → compute indicators
-        → prefilter → if passed: evaluate AI trigger.
+        Pipeline: parallel fetch → rotation detection → build snapshot
+        → compute indicators → prefilter → evaluate AI trigger.
         """
-        if not await self._ensure_market():
+        bet_data, btc_data = await asyncio.gather(
+            self._polymarket.fetch(),
+            self._btc_repo.fetch(),
+        )
+
+        if bet_data is None:
+            self._handle_discovery_failure()
             return
 
-        snapshot = await self._fetch_snapshot()
-        if snapshot is None:
-            return
+        recovering = self._ctx.outage_start is not None
+        self._handle_discovery_success()
+
+        # Detect market rotation
+        rotated = self._rotated(bet_data)
+        new_market_needed = self._ctx.current_market is None or rotated
+
+        if rotated:
+            if recovering:
+                logger.info(
+                    "Post-outage recovery: skipping resolution of %s, jumping to %s",
+                    self._ctx.current_market.slug,
+                    bet_data.market.slug,
+                )
+                cancelled = self._ctx.orderbook.cancel_all()
+                if cancelled:
+                    logger.info("Cancelled %d stale orders from pre-outage market", cancelled)
+            else:
+                logger.info(
+                    "Market rotation: %s → %s",
+                    self._ctx.current_market.slug,
+                    bet_data.market.slug,
+                )
+                await self._rotation.handle_transition()
+
+        if new_market_needed:
+            await self._rotation.setup_new_market(bet_data.market)
+
+        snapshot = self._market_data.build_snapshot(bet_data, btc_data)
+
+        self._shared.latest_snapshot = snapshot
+        self._shared.snapshot_timestamp = time.time()
+        self._broadcast_snapshot(snapshot)
 
         # Compute indicators once for the whole tick
         indicators = self._compute_indicators(snapshot)
@@ -99,45 +139,54 @@ class MarketMonitor:
         # Evaluate AI trigger (always updates dashboard; only fires AI if all gates pass)
         self._evaluate_trigger(snapshot, pf_snapshot, pf_result)
 
-    async def _ensure_market(self) -> bool:
-        """Discovery/rotation guard. Returns True if ready to monitor."""
-        market = self._shared.current_market
-        if market is None:
-            await self._rotation.discover_market()
-            return False
+    # --- Rotation / outage helpers ---
 
-        if market.time_remaining() <= 0:
-            await self._rotation.discover_market()
-            return False
+    def _rotated(self, bet_data: BetData) -> bool:
+        """Check if the fetched market differs from the current one."""
+        current = self._ctx.current_market
+        return current is not None and bet_data.market.condition_id != current.condition_id
 
-        self._discovery_counter += 1
-        if self._discovery_counter >= 5:
-            self._discovery_counter = 0
-            await self._rotation.discover_market()
+    def _handle_discovery_failure(self) -> None:
+        """Track consecutive discovery failures and detect outages.
 
-        return True
-
-    async def _fetch_snapshot(self):
-        """Fetch from provider, enrich with market-level fields, broadcast.
-
-        Returns None on failure.
+        Increments the failure counter on each call.  After 3 consecutive
+        failures, records an outage start timestamp.  During an ongoing outage,
+        logs a progress warning every 12 failures (~60 s at 5 s tick rate).
         """
-        try:
-            snapshot = await self._market_data.get_snapshot()
-        except Exception:
-            logger.debug("MarketMonitor: data fetch failed", exc_info=True)
-            return None
+        ctx = self._ctx
+        ctx.discovery_failures += 1
+        if ctx.discovery_failures >= 3 and ctx.outage_start is None:
+            ctx.outage_start = time.time()
+            logger.warning(
+                "Polymarket outage detected: %d consecutive discovery failures",
+                ctx.discovery_failures,
+            )
+        elif ctx.outage_start is not None and ctx.discovery_failures % 12 == 0:
+            elapsed = time.time() - ctx.outage_start
+            logger.warning(
+                "Polymarket outage ongoing: %.0fs elapsed (%d failures)",
+                elapsed,
+                ctx.discovery_failures,
+            )
 
-        # Stamp market-level fields so every downstream consumer reads from snapshot
-        market = self._shared.current_market
-        if market is not None:
-            snapshot.time_remaining = market.time_remaining()
-            snapshot.slug = market.slug
+    def _handle_discovery_success(self) -> None:
+        """Clear outage state on successful discovery."""
+        ctx = self._ctx
+        if ctx.outage_start is not None:
+            duration = time.time() - ctx.outage_start
+            ctx.last_outage_duration = duration
+            ctx.outage_recovered = time.time()
+            logger.info(
+                "Polymarket outage recovered after %.0fs (%d failures)",
+                duration,
+                ctx.discovery_failures,
+            )
+        ctx.discovery_failures = 0
+        ctx.outage_start = None
+        if ctx.outage_recovered and time.time() - ctx.outage_recovered > 60:
+            ctx.outage_recovered = None
 
-        self._shared.latest_snapshot = snapshot
-        self._shared.snapshot_timestamp = time.time()
-        self._broadcast_snapshot(snapshot)
-        return snapshot
+    # --- Indicators ---
 
     def _compute_indicators(self, snapshot) -> IndicatorResults | None:
         """Compute all indicators once using the processor."""

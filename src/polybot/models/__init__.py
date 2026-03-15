@@ -8,7 +8,9 @@ from polybot.models.constants import (
 )
 from polybot.models.core import (
     Action,
+    BetData,
     BtcCandle,
+    BtcData,
     BtcPrice,
     CandleMarket,
     FeatureVector,
@@ -35,7 +37,9 @@ from polybot.models.core import (
 
 __all__ = [
     "Action",
+    "BetData",
     "BtcCandle",
+    "BtcData",
     "BtcPrice",
     "CandleMarket",
     "DEFAULT_CONFIDENCE",

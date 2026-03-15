@@ -1,4 +1,4 @@
-"""Tests for MarketMonitor extracted methods."""
+"""Tests for MarketMonitor — parallel-fetch pipeline, rotation detection, outage tracking."""
 
 from __future__ import annotations
 
@@ -10,7 +10,10 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from polybot.models.core import (
+    BetData,
+    BtcData,
     BtcPrice,
+    CandleMarket,
     MarketSnapshot,
     OrderbookLevel,
     OrderbookSnapshot,
@@ -28,6 +31,35 @@ def _make_orderbook(best_bid: float, best_ask: float, depth: float = 100.0):
     return OrderbookSnapshot(
         bids=[OrderbookLevel(price=best_bid, size=depth / best_bid)],
         asks=[OrderbookLevel(price=best_ask, size=depth / best_ask)],
+    )
+
+
+def _make_candle_market(condition_id="cond_test", remaining=120.0, slug="btc-5min-123"):
+    return CandleMarket(
+        condition_id=condition_id,
+        up_token_id="up_tok_1",
+        down_token_id="down_tok_1",
+        slug=slug,
+        title="BTC 5min",
+        start_time=time.time() - 180,
+        end_time=time.time() + remaining,
+    )
+
+
+def _make_bet_data(condition_id="cond_test", remaining=120.0, up_bid=0.48, up_ask=0.52, down_bid=0.46, down_ask=0.50):
+    market = _make_candle_market(condition_id=condition_id, remaining=remaining)
+    return BetData(
+        market=market,
+        orderbook=_make_orderbook(up_bid, up_ask),
+        down_orderbook=_make_orderbook(down_bid, down_ask),
+        last_trade_price=0.50,
+    )
+
+
+def _make_btc_data(btc_price=65000.0):
+    return BtcData(
+        price=BtcPrice(price_usd=btc_price) if btc_price else None,
+        candles=[],
     )
 
 
@@ -84,6 +116,13 @@ def _make_monitor():
     shared.session_losses = 0
     ctx.shared = shared
 
+    # Outage tracking on ctx
+    ctx.discovery_failures = 0
+    ctx.outage_start = None
+    ctx.outage_recovered = None
+    ctx.last_outage_duration = None
+    ctx.current_market = None
+
     # Portfolio
     portfolio = MagicMock()
     portfolio.up_position.shares = 0.0
@@ -94,12 +133,23 @@ def _make_monitor():
     ctx.prefilter = MagicMock()
     ctx.prefilter.check.return_value = _make_prefilter_result()
 
-    # Market data
-    ctx.market_data = AsyncMock()
-    ctx.market_data.get_snapshot = AsyncMock(return_value=_make_snapshot())
+    # Market data — polymarket + btc repos
+    polymarket = AsyncMock()
+    polymarket.fetch = AsyncMock(return_value=_make_bet_data())
+    btc_repo = AsyncMock()
+    btc_repo.fetch = AsyncMock(return_value=_make_btc_data())
+
+    ctx.market_data = MagicMock()
+    ctx.market_data.polymarket = polymarket
+    ctx.market_data.btc_repo = btc_repo
+    ctx.market_data.build_snapshot = MagicMock(return_value=_make_snapshot())
 
     # Resolution tracker
     ctx.resolution_tracker = MagicMock()
+
+    # Orderbook (for outage cancel_all)
+    ctx.orderbook = MagicMock()
+    ctx.orderbook.cancel_all.return_value = 0
 
     # Datastores
     ctx.datastore = None
@@ -124,113 +174,92 @@ def _make_monitor():
 
     # Rotation manager
     rotation = AsyncMock()
-    rotation.discover_market = AsyncMock()
+    rotation.handle_transition = AsyncMock()
+    rotation.setup_new_market = AsyncMock()
 
     monitor = MarketMonitor(ctx, ai_decision, rotation)
     return monitor, ctx, ai_decision, rotation
 
 
 # ---------------------------------------------------------------------------
-# _ensure_market
+# Rotation detection
 # ---------------------------------------------------------------------------
 
 
-class TestEnsureMarket:
-    """Tests for MarketMonitor._ensure_market()."""
+class TestRotated:
+    """Tests for MarketMonitor._rotated()."""
 
-    @pytest.mark.asyncio
-    async def test_no_market_discovers_and_returns_false(self):
-        monitor, ctx, _, rotation = _make_monitor()
-        ctx.shared.current_market = None
-
-        result = await monitor._ensure_market()
-
-        assert result is False
-        rotation.discover_market.assert_awaited_once()
-
-    @pytest.mark.asyncio
-    async def test_expired_market_discovers_and_returns_false(self):
-        monitor, ctx, _, rotation = _make_monitor()
-        market = MagicMock()
-        market.time_remaining.return_value = 0.0
-        ctx.shared.current_market = market
-
-        result = await monitor._ensure_market()
-
-        assert result is False
-        rotation.discover_market.assert_awaited_once()
-
-    @pytest.mark.asyncio
-    async def test_valid_market_returns_true(self):
-        monitor, ctx, _, rotation = _make_monitor()
-        market = MagicMock()
-        market.time_remaining.return_value = 120.0
-        ctx.shared.current_market = market
-        monitor._discovery_counter = 0
-
-        result = await monitor._ensure_market()
-
-        assert result is True
-        # Counter incremented to 1, no discover yet
-        assert monitor._discovery_counter == 1
-        rotation.discover_market.assert_not_awaited()
-
-    @pytest.mark.asyncio
-    async def test_periodic_discovery_at_5_ticks(self):
-        monitor, ctx, _, rotation = _make_monitor()
-        market = MagicMock()
-        market.time_remaining.return_value = 120.0
-        ctx.shared.current_market = market
-        monitor._discovery_counter = 4  # next tick hits 5
-
-        result = await monitor._ensure_market()
-
-        assert result is True
-        assert monitor._discovery_counter == 0  # reset
-        rotation.discover_market.assert_awaited_once()
-
-    @pytest.mark.asyncio
-    async def test_counter_below_5_no_discover(self):
-        monitor, ctx, _, rotation = _make_monitor()
-        market = MagicMock()
-        market.time_remaining.return_value = 120.0
-        ctx.shared.current_market = market
-        monitor._discovery_counter = 2
-
-        await monitor._ensure_market()
-
-        assert monitor._discovery_counter == 3
-        rotation.discover_market.assert_not_awaited()
-
-
-# ---------------------------------------------------------------------------
-# _fetch_snapshot
-# ---------------------------------------------------------------------------
-
-
-class TestFetchSnapshot:
-    """Tests for MarketMonitor._fetch_snapshot()."""
-
-    @pytest.mark.asyncio
-    async def test_success_stores_and_returns(self):
+    def test_no_current_market_not_rotated(self):
         monitor, ctx, _, _ = _make_monitor()
-        expected = _make_snapshot()
-        ctx.market_data.get_snapshot.return_value = expected
+        ctx.current_market = None
+        bet_data = _make_bet_data(condition_id="cond_new")
+        assert monitor._rotated(bet_data) is False
 
-        result = await monitor._fetch_snapshot()
-
-        assert result is expected
-        assert ctx.shared.latest_snapshot is expected
-        assert ctx.shared.snapshot_timestamp > 0
-
-    @pytest.mark.asyncio
-    async def test_exception_returns_none(self):
+    def test_same_condition_not_rotated(self):
         monitor, ctx, _, _ = _make_monitor()
-        ctx.market_data.get_snapshot.side_effect = RuntimeError("API down")
+        ctx.current_market = _make_candle_market(condition_id="cond_1")
+        bet_data = _make_bet_data(condition_id="cond_1")
+        assert monitor._rotated(bet_data) is False
 
-        result = await monitor._fetch_snapshot()
+    def test_different_condition_rotated(self):
+        monitor, ctx, _, _ = _make_monitor()
+        ctx.current_market = _make_candle_market(condition_id="cond_1")
+        bet_data = _make_bet_data(condition_id="cond_2")
+        assert monitor._rotated(bet_data) is True
 
-        assert result is None
+
+# ---------------------------------------------------------------------------
+# Outage tracking
+# ---------------------------------------------------------------------------
+
+
+class TestOutageTracking:
+    """Tests for discovery failure/success handling."""
+
+    def test_first_failure_increments_counter(self):
+        monitor, ctx, _, _ = _make_monitor()
+        ctx.discovery_failures = 0
+        monitor._handle_discovery_failure()
+        assert ctx.discovery_failures == 1
+        assert ctx.outage_start is None
+
+    def test_third_failure_starts_outage(self):
+        monitor, ctx, _, _ = _make_monitor()
+        ctx.discovery_failures = 2
+        monitor._handle_discovery_failure()
+        assert ctx.discovery_failures == 3
+        assert ctx.outage_start is not None
+
+    def test_ongoing_outage_logs_periodically(self):
+        monitor, ctx, _, _ = _make_monitor()
+        ctx.discovery_failures = 11
+        ctx.outage_start = time.time() - 60
+        monitor._handle_discovery_failure()
+        assert ctx.discovery_failures == 12  # 12 % 12 == 0 → would log
+
+    def test_success_clears_outage(self):
+        monitor, ctx, _, _ = _make_monitor()
+        ctx.outage_start = time.time() - 30
+        ctx.discovery_failures = 5
+        monitor._handle_discovery_success()
+        assert ctx.discovery_failures == 0
+        assert ctx.outage_start is None
+        assert ctx.outage_recovered is not None
+
+    def test_success_no_outage_is_noop(self):
+        monitor, ctx, _, _ = _make_monitor()
+        ctx.outage_start = None
+        ctx.discovery_failures = 0
+        monitor._handle_discovery_success()
+        assert ctx.discovery_failures == 0
+        assert ctx.outage_recovered is None
+
+    def test_recovery_banner_cleared_after_60s(self):
+        monitor, ctx, _, _ = _make_monitor()
+        ctx.outage_start = None
+        ctx.outage_recovered = time.time() - 120  # 120s ago
+        monitor._handle_discovery_success()
+        assert ctx.outage_recovered is None
 
 
 # ---------------------------------------------------------------------------
@@ -510,37 +539,98 @@ class TestEvaluateTrigger:
 
 
 class TestTickIntegration:
-    """Tests that _tick() orchestrates the extracted methods correctly."""
+    """Tests that _tick() orchestrates the parallel-fetch pipeline correctly."""
 
     @pytest.mark.asyncio
-    async def test_tick_no_market(self):
+    async def test_tick_discovery_failure_returns_early(self):
         monitor, ctx, ai_decision, rotation = _make_monitor()
-        ctx.shared.current_market = None
+        ctx.market_data.polymarket.fetch.return_value = None
 
         await monitor._tick()
 
-        rotation.discover_market.assert_awaited_once()
+        assert ctx.discovery_failures == 1
+        rotation.setup_new_market.assert_not_awaited()
         ai_decision.evaluate_entry.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_tick_full_pass(self):
+    async def test_tick_first_market_setup(self):
+        """First tick — no current market, bet_data found → setup_new_market called."""
         monitor, ctx, ai_decision, rotation = _make_monitor()
+        ctx.current_market = None
 
-        # Set up valid market
-        market = MagicMock()
-        market.time_remaining.return_value = 120.0
-        ctx.shared.current_market = market
+        bet_data = _make_bet_data()
+        ctx.market_data.polymarket.fetch.return_value = bet_data
+
+        await monitor._tick()
+
+        rotation.handle_transition.assert_not_awaited()  # no rotation
+        rotation.setup_new_market.assert_awaited_once_with(bet_data.market)
+        assert ctx.shared.latest_snapshot is not None
+
+    @pytest.mark.asyncio
+    async def test_tick_same_market_no_rotation(self):
+        """Same condition_id → no rotation, no setup_new_market."""
+        monitor, ctx, ai_decision, rotation = _make_monitor()
+        ctx.current_market = _make_candle_market(condition_id="cond_test")
+
+        bet_data = _make_bet_data(condition_id="cond_test")
+        ctx.market_data.polymarket.fetch.return_value = bet_data
+
+        await monitor._tick()
+
+        rotation.handle_transition.assert_not_awaited()
+        rotation.setup_new_market.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_tick_rotation_triggers_transition_and_setup(self):
+        """Different condition_id → handle_transition + setup_new_market."""
+        monitor, ctx, ai_decision, rotation = _make_monitor()
+        ctx.current_market = _make_candle_market(condition_id="cond_old")
+
+        bet_data = _make_bet_data(condition_id="cond_new")
+        ctx.market_data.polymarket.fetch.return_value = bet_data
+
+        await monitor._tick()
+
+        rotation.handle_transition.assert_awaited_once()
+        rotation.setup_new_market.assert_awaited_once_with(bet_data.market)
+
+    @pytest.mark.asyncio
+    async def test_tick_post_outage_skips_transition(self):
+        """Rotation during outage recovery → skip transition, cancel stale orders."""
+        monitor, ctx, ai_decision, rotation = _make_monitor()
+        ctx.current_market = _make_candle_market(condition_id="cond_old")
+        ctx.outage_start = time.time() - 30  # in outage
+        ctx.discovery_failures = 5
+
+        bet_data = _make_bet_data(condition_id="cond_new")
+        ctx.market_data.polymarket.fetch.return_value = bet_data
+
+        await monitor._tick()
+
+        rotation.handle_transition.assert_not_awaited()  # skipped
+        rotation.setup_new_market.assert_awaited_once_with(bet_data.market)
+        ctx.orderbook.cancel_all.assert_called_once()
+        # Outage should be cleared
+        assert ctx.discovery_failures == 0
+        assert ctx.outage_start is None
+
+    @pytest.mark.asyncio
+    async def test_tick_full_pipeline(self):
+        """Full tick — same market, all gates pass, AI triggered."""
+        monitor, ctx, ai_decision, rotation = _make_monitor()
+        ctx.current_market = _make_candle_market(condition_id="cond_test")
         ctx.shared.ai_last_call_time = 0.0
         ctx.shared.candle_open_btc = 65000.0
 
-        # Snapshot with good R/R
+        # Good R/R snapshot
         snapshot = _make_snapshot(up_ask=0.30, down_ask=0.40, btc_price=65100.0)
-        ctx.market_data.get_snapshot.return_value = snapshot
+        ctx.market_data.build_snapshot.return_value = snapshot
 
-        # Prefilter passes
+        bet_data = _make_bet_data(condition_id="cond_test")
+        ctx.market_data.polymarket.fetch.return_value = bet_data
+
         ctx.prefilter.check.return_value = _make_prefilter_result(should_skip=False)
-
-        # Low threshold so trigger fires
         monitor._rr_threshold = 0.1
         monitor._cooldown = 0.0
         ai_decision.busy = False
@@ -555,17 +645,16 @@ class TestTickIntegration:
         ai_decision.evaluate_entry.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_tick_fetch_failure(self):
-        monitor, ctx, ai_decision, _ = _make_monitor()
+    async def test_tick_builds_snapshot_from_repos(self):
+        """Verify build_snapshot is called with the fetched bet_data and btc_data."""
+        monitor, ctx, _, _ = _make_monitor()
+        ctx.current_market = _make_candle_market(condition_id="cond_test")
 
-        market = MagicMock()
-        market.time_remaining.return_value = 120.0
-        ctx.shared.current_market = market
-
-        ctx.market_data.get_snapshot.side_effect = RuntimeError("network")
+        bet_data = _make_bet_data(condition_id="cond_test")
+        btc_data = _make_btc_data(65500.0)
+        ctx.market_data.polymarket.fetch.return_value = bet_data
+        ctx.market_data.btc_repo.fetch.return_value = btc_data
 
         await monitor._tick()
 
-        # Should return early — no prefilter history, no AI trigger
-        assert len(ctx.shared.prefilter_history) == 0
-        ai_decision.evaluate_entry.assert_not_called()
+        ctx.market_data.build_snapshot.assert_called_once_with(bet_data, btc_data)
