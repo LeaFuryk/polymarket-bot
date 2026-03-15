@@ -30,6 +30,10 @@ class Portfolio:
         # Accumulated realized PnL from trades closed during current market
         self._market_trading_pnl: float = 0.0
 
+    def has_open_position(self) -> bool:
+        """True if holding shares on either side."""
+        return self.up_position.shares > 0 or self.down_position.shares > 0
+
     @property
     def market_trading_pnl(self) -> float:
         """PnL from trades closed on the current (unresolved) candle."""

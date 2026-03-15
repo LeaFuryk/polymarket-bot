@@ -85,7 +85,7 @@ class MarketMonitor:
         indicators = self._update_indicators(snapshot)
 
         # Run prefilter gate
-        has_position = self._portfolio.up_position.shares > 0 or self._portfolio.down_position.shares > 0
+        has_position = self._portfolio.has_open_position()
         pf_result = self._prefilter.check(snapshot.time_remaining, snapshot, has_position)
 
         # Record tick (always — analytics + dashboard history)
@@ -118,7 +118,7 @@ class MarketMonitor:
         if self._processor is None:
             return None
         try:
-            has_position = self._portfolio.up_position.shares > 0 or self._portfolio.down_position.shares > 0
+            has_position = self._portfolio.has_open_position()
             session = SessionContext(
                 wins=self._shared.session_wins,
                 losses=self._shared.session_losses,
@@ -227,7 +227,7 @@ class MarketMonitor:
         prefilter_passed = not pf_result.should_skip
         min_ask = min(up_ask, down_ask)
         best_side = "up" if rr_up >= rr_down else "down"
-        has_position = self._portfolio.up_position.shares > 0 or self._portfolio.down_position.shares > 0
+        has_position = self._portfolio.has_open_position()
 
         # Adaptive trigger: uses rolling reversal rate to set BTC threshold + max entry
         adaptive_passed = False
