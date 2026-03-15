@@ -38,6 +38,8 @@ class MarketDataProvider:
         config: AppConfig,
         logger: logging.Logger,
         discovery: MarketDiscovery | None = None,
+        on_rotation: Callable[[], Coroutine] | None = None,
+        broadcaster: Broadcaster | None = None,
     ) -> None:
         self._log = logger
         self._config = config
@@ -53,8 +55,12 @@ class MarketDataProvider:
         self._btc_price_history: deque[float] = deque(maxlen=PRICE_HISTORY_SIZE)
 
         self._prev_condition_id: str | None = None
-        self._on_rotation: Callable[[], Coroutine] | None = None
-        self._broadcaster: Broadcaster | None = None
+        self._on_rotation = on_rotation
+        self._broadcaster = broadcaster
+
+    def set_on_rotation(self, callback: Callable[[], Coroutine]) -> None:
+        """Register the callback fired when a market rotation is detected."""
+        self._on_rotation = callback
 
     # --- Public properties ---
 
@@ -87,16 +93,6 @@ class MarketDataProvider:
     @property
     def last_outage_duration(self) -> float:
         return self._polymarket.last_outage_duration
-
-    # --- Wiring (called after construction) ---
-
-    def set_on_rotation(self, callback: Callable[[], Coroutine]) -> None:
-        """Register the callback fired when a market rotation is detected."""
-        self._on_rotation = callback
-
-    def set_broadcaster(self, broadcaster: Broadcaster) -> None:
-        """Register the WebSocket broadcaster for outage notifications."""
-        self._broadcaster = broadcaster
 
     def set_market(self, candle: CandleMarket) -> None:
         """Sync provider state for a new candle market."""

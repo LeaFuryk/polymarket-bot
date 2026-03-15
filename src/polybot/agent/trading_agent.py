@@ -7,11 +7,9 @@ import signal
 
 from polybot.agent.factory import ContextFactory
 from polybot.agent.helpers import resolve_pending_bets
-from polybot.agent.rotation import RotationManager
 from polybot.agent.startup_loader import StartupLoader
 from polybot.config import AppConfig
 from polybot.logging import create_logger
-from polybot.tasks.ai_decision import AIDecision
 from polybot.tasks.market_monitor import MarketMonitor
 from polybot.tasks.position_monitor import PositionMonitor
 from polybot.ws.server import WSServer
@@ -26,7 +24,7 @@ class TradingAgent:
         # Load persisted state before building context
         startup_data = StartupLoader(config, log=self._log).load()
 
-        # Build AgentContext via factory (all sub-component wiring)
+        # Build AgentContext via factory (all sub-component + task wiring)
         factory = ContextFactory(config, self._log, startup_data)
         self._ctx = factory.build()
 
@@ -84,13 +82,9 @@ class TradingAgent:
             resolve_pending_bets(ctx, log=self._log),
         )
 
-        # Create task objects — AIDecision first (monitors reference it)
-        ai_decision = AIDecision(ctx)
-        rotation_manager = RotationManager(ctx, self._log, ai_decision=ai_decision)
-        ctx.market_data.set_on_rotation(rotation_manager.handle_rotation)
-        ctx.market_data.set_broadcaster(ctx.broadcaster)
-        market_monitor = MarketMonitor(ctx, ai_decision, logger=self._log)
-        position_monitor = PositionMonitor(ctx, ai_decision=ai_decision)
+        # Create monitor tasks (AIDecision + RotationManager already wired by factory)
+        market_monitor = MarketMonitor(ctx, ctx.ai_decision, logger=self._log)
+        position_monitor = PositionMonitor(ctx, ai_decision=ctx.ai_decision)
 
         # Start WebSocket server
         if ctx.config.logging.ws_enabled:
