@@ -323,8 +323,8 @@ class TestRotationManager:
         # 15 BTC price ticks: candle_open=65000, moves = 0..14
         ctx.shared.candle_open_btc = 65000.0
         ctx.shared.latest_snapshot.btc_price_history = [65000.0 + float(i) for i in range(15)]
-        ctx.shared.tick_spreads_up = [0.02] * 15
-        ctx.shared.tick_spreads_down = [0.03] * 15
+        ctx.shared.latest_snapshot.orderbook.spread_pct = 0.02
+        ctx.shared.latest_snapshot.down_orderbook.spread_pct = 0.03
         ctx.shared.microstructure_history = []
 
         rm = RotationManager(ctx, logging.getLogger("test"))

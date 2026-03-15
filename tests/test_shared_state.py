@@ -88,8 +88,3 @@ class TestSharedStateInit:
         state = SharedState()
         assert state.signal_type == DEFAULT_SIGNAL_TYPE
         assert state.regime == DEFAULT_REGIME
-
-    def test_tick_spreads_initially_empty(self):
-        state = SharedState()
-        assert state.tick_spreads_up == []
-        assert state.tick_spreads_down == []

@@ -80,9 +80,6 @@ class MarketMonitor:
         indicators = self._calculate_indicators(snapshot)
         pf_result = self._run_prefilter(snapshot)
 
-        # Track spreads for microstructure computation at rotation
-        self._record_spreads(snapshot)
-
         self._persist_snapshots(snapshot, pf_result, indicators)
         self._evaluate_trigger(snapshot, pf_result)
 
@@ -108,15 +105,6 @@ class MarketMonitor:
         pf_result = self._prefilter.check(snapshot, has_position)
         self._broadcast_prefilter(pf_result)
         return pf_result
-
-    def _record_spreads(self, snapshot) -> None:
-        """Track per-tick spreads for candle microstructure computation."""
-        up_spread = snapshot.orderbook.spread_pct
-        down_spread = snapshot.down_orderbook.spread_pct
-        if up_spread is not None:
-            self._shared.tick_spreads_up.append(up_spread)
-        if down_spread is not None:
-            self._shared.tick_spreads_down.append(down_spread)
 
     # --- Indicators ---
 

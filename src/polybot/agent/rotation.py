@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import statistics
 import time
 from typing import TYPE_CHECKING
 
@@ -383,8 +382,6 @@ class RotationManager:
             # Reset shared state for new candle
             ctx.shared.candle_open_btc = None
             ctx.shared.position_pnl_pct.clear()
-            ctx.shared.tick_spreads_up.clear()
-            ctx.shared.tick_spreads_down.clear()
             ctx.shared.last_stop_loss = None
             ctx.shared.entry_context.clear()
             ctx.shared.dynamic_sl.clear()
@@ -407,8 +404,9 @@ class RotationManager:
         if len(moves) < 10:
             return
 
-        spreads_up = ctx.shared.tick_spreads_up
-        spreads_down = ctx.shared.tick_spreads_down
+        # Use latest snapshot spreads (single point, not per-tick average)
+        up_spread = snapshot.orderbook.spread_pct if snapshot else None
+        down_spread = snapshot.down_orderbook.spread_pct if snapshot else None
 
         btc_range = max(moves) - min(moves) if moves else 0.0
         btc_final_move = moves[-1] if moves else 0.0
@@ -427,8 +425,8 @@ class RotationManager:
 
         summary = CandleMicrostructure(
             timestamp=time.time(),
-            avg_spread_up=statistics.mean(spreads_up) if spreads_up else 0.0,
-            avg_spread_down=statistics.mean(spreads_down) if spreads_down else 0.0,
+            avg_spread_up=up_spread or 0.0,
+            avg_spread_down=down_spread or 0.0,
             avg_depth=0.0,
             avg_imbalance=1.0,
             btc_range=btc_range,

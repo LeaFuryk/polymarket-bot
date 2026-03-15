@@ -37,10 +37,6 @@ class SharedState:
         self.current_market: CandleMarket | None = None
         self.candle_open_btc: float | None = None
 
-        # -- Per-tick spread tracking (for microstructure computation at rotation) --
-        self.tick_spreads_up: list[float] = []
-        self.tick_spreads_down: list[float] = []
-
         # -- AI trigger coordination --
         self.ai_trigger_reason: str = ""
         self.ai_last_call_time: float = 0.0
