@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 
 from polybot.dashboard import DashboardMessageBuilder
 from polybot.indicators import SessionContext
-from polybot.prefilter.checker import PrefilterChecker
+from polybot.indicators.helpers import compute_rr
 from polybot.shared_state import PreFilterSnapshot
 
 logger = logging.getLogger(__name__)
@@ -38,7 +38,7 @@ class MarketMonitor:
         self._config = ctx.config
         self._shared = ctx.shared
         self._market_data = ctx.market_data
-        self._checker = PrefilterChecker(ctx.prefilter)
+        self._prefilter = ctx.prefilter
         self._portfolio = ctx.portfolio
         self._resolution_tracker = ctx.resolution_tracker
         self._ai_decision = ai_decision
@@ -74,7 +74,11 @@ class MarketMonitor:
         logger.info("MarketMonitor stopped")
 
     async def _tick(self) -> None:
-        """Single monitoring cycle."""
+        """Single monitoring cycle.
+
+        Pipeline: ensure market → fetch snapshot → compute indicators
+        → prefilter → if passed: evaluate AI trigger.
+        """
         if not await self._ensure_market():
             return
 
@@ -84,19 +88,20 @@ class MarketMonitor:
 
         time_remaining = self._shared.current_market.time_remaining()
 
-        indicator_results = self._compute_indicators(snapshot, time_remaining)
-        self._shared.latest_indicator_results = indicator_results
+        # Compute indicators once for the whole tick
+        indicators = self._compute_indicators(snapshot, time_remaining)
+        self._shared.latest_indicator_results = indicators
 
+        # Run prefilter gate
         has_position = self._portfolio.up_position.shares > 0 or self._portfolio.down_position.shares > 0
-        check = self._checker.check(
-            snapshot,
-            time_remaining,
-            has_open_position=has_position,
-            candle_open_btc=self._shared.candle_open_btc,
-        )
-        self._shared.prefilter_history.append(check.snapshot)
-        self._persist_snapshots(snapshot, check.snapshot, check.prefilter, indicator_results)
-        self._evaluate_trigger(snapshot, check.snapshot, check.prefilter, time_remaining)
+        pf_result = self._prefilter.check(time_remaining, snapshot, has_position)
+
+        # Record tick (always — analytics + dashboard history)
+        pf_snapshot = self._record_tick(snapshot, pf_result, time_remaining)
+        self._persist_snapshots(snapshot, pf_snapshot, pf_result, indicators)
+
+        # Evaluate AI trigger (always updates dashboard; only fires AI if all gates pass)
+        self._evaluate_trigger(snapshot, pf_snapshot, pf_result, time_remaining)
 
     async def _ensure_market(self) -> bool:
         """Discovery/rotation guard. Returns True if ready to monitor."""
@@ -149,6 +154,48 @@ class MarketMonitor:
         except Exception:
             logger.debug("Indicator computation failed", exc_info=True)
             return None
+
+    def _record_tick(self, snapshot, pf_result, time_remaining: float) -> PreFilterSnapshot:
+        """Build a PreFilterSnapshot from the current tick and append to history."""
+        up_ob = snapshot.orderbook
+        down_ob = snapshot.down_orderbook
+
+        rr_up = compute_rr(up_ob.best_ask or 1.0)
+        rr_down = compute_rr(down_ob.best_ask or 1.0)
+
+        btc_move = 0.0
+        btc_price_val = snapshot.btc_price.price_usd if snapshot.btc_price else 0.0
+        candle_open = self._shared.candle_open_btc
+        if candle_open is not None and btc_price_val > 0:
+            btc_move = btc_price_val - candle_open
+
+        pf_snapshot = PreFilterSnapshot(
+            timestamp=time.time(),
+            time_remaining=time_remaining,
+            checks={
+                "time_ok": time_remaining >= 45,
+                "spread_ok": not pf_result.should_skip or "spread" not in pf_result.reason.lower(),
+                "depth_ok": not pf_result.should_skip or "thin" not in pf_result.reason.lower(),
+                "choppy_ok": not pf_result.should_skip or "choppy" not in pf_result.reason.lower(),
+                "setup_ok": not pf_result.should_skip or "setup" not in pf_result.reason.lower(),
+                "prefilter_passed": not pf_result.should_skip,
+            },
+            reasons=[pf_result.reason] if pf_result.reason else [],
+            best_entry_up=up_ob.best_ask or 1.0,
+            best_entry_down=down_ob.best_ask or 1.0,
+            rr_up=rr_up,
+            rr_down=rr_down,
+            btc_price=btc_price_val,
+            up_mid=up_ob.midpoint,
+            down_mid=down_ob.midpoint,
+            up_spread_pct=up_ob.spread_pct,
+            down_spread_pct=down_ob.spread_pct,
+            streak=pf_result.consecutive_streak,
+            streak_direction=pf_result.streak_direction,
+            btc_move_from_open=btc_move,
+        )
+        self._shared.prefilter_history.append(pf_snapshot)
+        return pf_snapshot
 
     def _persist_snapshots(
         self,
