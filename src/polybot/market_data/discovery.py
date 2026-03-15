@@ -28,8 +28,8 @@ def _boundary_ts(offset: int = 0) -> int:
 class MarketDiscovery:
     """Discovers active BTC 5-min candle markets from the Gamma API."""
 
-    def __init__(self, config: AppConfig, logger: logging.Logger | None = None) -> None:
-        self._log = logger or logging.getLogger(__name__)
+    def __init__(self, config: AppConfig, logger: logging.Logger) -> None:
+        self._log = logger
         self._config = config
         self._series_slug = config.market.series_slug
         self._client = httpx.AsyncClient(timeout=10.0)

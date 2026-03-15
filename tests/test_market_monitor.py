@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import time
 from collections import deque
 from unittest.mock import AsyncMock, MagicMock
@@ -112,7 +113,7 @@ def _make_monitor():
     ai_decision.busy = False
     ai_decision.evaluate_entry = AsyncMock()
 
-    monitor = MarketMonitor(ctx, ai_decision)
+    monitor = MarketMonitor(ctx, ai_decision, logger=logging.getLogger("test"))
     return monitor, ctx, ai_decision
 
 

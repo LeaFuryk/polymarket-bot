@@ -36,18 +36,18 @@ class MarketDataProvider:
     def __init__(
         self,
         config: AppConfig,
+        logger: logging.Logger,
         discovery: MarketDiscovery | None = None,
-        logger: logging.Logger | None = None,
     ) -> None:
-        self._log = logger or logging.getLogger(__name__)
+        self._log = logger
         self._config = config
-        rest = PolymarketRestClient(config.market, config.api)
+        rest = PolymarketRestClient(config.market, config.api, logger=logger)
         cache_ttl = config.monitor.btc_price_cache_ttl if hasattr(config, "monitor") else BTC_PRICE_CACHE_TTL
-        btc_feed = BtcPriceFeed(config.api, cache_ttl=cache_ttl)
+        btc_feed = BtcPriceFeed(config.api, logger, cache_ttl=cache_ttl)
 
-        disc = discovery or MarketDiscovery(config)
-        self._polymarket = PolymarketRepository(rest, disc)
-        self._btc_repo = BtcRepository(btc_feed)
+        disc = discovery or MarketDiscovery(config, logger=logger)
+        self._polymarket = PolymarketRepository(rest, disc, logger=logger)
+        self._btc_repo = BtcRepository(btc_feed, logger=logger)
 
         self._price_history: deque[float] = deque(maxlen=PRICE_HISTORY_SIZE)
         self._btc_price_history: deque[float] = deque(maxlen=PRICE_HISTORY_SIZE)

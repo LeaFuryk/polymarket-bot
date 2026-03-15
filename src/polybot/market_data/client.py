@@ -19,9 +19,9 @@ class PolymarketRestClient:
         self,
         market_config: MarketConfig,
         api_config: ApiConfig,
-        logger: logging.Logger | None = None,
+        logger: logging.Logger,
     ) -> None:
-        self._log = logger or logging.getLogger(__name__)
+        self._log = logger
         self._market_config = market_config
         self._api_config = api_config
         self._client = ClobClient(api_config.polymarket_host)

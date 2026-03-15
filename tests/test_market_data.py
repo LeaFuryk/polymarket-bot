@@ -27,6 +27,8 @@ from polybot.models.core import (
     OrderbookSnapshot,
 )
 
+_log = logging.getLogger("test")
+
 # ── Constants ──────────────────────────────────────────────────────────
 
 
@@ -96,7 +98,7 @@ class TestParseIsoTimestamp:
         config.market.series_slug = "test-series"
         from polybot.market_data.discovery import MarketDiscovery
 
-        return MarketDiscovery(config)
+        return MarketDiscovery(config, _log)
 
     def test_iso_with_z_suffix(self):
         d = self._make_discovery()
@@ -129,13 +131,13 @@ class TestInjectableLoggers:
         d = MarketDiscovery(config, logger=custom)
         assert d._log is custom
 
-    def test_discovery_default_logger(self):
+    def test_discovery_uses_injected_logger(self):
         from polybot.market_data.discovery import MarketDiscovery
 
         config = MagicMock()
         config.market.series_slug = "test"
-        d = MarketDiscovery(config)
-        assert d._log.name == "polybot.market_data.discovery"
+        d = MarketDiscovery(config, _log)
+        assert d._log is _log
 
     @patch("polybot.market_data.client.ClobClient")
     def test_client_injectable_logger(self, mock_clob):
@@ -154,7 +156,7 @@ class TestInjectableLoggers:
         config = MagicMock()
         config.monitor.btc_price_cache_ttl = 30
         custom = logging.getLogger("test.provider")
-        p = MarketDataProvider(config, logger=custom)
+        p = MarketDataProvider(config, custom)
         assert p._log is custom
 
     def test_btc_price_injectable_logger(self):
@@ -165,7 +167,7 @@ class TestInjectableLoggers:
         api_cfg.ethereum_rpc_url = "https://eth.example.com"
         api_cfg.chainlink_btcusd_address = "0x1234"
         custom = logging.getLogger("test.btc")
-        feed = BtcPriceFeed(api_cfg, logger=custom)
+        feed = BtcPriceFeed(api_cfg, custom)
         assert feed._log is custom
 
 
@@ -238,7 +240,7 @@ class TestBtcRepository:
         from polybot.market_data.btc_repository import BtcRepository
 
         feed = _make_btc_feed()
-        repo = BtcRepository(feed)
+        repo = BtcRepository(feed, _log)
 
         result = await repo.fetch()
 
@@ -254,7 +256,7 @@ class TestBtcRepository:
 
         feed = _make_btc_feed()
         feed.get_price.return_value = None
-        repo = BtcRepository(feed)
+        repo = BtcRepository(feed, _log)
 
         result = await repo.fetch()
 
@@ -266,7 +268,7 @@ class TestBtcRepository:
         from polybot.market_data.btc_repository import BtcRepository
 
         feed = _make_btc_feed()
-        repo = BtcRepository(feed)
+        repo = BtcRepository(feed, _log)
 
         price = await repo.get_price()
         assert price.price_usd == 65000.0
@@ -276,7 +278,7 @@ class TestBtcRepository:
         from polybot.market_data.btc_repository import BtcRepository
 
         feed = _make_btc_feed()
-        repo = BtcRepository(feed)
+        repo = BtcRepository(feed, _log)
 
         price = await repo.get_price_at(1000.0)
         assert price == 64500.0
@@ -286,7 +288,7 @@ class TestBtcRepository:
         from polybot.market_data.btc_repository import BtcRepository
 
         feed = _make_btc_feed()
-        repo = BtcRepository(feed)
+        repo = BtcRepository(feed, _log)
 
         await repo.load_history(100)
         feed.load_candle_history.assert_awaited_once_with(100)
@@ -296,7 +298,7 @@ class TestBtcRepository:
         from polybot.market_data.btc_repository import BtcRepository
 
         feed = _make_btc_feed()
-        repo = BtcRepository(feed)
+        repo = BtcRepository(feed, _log)
 
         await repo.close()
         feed.close.assert_awaited_once()
@@ -306,7 +308,7 @@ class TestBtcRepository:
 
         feed = _make_btc_feed()
         custom = logging.getLogger("test.btc_repo")
-        repo = BtcRepository(feed, logger=custom)
+        repo = BtcRepository(feed, custom)
         assert repo._log is custom
 
 
@@ -344,7 +346,7 @@ class TestPolymarketRepository:
         rest.get_last_trade_price = AsyncMock(return_value=0.50)
         discovery = AsyncMock()
 
-        repo = PolymarketRepository(rest, discovery)
+        repo = PolymarketRepository(rest, discovery, _log)
         market = _make_candle_market()
         repo.set_market(market)
 
@@ -368,7 +370,7 @@ class TestPolymarketRepository:
         discovery = AsyncMock()
         discovery.get_current_market = AsyncMock(return_value=market)
 
-        repo = PolymarketRepository(rest, discovery)
+        repo = PolymarketRepository(rest, discovery, _log)
 
         result = await repo.fetch()
 
@@ -385,7 +387,7 @@ class TestPolymarketRepository:
         discovery.get_current_market = AsyncMock(return_value=None)
         discovery.get_next_market = AsyncMock(return_value=None)
 
-        repo = PolymarketRepository(rest, discovery)
+        repo = PolymarketRepository(rest, discovery, _log)
 
         result = await repo.fetch()
 
@@ -404,7 +406,7 @@ class TestPolymarketRepository:
         discovery.get_current_market = AsyncMock(return_value=None)
         discovery.get_next_market = AsyncMock(return_value=market)
 
-        repo = PolymarketRepository(rest, discovery)
+        repo = PolymarketRepository(rest, discovery, _log)
 
         result = await repo.fetch()
 
@@ -422,7 +424,7 @@ class TestPolymarketRepository:
         discovery = AsyncMock()
 
         ws_ob = _make_orderbook(best_bid=0.55, best_ask=0.60)
-        repo = PolymarketRepository(rest, discovery)
+        repo = PolymarketRepository(rest, discovery, _log)
         repo.set_market(_make_candle_market())
         repo.update_from_ws(orderbook=ws_ob, last_price=0.57)
 
@@ -446,7 +448,7 @@ class TestPolymarketRepository:
         discovery = AsyncMock()
         discovery.get_current_market = AsyncMock(return_value=new_market)
 
-        repo = PolymarketRepository(rest, discovery)
+        repo = PolymarketRepository(rest, discovery, _log)
         repo.set_market(expired_market)
 
         result = await repo.fetch()
@@ -458,7 +460,7 @@ class TestPolymarketRepository:
     def test_market_property(self):
         from polybot.market_data.polymarket_repository import PolymarketRepository
 
-        repo = PolymarketRepository(AsyncMock(), AsyncMock())
+        repo = PolymarketRepository(AsyncMock(), AsyncMock(), _log)
         assert repo.market is None
 
         market = _make_candle_market()
@@ -469,7 +471,7 @@ class TestPolymarketRepository:
         from polybot.market_data.polymarket_repository import PolymarketRepository
 
         custom = logging.getLogger("test.poly_repo")
-        repo = PolymarketRepository(AsyncMock(), AsyncMock(), logger=custom)
+        repo = PolymarketRepository(AsyncMock(), AsyncMock(), custom)
         assert repo._log is custom
 
     @pytest.mark.asyncio
@@ -481,7 +483,7 @@ class TestPolymarketRepository:
         discovery.get_current_market = AsyncMock(return_value=None)
         discovery.get_next_market = AsyncMock(return_value=None)
 
-        repo = PolymarketRepository(rest, discovery)
+        repo = PolymarketRepository(rest, discovery, _log)
 
         await repo.fetch()
         assert repo.discovery_failures == 1
@@ -505,7 +507,7 @@ class TestPolymarketRepository:
         discovery.get_current_market = AsyncMock(return_value=None)
         discovery.get_next_market = AsyncMock(return_value=None)
 
-        repo = PolymarketRepository(rest, discovery)
+        repo = PolymarketRepository(rest, discovery, _log)
 
         # Build up failures
         for _ in range(3):
@@ -533,7 +535,7 @@ class TestProviderParallelFetch:
 
         config = MagicMock()
         config.monitor.btc_price_cache_ttl = 30
-        provider = MarketDataProvider(config)
+        provider = MarketDataProvider(config, _log)
 
         # Mock the repos
         market = _make_candle_market()
@@ -569,7 +571,7 @@ class TestProviderParallelFetch:
 
         config = MagicMock()
         config.monitor.btc_price_cache_ttl = 30
-        provider = MarketDataProvider(config)
+        provider = MarketDataProvider(config, _log)
 
         from polybot.models import BtcData
 
@@ -588,7 +590,7 @@ class TestProviderParallelFetch:
 
         config = MagicMock()
         config.monitor.btc_price_cache_ttl = 30
-        provider = MarketDataProvider(config)
+        provider = MarketDataProvider(config, _log)
 
         market = _make_candle_market()
         from polybot.models import BetData, BtcData
@@ -616,7 +618,7 @@ class TestProviderParallelFetch:
 
         config = MagicMock()
         config.monitor.btc_price_cache_ttl = 30
-        provider = MarketDataProvider(config)
+        provider = MarketDataProvider(config, _log)
 
         market = _make_candle_market()
         from polybot.models import BetData, BtcData
@@ -643,7 +645,7 @@ class TestProviderParallelFetch:
 
         config = MagicMock()
         config.monitor.btc_price_cache_ttl = 30
-        provider = MarketDataProvider(config)
+        provider = MarketDataProvider(config, _log)
 
         # Seed some price history
         provider._price_history.append(0.50)
@@ -662,7 +664,7 @@ class TestProviderParallelFetch:
 
         config = MagicMock()
         config.monitor.btc_price_cache_ttl = 30
-        provider = MarketDataProvider(config)
+        provider = MarketDataProvider(config, _log)
 
         callback = AsyncMock()
         provider.set_on_rotation(callback)
@@ -700,7 +702,7 @@ class TestProviderParallelFetch:
 
         config = MagicMock()
         config.monitor.btc_price_cache_ttl = 30
-        provider = MarketDataProvider(config)
+        provider = MarketDataProvider(config, _log)
 
         # Simulate repo outage state
         provider._polymarket.discovery_failures = 5

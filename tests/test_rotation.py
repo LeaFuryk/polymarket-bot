@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import time
 from unittest.mock import AsyncMock, MagicMock
 
@@ -48,7 +49,7 @@ def _make_ctx():
 
 def _make_rotation(ctx=None):
     ctx = ctx or _make_ctx()
-    return RotationManager(ctx), ctx
+    return RotationManager(ctx, logging.getLogger("test")), ctx
 
 
 # ---------------------------------------------------------------------------

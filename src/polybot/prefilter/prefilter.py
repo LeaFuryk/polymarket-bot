@@ -62,6 +62,7 @@ class PreFilter:
 
     def __init__(
         self,
+        logger: logging.Logger,
         min_time_remaining: float = MIN_TIME_REMAINING,
         choppy_range_threshold: float = CHOPPY_RANGE_THRESHOLD,
         choppy_max_entry: float = CHOPPY_MAX_ENTRY,
@@ -70,9 +71,8 @@ class PreFilter:
         max_spread_pct: float = MAX_SPREAD_PCT,
         min_book_depth: float = MIN_BOOK_DEPTH,
         filters: Sequence[MarketFilter] | None = None,
-        logger: logging.Logger | None = None,
     ) -> None:
-        self._log = logger or logging.getLogger(__name__)
+        self._log = logger
         self.min_time_remaining = min_time_remaining
         self.choppy_range_threshold = choppy_range_threshold
         self.choppy_max_entry = choppy_max_entry
