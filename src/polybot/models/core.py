@@ -162,6 +162,7 @@ class MarketSnapshot(BaseModel):
     up_token_id: str = ""
     down_token_id: str = ""
     down_orderbook: OrderbookSnapshot = Field(default_factory=OrderbookSnapshot)
+    slug: str = ""  # market slug (e.g. "btc-5min-candle-...")
     time_remaining: float = 0.0  # seconds until resolution
 
 

@@ -84,22 +84,20 @@ class MarketMonitor:
         if snapshot is None:
             return
 
-        time_remaining = self._shared.current_market.time_remaining()
-
         # Compute indicators once for the whole tick
-        indicators = self._compute_indicators(snapshot, time_remaining)
+        indicators = self._compute_indicators(snapshot)
         self._shared.latest_indicator_results = indicators
 
         # Run prefilter gate
         has_position = self._portfolio.up_position.shares > 0 or self._portfolio.down_position.shares > 0
-        pf_result = self._prefilter.check(time_remaining, snapshot, has_position)
+        pf_result = self._prefilter.check(snapshot.time_remaining, snapshot, has_position)
 
         # Record tick (always — analytics + dashboard history)
-        pf_snapshot = self._record_tick(snapshot, pf_result, time_remaining)
+        pf_snapshot = self._record_tick(snapshot, pf_result)
         self._persist_snapshots(snapshot, pf_snapshot, pf_result, indicators)
 
         # Evaluate AI trigger (always updates dashboard; only fires AI if all gates pass)
-        self._evaluate_trigger(snapshot, pf_snapshot, pf_result, time_remaining)
+        self._evaluate_trigger(snapshot, pf_snapshot, pf_result)
 
     async def _ensure_market(self) -> bool:
         """Discovery/rotation guard. Returns True if ready to monitor."""
@@ -120,19 +118,28 @@ class MarketMonitor:
         return True
 
     async def _fetch_snapshot(self):
-        """Fetch from provider, store on shared state. Returns None on failure."""
+        """Fetch from provider, enrich with market-level fields, broadcast.
+
+        Returns None on failure.
+        """
         try:
             snapshot = await self._market_data.get_snapshot()
         except Exception:
             logger.debug("MarketMonitor: data fetch failed", exc_info=True)
             return None
 
+        # Stamp market-level fields so every downstream consumer reads from snapshot
+        market = self._shared.current_market
+        if market is not None:
+            snapshot.time_remaining = market.time_remaining()
+            snapshot.slug = market.slug
+
         self._shared.latest_snapshot = snapshot
         self._shared.snapshot_timestamp = time.time()
         self._broadcast_snapshot(snapshot)
         return snapshot
 
-    def _compute_indicators(self, snapshot, time_remaining: float) -> IndicatorResults | None:
+    def _compute_indicators(self, snapshot) -> IndicatorResults | None:
         """Compute all indicators once using the processor."""
         if self._processor is None:
             return None
@@ -148,13 +155,13 @@ class MarketMonitor:
                 session,
                 candle_open_btc=self._shared.candle_open_btc,
                 has_open_position=has_position,
-                time_remaining=time_remaining,
+                time_remaining=snapshot.time_remaining,
             )
         except Exception:
             logger.debug("Indicator computation failed", exc_info=True)
             return None
 
-    def _record_tick(self, snapshot, pf_result, time_remaining: float) -> PreFilterSnapshot:
+    def _record_tick(self, snapshot, pf_result) -> PreFilterSnapshot:
         """Build a PreFilterSnapshot from the current tick and append to history."""
         up_ob = snapshot.orderbook
         down_ob = snapshot.down_orderbook
@@ -168,11 +175,12 @@ class MarketMonitor:
         if candle_open is not None and btc_price_val > 0:
             btc_move = btc_price_val - candle_open
 
+        tr = snapshot.time_remaining
         pf_snapshot = PreFilterSnapshot(
-            timestamp=time.time(),
-            time_remaining=time_remaining,
+            timestamp=snapshot.timestamp,
+            time_remaining=tr,
             checks={
-                "time_ok": time_remaining >= 45,
+                "time_ok": tr >= 45,
                 "spread_ok": not pf_result.should_skip or "spread" not in pf_result.reason.lower(),
                 "depth_ok": not pf_result.should_skip or "thin" not in pf_result.reason.lower(),
                 "choppy_ok": not pf_result.should_skip or "choppy" not in pf_result.reason.lower(),
@@ -228,7 +236,7 @@ class MarketMonitor:
                 btc_move,
             )
 
-    def _evaluate_trigger(self, snapshot, pf_snapshot: PreFilterSnapshot, pf_result, time_remaining: float) -> None:
+    def _evaluate_trigger(self, snapshot, pf_snapshot: PreFilterSnapshot, pf_result) -> None:
         """Gate pipeline: adaptive/static R/R, cooldown, AI busy. Fires evaluate_entry task."""
         up_ask = pf_snapshot.best_entry_up
         down_ask = pf_snapshot.best_entry_down
@@ -291,7 +299,7 @@ class MarketMonitor:
 
         self._shared.monitor_status = {
             "timestamp": now,
-            "time_remaining": time_remaining,
+            "time_remaining": pf_snapshot.time_remaining,
             "btc_price": btc_price_val,
             "btc_move": btc_move,
             "candle_open_btc": candle_open or 0,
@@ -350,15 +358,13 @@ class MarketMonitor:
         if not bc.has_clients:
             return
 
-        market = self._shared.current_market
-        data: dict = {"timestamp": time.time()}
-
-        if market:
-            data["time_remaining"] = market.time_remaining()
-            data["slug"] = market.slug
-
-        data["up_mid"] = snapshot.orderbook.midpoint
-        data["down_mid"] = snapshot.down_orderbook.midpoint
+        data: dict = {
+            "timestamp": snapshot.timestamp,
+            "time_remaining": snapshot.time_remaining,
+            "slug": snapshot.slug,
+            "up_mid": snapshot.orderbook.midpoint,
+            "down_mid": snapshot.down_orderbook.midpoint,
+        }
 
         if snapshot.btc_price:
             data["btc_price"] = snapshot.btc_price.price_usd

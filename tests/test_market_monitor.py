@@ -348,7 +348,7 @@ class TestEvaluateTrigger:
             pf_result = _make_prefilter_result()
         if pf_snapshot is None:
             pf_snapshot = self._build_pf_snapshot(snapshot)
-        monitor._evaluate_trigger(snapshot, pf_snapshot, pf_result, 120.0)
+        monitor._evaluate_trigger(snapshot, pf_snapshot, pf_result)
 
     def test_prefilter_fail_no_trigger(self):
         monitor, ctx, ai_decision, _ = _make_monitor()
