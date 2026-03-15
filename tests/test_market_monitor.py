@@ -63,8 +63,6 @@ def _make_monitor():
     shared.current_market = None
     shared.latest_snapshot = None
     shared.snapshot_timestamp = 0.0
-    shared.tick_spreads_up = []
-    shared.tick_spreads_down = []
     shared.ai_last_call_time = 0.0
     shared.candle_open_btc = 65000.0
     shared.monitor_status = {}
