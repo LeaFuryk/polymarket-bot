@@ -5,7 +5,6 @@ plausible trade setup. Saves 60-70% of AI API costs by filtering out cycles
 where HOLD is the only sensible decision.
 """
 
-from polybot.prefilter.composite import PreFilter, default_filters
 from polybot.prefilter.filters import (
     ChoppyMarketFilter,
     NoStreakFilter,
@@ -14,6 +13,7 @@ from polybot.prefilter.filters import (
     TimeRemainingFilter,
     WideSpreadFilter,
 )
+from polybot.prefilter.prefilter import PreFilter, default_filters
 from polybot.prefilter.protocol import MarketFilter
 from polybot.prefilter.result import PreFilterResult
 from polybot.prefilter.signals import (
