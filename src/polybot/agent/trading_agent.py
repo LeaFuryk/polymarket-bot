@@ -87,7 +87,9 @@ class TradingAgent:
         # Create task objects — AIDecision first (monitors reference it)
         ai_decision = AIDecision(ctx)
         rotation_manager = RotationManager(ctx, ai_decision=ai_decision, logger=self._log)
-        market_monitor = MarketMonitor(ctx, ai_decision=ai_decision, rotation_manager=rotation_manager)
+        ctx.market_data.set_on_rotation(rotation_manager.handle_rotation)
+        ctx.market_data.set_broadcaster(ctx.broadcaster)
+        market_monitor = MarketMonitor(ctx, ai_decision=ai_decision)
         position_monitor = PositionMonitor(ctx, ai_decision=ai_decision)
 
         # Start WebSocket server

@@ -372,12 +372,12 @@ def assemble_dashboard_data(
             else 0,
         },
         "outage": {
-            "is_down": ctx.outage_start is not None,
-            "since": ctx.outage_start,
-            "duration": (time.time() - ctx.outage_start) if ctx.outage_start else 0,
-            "failures": ctx.discovery_failures,
-            "recovered": ctx.outage_recovered is not None,
-            "last_outage_duration": ctx.last_outage_duration,
+            "is_down": ctx.market_data.outage_start is not None,
+            "since": ctx.market_data.outage_start,
+            "duration": (time.time() - ctx.market_data.outage_start) if ctx.market_data.outage_start else 0,
+            "failures": ctx.market_data.discovery_failures,
+            "recovered": ctx.market_data.outage_recovered is not None,
+            "last_outage_duration": ctx.market_data.last_outage_duration,
         },
         "observations": [
             {

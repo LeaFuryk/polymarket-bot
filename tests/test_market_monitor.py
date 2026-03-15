@@ -11,7 +11,6 @@ import pytest
 
 from polybot.models.core import (
     BtcPrice,
-    CandleMarket,
     MarketSnapshot,
     OrderbookLevel,
     OrderbookSnapshot,
@@ -25,33 +24,13 @@ from polybot.tasks.market_monitor import MarketMonitor
 
 
 def _make_orderbook(best_bid: float, best_ask: float, depth: float = 100.0):
-    """Build an OrderbookSnapshot with one bid/ask level."""
     return OrderbookSnapshot(
         bids=[OrderbookLevel(price=best_bid, size=depth / best_bid)],
         asks=[OrderbookLevel(price=best_ask, size=depth / best_ask)],
     )
 
 
-def _make_candle_market(condition_id="cond_test", remaining=120.0, slug="btc-5min-123"):
-    return CandleMarket(
-        condition_id=condition_id,
-        up_token_id="up_tok_1",
-        down_token_id="down_tok_1",
-        slug=slug,
-        title="BTC 5min",
-        start_time=time.time() - 180,
-        end_time=time.time() + remaining,
-    )
-
-
-def _make_snapshot(
-    up_bid=0.48,
-    up_ask=0.52,
-    down_bid=0.46,
-    down_ask=0.50,
-    btc_price=65000.0,
-):
-    """Build a MarketSnapshot with sane defaults."""
+def _make_snapshot(up_bid=0.48, up_ask=0.52, down_bid=0.46, down_ask=0.50, btc_price=65000.0):
     return MarketSnapshot(
         condition_id="cond_test",
         orderbook=_make_orderbook(up_bid, up_ask),
@@ -61,7 +40,6 @@ def _make_snapshot(
 
 
 def _make_prefilter_result(should_skip=False, reason="", streak=0, direction=""):
-    """Build a mock PreFilterResult."""
     result = MagicMock()
     result.should_skip = should_skip
     result.reason = reason
@@ -73,7 +51,6 @@ def _make_prefilter_result(should_skip=False, reason="", streak=0, direction="")
 
 
 def _make_monitor():
-    """Build a MarketMonitor with fully mocked AgentContext."""
     ctx = MagicMock()
 
     # Config
@@ -135,13 +112,8 @@ def _make_monitor():
     ai_decision.busy = False
     ai_decision.evaluate_entry = AsyncMock()
 
-    # Rotation manager
-    rotation = MagicMock()
-    rotation.record_discovery_failure = MagicMock()
-    rotation.handle_fetched_market = AsyncMock()
-
-    monitor = MarketMonitor(ctx, ai_decision, rotation)
-    return monitor, ctx, ai_decision, rotation
+    monitor = MarketMonitor(ctx, ai_decision)
+    return monitor, ctx, ai_decision
 
 
 # ---------------------------------------------------------------------------
@@ -150,10 +122,8 @@ def _make_monitor():
 
 
 class TestPersistSnapshots:
-    """Tests for MarketMonitor._persist_snapshots()."""
-
     def test_queues_datastore_when_candle_id_set(self):
-        monitor, ctx, _, _ = _make_monitor()
+        monitor, ctx, _ = _make_monitor()
         datastore = MagicMock()
         datastore.current_candle_id = 42
         monitor._datastore = datastore
@@ -161,20 +131,14 @@ class TestPersistSnapshots:
 
         snapshot = _make_snapshot()
         pf_snapshot = PreFilterSnapshot(
-            timestamp=time.time(),
-            time_remaining=120.0,
-            rr_up=1.0,
-            rr_down=1.5,
-            btc_move_from_open=100.0,
+            timestamp=time.time(), time_remaining=120.0, rr_up=1.0, rr_down=1.5, btc_move_from_open=100.0
         )
         pf_result = _make_prefilter_result()
-
         monitor._persist_snapshots(snapshot, pf_snapshot, pf_result)
-
         datastore.queue_snapshot.assert_called_once()
 
     def test_skips_datastore_when_no_candle_id(self):
-        monitor, ctx, _, _ = _make_monitor()
+        monitor, ctx, _ = _make_monitor()
         datastore = MagicMock()
         datastore.current_candle_id = None
         monitor._datastore = datastore
@@ -182,50 +146,38 @@ class TestPersistSnapshots:
         snapshot = _make_snapshot()
         pf_snapshot = PreFilterSnapshot(timestamp=time.time(), time_remaining=120.0)
         pf_result = _make_prefilter_result()
-
         monitor._persist_snapshots(snapshot, pf_snapshot, pf_result)
-
         datastore.queue_snapshot.assert_not_called()
 
     def test_skips_datastore_when_none(self):
-        monitor, ctx, _, _ = _make_monitor()
+        monitor, ctx, _ = _make_monitor()
         monitor._datastore = None
 
         snapshot = _make_snapshot()
         pf_snapshot = PreFilterSnapshot(timestamp=time.time(), time_remaining=120.0)
         pf_result = _make_prefilter_result()
-
-        # Should not raise
         monitor._persist_snapshots(snapshot, pf_snapshot, pf_result)
 
     def test_queues_market_history_when_candle_id_set(self):
-        monitor, ctx, _, _ = _make_monitor()
+        monitor, ctx, _ = _make_monitor()
         ctx.market_history.current_candle_id = 7
 
         snapshot = _make_snapshot()
         pf_snapshot = PreFilterSnapshot(
-            timestamp=time.time(),
-            time_remaining=120.0,
-            rr_up=1.0,
-            rr_down=1.5,
-            btc_move_from_open=100.0,
+            timestamp=time.time(), time_remaining=120.0, rr_up=1.0, rr_down=1.5, btc_move_from_open=100.0
         )
         pf_result = _make_prefilter_result()
-
         monitor._persist_snapshots(snapshot, pf_snapshot, pf_result)
-
         ctx.market_history.queue_snapshot.assert_called_once()
 
     def test_skips_market_history_when_no_candle_id(self):
-        monitor, ctx, _, _ = _make_monitor()
+        monitor, ctx, _ = _make_monitor()
         ctx.market_history.current_candle_id = None
 
         snapshot = _make_snapshot()
         pf_snapshot = PreFilterSnapshot(timestamp=time.time(), time_remaining=120.0)
         pf_result = _make_prefilter_result()
-
         monitor._persist_snapshots(snapshot, pf_snapshot, pf_result)
-
         ctx.market_history.queue_snapshot.assert_not_called()
 
 
@@ -235,11 +187,8 @@ class TestPersistSnapshots:
 
 
 class TestEvaluateTrigger:
-    """Tests for MarketMonitor._evaluate_trigger()."""
-
     @staticmethod
     def _build_pf_snapshot(snapshot):
-        """Build a PreFilterSnapshot from a MarketSnapshot."""
         return PreFilterSnapshot(
             timestamp=time.time(),
             time_remaining=120.0,
@@ -252,7 +201,6 @@ class TestEvaluateTrigger:
         )
 
     def _run_trigger(self, monitor, ctx, pf_result=None, snapshot=None, pf_snapshot=None):
-        """Helper: build defaults and call _evaluate_trigger."""
         if snapshot is None:
             snapshot = _make_snapshot(up_ask=0.30, down_ask=0.40)
         if pf_result is None:
@@ -262,154 +210,104 @@ class TestEvaluateTrigger:
         monitor._evaluate_trigger(snapshot, pf_snapshot, pf_result)
 
     def test_prefilter_fail_no_trigger(self):
-        monitor, ctx, ai_decision, _ = _make_monitor()
+        monitor, ctx, ai = _make_monitor()
         ctx.shared.ai_last_call_time = 0.0
         pf_result = _make_prefilter_result(should_skip=True, reason="spread too wide")
-
         self._run_trigger(monitor, ctx, pf_result=pf_result)
-
-        ai_decision.evaluate_entry.assert_not_called()
+        ai.evaluate_entry.assert_not_called()
         assert "PREFILTER" in ctx.shared.monitor_status["gate_status"]
 
     def test_rr_below_threshold_no_trigger(self):
-        monitor, ctx, ai_decision, _ = _make_monitor()
+        monitor, ctx, ai = _make_monitor()
         ctx.shared.ai_last_call_time = 0.0
         monitor._rr_threshold = 5.0
-
         snapshot = _make_snapshot(up_ask=0.90, down_ask=0.90)
         pf_result = _make_prefilter_result(should_skip=False)
-
         self._run_trigger(monitor, ctx, pf_result=pf_result, snapshot=snapshot)
-
-        ai_decision.evaluate_entry.assert_not_called()
+        ai.evaluate_entry.assert_not_called()
         assert "ADAPTIVE" in ctx.shared.monitor_status["gate_status"]
 
     def test_cooldown_active_no_trigger(self):
-        monitor, ctx, ai_decision, _ = _make_monitor()
+        monitor, ctx, ai = _make_monitor()
         ctx.shared.ai_last_call_time = time.time()
         monitor._rr_threshold = 0.1
-
         snapshot = _make_snapshot(up_ask=0.30, down_ask=0.40)
         pf_result = _make_prefilter_result(should_skip=False)
-
         self._run_trigger(monitor, ctx, pf_result=pf_result, snapshot=snapshot)
-
-        ai_decision.evaluate_entry.assert_not_called()
+        ai.evaluate_entry.assert_not_called()
         assert "COOLDOWN" in ctx.shared.monitor_status["gate_status"]
 
     def test_ai_busy_no_trigger(self):
-        monitor, ctx, ai_decision, _ = _make_monitor()
+        monitor, ctx, ai = _make_monitor()
         ctx.shared.ai_last_call_time = 0.0
-        ai_decision.busy = True
+        ai.busy = True
         monitor._rr_threshold = 0.1
-
         snapshot = _make_snapshot(up_ask=0.30, down_ask=0.40)
         pf_result = _make_prefilter_result(should_skip=False)
-
         self._run_trigger(monitor, ctx, pf_result=pf_result, snapshot=snapshot)
-
-        ai_decision.evaluate_entry.assert_not_called()
+        ai.evaluate_entry.assert_not_called()
         assert "AI BUSY" in ctx.shared.monitor_status["gate_status"]
 
     @pytest.mark.asyncio
     async def test_all_gates_pass_triggers_ai(self):
-        monitor, ctx, ai_decision, _ = _make_monitor()
+        monitor, ctx, ai = _make_monitor()
         ctx.shared.ai_last_call_time = 0.0
-        ai_decision.busy = False
+        ai.busy = False
         monitor._rr_threshold = 0.1
         monitor._cooldown = 0.0
-
         snapshot = _make_snapshot(up_ask=0.30, down_ask=0.40)
         pf_result = _make_prefilter_result(should_skip=False)
-
         self._run_trigger(monitor, ctx, pf_result=pf_result, snapshot=snapshot)
         await asyncio.sleep(0)
-
-        ai_decision.evaluate_entry.assert_called_once()
+        ai.evaluate_entry.assert_called_once()
         assert ctx.shared.monitor_status["ai_triggered"] is True
 
     @pytest.mark.asyncio
     async def test_adaptive_mode_triggers(self):
-        monitor, ctx, ai_decision, _ = _make_monitor()
+        monitor, ctx, ai = _make_monitor()
         ctx.shared.ai_last_call_time = 0.0
-        ai_decision.busy = False
+        ai.busy = False
         monitor._adaptive_enabled = True
         monitor._cooldown = 0.0
-
         adaptive = MagicMock()
         adaptive.should_trigger.return_value = True
         adaptive.btc_threshold = 50.0
         adaptive.max_entry_price = 0.60
         monitor._adaptive_entry = adaptive
-
         snapshot = _make_snapshot(up_ask=0.30, down_ask=0.40)
         pf_result = _make_prefilter_result(should_skip=False)
-
         self._run_trigger(monitor, ctx, pf_result=pf_result, snapshot=snapshot)
         await asyncio.sleep(0)
-
         adaptive.should_trigger.assert_called_once()
-        ai_decision.evaluate_entry.assert_called_once()
+        ai.evaluate_entry.assert_called_once()
 
     def test_adaptive_mode_blocks(self):
-        monitor, ctx, ai_decision, _ = _make_monitor()
+        monitor, ctx, ai = _make_monitor()
         ctx.shared.ai_last_call_time = 0.0
-        ai_decision.busy = False
+        ai.busy = False
         monitor._adaptive_enabled = True
         monitor._cooldown = 0.0
-
         adaptive = MagicMock()
         adaptive.should_trigger.return_value = False
         adaptive.btc_threshold = 500.0
         adaptive.max_entry_price = 0.20
         monitor._adaptive_entry = adaptive
-
         snapshot = _make_snapshot(up_ask=0.30, down_ask=0.40)
         pf_result = _make_prefilter_result(should_skip=False)
-
         self._run_trigger(monitor, ctx, pf_result=pf_result, snapshot=snapshot)
-
-        ai_decision.evaluate_entry.assert_not_called()
+        ai.evaluate_entry.assert_not_called()
         assert "ADAPTIVE" in ctx.shared.monitor_status["gate_status"]
 
     @pytest.mark.asyncio
-    async def test_monitor_status_populated(self):
-        monitor, ctx, ai_decision, _ = _make_monitor()
-        ctx.shared.ai_last_call_time = 0.0
-        ctx.shared.candle_open_btc = 65000.0
-        monitor._rr_threshold = 0.1
-        monitor._cooldown = 0.0
-
-        snapshot = _make_snapshot(up_ask=0.50, down_ask=0.50)
-        pf_result = _make_prefilter_result(should_skip=False)
-
-        self._run_trigger(monitor, ctx, pf_result=pf_result, snapshot=snapshot)
-        await asyncio.sleep(0)
-
-        status = ctx.shared.monitor_status
-        assert "timestamp" in status
-        assert "time_remaining" in status
-        assert "rr_up" in status
-        assert "rr_down" in status
-        assert "best_side" in status
-        assert "prefilter_passed" in status
-        assert "adaptive_passed" in status
-        assert "cooldown_active" in status
-        assert "gate_status" in status
-
-    @pytest.mark.asyncio
     async def test_best_side_down_when_down_rr_higher(self):
-        monitor, ctx, _, _ = _make_monitor()
+        monitor, ctx, _ = _make_monitor()
         ctx.shared.ai_last_call_time = 0.0
         monitor._rr_threshold = 0.1
         monitor._cooldown = 0.0
-
         snapshot = _make_snapshot(up_ask=0.60, down_ask=0.30)
         pf_result = _make_prefilter_result(should_skip=False)
-
         self._run_trigger(monitor, ctx, pf_result=pf_result, snapshot=snapshot)
         await asyncio.sleep(0)
-
         assert ctx.shared.monitor_status["best_side"] == "down"
 
 
@@ -419,30 +317,19 @@ class TestEvaluateTrigger:
 
 
 class TestTickIntegration:
-    """Tests that _tick() uses the provider as a facade."""
-
     @pytest.mark.asyncio
-    async def test_tick_discovery_failure_delegates_to_rotation(self):
-        monitor, ctx, ai_decision, rotation = _make_monitor()
+    async def test_tick_returns_early_on_none(self):
+        monitor, ctx, ai = _make_monitor()
         ctx.market_data.get_snapshot.return_value = None
 
         await monitor._tick()
 
-        rotation.record_discovery_failure.assert_called_once()
-        rotation.handle_fetched_market.assert_not_awaited()
-        ai_decision.evaluate_entry.assert_not_called()
+        ai.evaluate_entry.assert_not_called()
+        assert ctx.shared.latest_snapshot is None
 
     @pytest.mark.asyncio
-    async def test_tick_success_delegates_to_rotation(self):
-        monitor, ctx, _, rotation = _make_monitor()
-
-        await monitor._tick()
-
-        rotation.handle_fetched_market.assert_awaited_once()
-
-    @pytest.mark.asyncio
-    async def test_tick_stores_snapshot_on_shared_state(self):
-        monitor, ctx, _, _ = _make_monitor()
+    async def test_tick_stores_snapshot(self):
+        monitor, ctx, _ = _make_monitor()
         expected = _make_snapshot()
         ctx.market_data.get_snapshot.return_value = expected
 
@@ -453,7 +340,7 @@ class TestTickIntegration:
 
     @pytest.mark.asyncio
     async def test_tick_full_pipeline_triggers_ai(self):
-        monitor, ctx, ai_decision, _ = _make_monitor()
+        monitor, ctx, ai = _make_monitor()
         ctx.shared.ai_last_call_time = 0.0
         ctx.shared.candle_open_btc = 65000.0
 
@@ -463,9 +350,9 @@ class TestTickIntegration:
         ctx.prefilter.check.return_value = _make_prefilter_result(should_skip=False)
         monitor._rr_threshold = 0.1
         monitor._cooldown = 0.0
-        ai_decision.busy = False
+        ai.busy = False
 
         await monitor._tick()
 
         assert len(ctx.shared.prefilter_history) == 1
-        ai_decision.evaluate_entry.assert_called_once()
+        ai.evaluate_entry.assert_called_once()

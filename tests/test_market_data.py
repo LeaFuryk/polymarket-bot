@@ -472,6 +472,53 @@ class TestPolymarketRepository:
         repo = PolymarketRepository(AsyncMock(), AsyncMock(), logger=custom)
         assert repo._log is custom
 
+    @pytest.mark.asyncio
+    async def test_fetch_tracks_failure(self):
+        from polybot.market_data.polymarket_repository import PolymarketRepository
+
+        rest = AsyncMock()
+        discovery = AsyncMock()
+        discovery.get_current_market = AsyncMock(return_value=None)
+        discovery.get_next_market = AsyncMock(return_value=None)
+
+        repo = PolymarketRepository(rest, discovery)
+
+        await repo.fetch()
+        assert repo.discovery_failures == 1
+        assert repo.outage_start is None  # below threshold
+
+        await repo.fetch()
+        await repo.fetch()
+        assert repo.discovery_failures == 3
+        assert repo.outage_start is not None  # outage started
+
+    @pytest.mark.asyncio
+    async def test_fetch_clears_outage_on_success(self):
+        from polybot.market_data.polymarket_repository import PolymarketRepository
+
+        rest = AsyncMock()
+        rest.get_orderbook = AsyncMock(return_value=_make_orderbook())
+        rest.get_last_trade_price = AsyncMock(return_value=0.50)
+
+        market = _make_candle_market()
+        discovery = AsyncMock()
+        discovery.get_current_market = AsyncMock(return_value=None)
+        discovery.get_next_market = AsyncMock(return_value=None)
+
+        repo = PolymarketRepository(rest, discovery)
+
+        # Build up failures
+        for _ in range(3):
+            await repo.fetch()
+        assert repo.outage_start is not None
+
+        # Now succeed
+        discovery.get_current_market.return_value = market
+        await repo.fetch()
+        assert repo.discovery_failures == 0
+        assert repo.outage_start is None
+        assert repo.outage_recovered is not None
+
 
 # ── Provider parallel fetch ───────────────────────────────────────────
 
@@ -607,6 +654,64 @@ class TestProviderParallelFetch:
 
         assert provider._polymarket.market is market
         assert len(provider._price_history) == 0
+
+    @patch("polybot.market_data.client.ClobClient")
+    @pytest.mark.asyncio
+    async def test_on_rotation_callback_fires_on_market_change(self, mock_clob):
+        from polybot.market_data.provider import MarketDataProvider
+
+        config = MagicMock()
+        config.monitor.btc_price_cache_ttl = 30
+        provider = MarketDataProvider(config)
+
+        callback = AsyncMock()
+        provider.set_on_rotation(callback)
+
+        from polybot.models import BetData, BtcData
+
+        market_a = _make_candle_market(condition_id="cond_a")
+        market_b = _make_candle_market(condition_id="cond_b")
+        btc_data = BtcData(price=BtcPrice(price_usd=65000.0), candles=[])
+
+        # First fetch — fires callback (first market)
+        bet_a = BetData(
+            market=market_a, orderbook=_make_orderbook(), down_orderbook=_make_orderbook(), last_trade_price=0.50
+        )
+        provider._polymarket.fetch = AsyncMock(return_value=bet_a)
+        provider._btc_repo.fetch = AsyncMock(return_value=btc_data)
+        await provider.get_snapshot()
+        assert callback.await_count == 1
+
+        # Same market — no callback
+        await provider.get_snapshot()
+        assert callback.await_count == 1
+
+        # New market — fires callback
+        bet_b = BetData(
+            market=market_b, orderbook=_make_orderbook(), down_orderbook=_make_orderbook(), last_trade_price=0.50
+        )
+        provider._polymarket.fetch.return_value = bet_b
+        await provider.get_snapshot()
+        assert callback.await_count == 2
+
+    @patch("polybot.market_data.client.ClobClient")
+    def test_outage_properties_delegate_to_repo(self, mock_clob):
+        from polybot.market_data.provider import MarketDataProvider
+
+        config = MagicMock()
+        config.monitor.btc_price_cache_ttl = 30
+        provider = MarketDataProvider(config)
+
+        # Simulate repo outage state
+        provider._polymarket.discovery_failures = 5
+        provider._polymarket.outage_start = 1000.0
+        provider._polymarket.outage_recovered = 1030.0
+        provider._polymarket.last_outage_duration = 30.0
+
+        assert provider.discovery_failures == 5
+        assert provider.outage_start == 1000.0
+        assert provider.outage_recovered == 1030.0
+        assert provider.last_outage_duration == 30.0
 
 
 # ── Model data objects ────────────────────────────────────────────────
