@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from polybot.adaptive_entry import AdaptiveEntryTracker
+    from polybot.agent.rotation import RotationManager
     from polybot.calibration import ConfidenceCalibrator
     from polybot.config import AppConfig
     from polybot.datastore import DataStore, MarketHistoryStore
@@ -34,6 +35,7 @@ if TYPE_CHECKING:
     from polybot.simulator.engine import ExecutionSimulator
     from polybot.simulator.orderbook import SimulatedOrderBook
     from polybot.simulator.portfolio import Portfolio
+    from polybot.tasks.ai_decision import AIDecision
     from polybot.ws.broadcaster import Broadcaster
 
 
@@ -77,6 +79,10 @@ class AgentContext:
 
     # Datastores (optional)
     datastore: DataStore | None = None
+
+    # Task objects (created by ContextFactory.build)
+    ai_decision: AIDecision | None = None
+    rotation_manager: RotationManager | None = None
 
     # Current state
     current_market: CandleMarket | None = None

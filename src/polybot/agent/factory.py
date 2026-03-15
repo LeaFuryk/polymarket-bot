@@ -8,6 +8,7 @@ from pathlib import Path
 from polybot import __version__
 from polybot.adaptive_entry import AdaptiveEntryTracker
 from polybot.agent.context import AgentContext
+from polybot.agent.rotation import RotationManager
 from polybot.agent.startup_loader import StartupData
 from polybot.calibration import ConfidenceCalibrator
 from polybot.config import AppConfig
@@ -30,6 +31,7 @@ from polybot.shared_state import SharedState
 from polybot.simulator.engine import ExecutionSimulator
 from polybot.simulator.orderbook import SimulatedOrderBook
 from polybot.simulator.portfolio import Portfolio
+from polybot.tasks.ai_decision import AIDecision
 from polybot.ws.broadcaster import Broadcaster
 
 
@@ -57,8 +59,12 @@ class ContextFactory:
         sd = self._startup_data
 
         log = self._log
+
+        # Broadcaster created early — injected into MarketDataProvider
+        broadcaster = Broadcaster()
+
         discovery = MarketDiscovery(config, logger=log)
-        market_data = MarketDataProvider(config, logger=log, discovery=discovery)
+        market_data = MarketDataProvider(config, logger=log, discovery=discovery, broadcaster=broadcaster)
         decision_engine = DecisionEngine(config.ai)
         execution_sim = ExecutionSimulator(config.simulator)
         orderbook = SimulatedOrderBook(config.simulator)
@@ -93,9 +99,6 @@ class ContextFactory:
         knowledge_manager = KnowledgeManager(config.logging.knowledge_dir, config.ai)
         feature_config = FeatureConfig(Path(config.logging.knowledge_dir).parent / "feature_config.json")
         processor = IndicatorsProcessor(all_indicators(), feature_config)
-
-        # WebSocket broadcaster (server owned by TradingAgent)
-        broadcaster = Broadcaster()
 
         # SQLite analytics store
         datastore: DataStore | None = None
@@ -148,5 +151,13 @@ class ContextFactory:
         ctx.historical_resolutions = sd.historical_resolutions
         ctx.historical_trades = sd.historical_trades
         ctx.iteration_summaries = sd.iteration_summaries
+
+        # Task objects — on_rotation wired after ctx exists (circular dep)
+        ai_decision = AIDecision(ctx)
+        rotation_manager = RotationManager(ctx, self._log, ai_decision=ai_decision)
+        market_data.set_on_rotation(rotation_manager.handle_rotation)
+
+        ctx.ai_decision = ai_decision
+        ctx.rotation_manager = rotation_manager
 
         return ctx
