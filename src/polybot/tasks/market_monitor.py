@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from polybot.agent.context import AgentContext
     from polybot.indicators.results import IndicatorResults
+    from polybot.models import MarketSnapshot
     from polybot.tasks.ai_decision import AIDecision
 
 from polybot.indicators import SessionContext
@@ -77,17 +78,11 @@ class MarketMonitor:
         the provider and rotation manager — the monitor just consumes
         the resulting snapshot.
         """
-        snapshot = await self._market_data.get_snapshot()
+        snapshot = await self._fetch_snapshot()
         if snapshot is None:
             return
 
-        self._shared.latest_snapshot = snapshot
-        self._shared.snapshot_timestamp = time.time()
-
-        # Compute indicators once for the whole tick
-        indicators = self._compute_indicators(snapshot)
-        self._shared.latest_indicator_results = indicators
-        self._broadcast_indicators(indicators)
+        indicators = self._update_indicators(snapshot)
 
         # Run prefilter gate
         has_position = self._portfolio.up_position.shares > 0 or self._portfolio.down_position.shares > 0
@@ -99,6 +94,22 @@ class MarketMonitor:
 
         # Evaluate AI trigger (always updates dashboard; only fires AI if all gates pass)
         self._evaluate_trigger(snapshot, pf_snapshot, pf_result)
+
+    async def _fetch_snapshot(self) -> MarketSnapshot | None:
+        """Fetch snapshot from provider and store on shared state."""
+        snapshot = await self._market_data.get_snapshot()
+        if snapshot is None:
+            return None
+        self._shared.latest_snapshot = snapshot
+        self._shared.snapshot_timestamp = time.time()
+        return snapshot
+
+    def _update_indicators(self, snapshot) -> IndicatorResults | None:
+        """Compute indicators, store on shared state, and broadcast."""
+        indicators = self._compute_indicators(snapshot)
+        self._shared.latest_indicator_results = indicators
+        self._broadcast_indicators(indicators)
+        return indicators
 
     # --- Indicators ---
 
