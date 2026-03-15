@@ -159,15 +159,17 @@ class RotationManager:
                 ctx.discovery_failures,
             )
 
-    async def handle_fetched_market(self, new_market: CandleMarket) -> None:
+    async def handle_fetched_market(self) -> None:
         """Process a successfully fetched market — outage recovery, rotation, setup.
 
-        Called by the monitor on every tick where discovery succeeded.  Handles
+        Called by the monitor on every tick where discovery succeeded.
+        Reads the market from ctx.market_data.fetched_market.  Handles
         clearing outage state, detecting rotation (condition_id change),
         running the transition (or skipping it post-outage), and setting up
         the new market.
         """
         ctx = self._ctx
+        new_market = ctx.market_data.fetched_market
         recovering = ctx.outage_start is not None
         self._clear_outage()
 

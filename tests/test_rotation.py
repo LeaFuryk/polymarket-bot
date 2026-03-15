@@ -120,8 +120,9 @@ class TestHandleFetchedMarket:
         rm, ctx = _make_rotation()
         ctx.current_market = None
         market = _make_candle_market()
+        ctx.market_data.fetched_market = market
 
-        await rm.handle_fetched_market(market)
+        await rm.handle_fetched_market()
 
         assert ctx.current_market is market
         ctx.market_data.set_market.assert_called_once_with(market)
@@ -131,8 +132,9 @@ class TestHandleFetchedMarket:
         rm, ctx = _make_rotation()
         market = _make_candle_market(condition_id="cond_1")
         ctx.current_market = market
+        ctx.market_data.fetched_market = market
 
-        await rm.handle_fetched_market(market)
+        await rm.handle_fetched_market()
 
         # No transition, no setup
         assert ctx.current_market is market
@@ -143,11 +145,12 @@ class TestHandleFetchedMarket:
         old = _make_candle_market(condition_id="cond_old")
         new = _make_candle_market(condition_id="cond_new")
         ctx.current_market = old
+        ctx.market_data.fetched_market = new
 
         # Mock _handle_market_transition to avoid full resolution flow
         rm._handle_market_transition = AsyncMock()
 
-        await rm.handle_fetched_market(new)
+        await rm.handle_fetched_market()
 
         rm._handle_market_transition.assert_awaited_once()
         assert ctx.current_market is new
@@ -160,10 +163,11 @@ class TestHandleFetchedMarket:
         ctx.current_market = old
         ctx.outage_start = time.time() - 30
         ctx.discovery_failures = 5
+        ctx.market_data.fetched_market = new
 
         rm._handle_market_transition = AsyncMock()
 
-        await rm.handle_fetched_market(new)
+        await rm.handle_fetched_market()
 
         rm._handle_market_transition.assert_not_awaited()
         ctx.orderbook.cancel_all.assert_called_once()
@@ -179,8 +183,9 @@ class TestHandleFetchedMarket:
         ctx.discovery_failures = 5
         market = _make_candle_market()
         ctx.current_market = market
+        ctx.market_data.fetched_market = market
 
-        await rm.handle_fetched_market(market)
+        await rm.handle_fetched_market()
 
         assert ctx.discovery_failures == 0
         assert ctx.outage_start is None

@@ -108,10 +108,8 @@ def _make_monitor():
     ctx.prefilter.check.return_value = _make_prefilter_result()
 
     # Market data provider
-    market = _make_candle_market()
     ctx.market_data = AsyncMock()
     ctx.market_data.get_snapshot = AsyncMock(return_value=_make_snapshot())
-    ctx.market_data.fetched_market = market
 
     # Resolution tracker
     ctx.resolution_tracker = MagicMock()
@@ -435,14 +433,12 @@ class TestTickIntegration:
         ai_decision.evaluate_entry.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_tick_success_delegates_market_to_rotation(self):
+    async def test_tick_success_delegates_to_rotation(self):
         monitor, ctx, _, rotation = _make_monitor()
-        market = _make_candle_market()
-        ctx.market_data.fetched_market = market
 
         await monitor._tick()
 
-        rotation.handle_fetched_market.assert_awaited_once_with(market)
+        rotation.handle_fetched_market.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_tick_stores_snapshot_on_shared_state(self):
