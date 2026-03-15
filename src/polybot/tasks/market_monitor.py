@@ -22,8 +22,6 @@ from polybot.indicators import SessionContext
 from polybot.indicators.helpers import compute_rr
 from polybot.shared_state import PreFilterSnapshot
 
-logger = logging.getLogger(__name__)
-
 
 class MarketMonitor:
     """Fetches market data every second, runs prefilter, triggers AI."""
@@ -32,7 +30,9 @@ class MarketMonitor:
         self,
         ctx: AgentContext,
         ai_decision: AIDecision,
+        logger: logging.Logger | None = None,
     ) -> None:
+        self._log = logger or logging.getLogger(__name__)
         self._config = ctx.config
         self._shared = ctx.shared
         self._market_data = ctx.market_data
@@ -53,7 +53,7 @@ class MarketMonitor:
 
     async def run(self) -> None:
         """Main loop — runs until shutdown."""
-        logger.info("MarketMonitor started (interval=%.1fs)", self._interval)
+        self._log.info("MarketMonitor started (interval=%.1fs)", self._interval)
         while not self._shared.shutdown:
             if self._shared.rotation_in_progress:
                 await asyncio.sleep(0.2)
@@ -62,11 +62,11 @@ class MarketMonitor:
             try:
                 await self._tick()
             except Exception:
-                logger.exception("MarketMonitor tick error")
+                self._log.exception("MarketMonitor tick error")
 
             await asyncio.sleep(self._interval)
 
-        logger.info("MarketMonitor stopped")
+        self._log.info("MarketMonitor stopped")
 
     async def _tick(self) -> None:
         """Single monitoring cycle.
@@ -132,7 +132,7 @@ class MarketMonitor:
                 time_remaining=snapshot.time_remaining,
             )
         except Exception:
-            logger.debug("Indicator computation failed", exc_info=True)
+            self._log.debug("Indicator computation failed", exc_info=True)
             return None
 
     def _record_tick(self, snapshot, pf_result) -> PreFilterSnapshot:
@@ -318,7 +318,7 @@ class MarketMonitor:
                         f"btc_move=${btc_move:+.0f}"
                     )
                 asyncio.create_task(self._ai_decision.evaluate_entry(reason))
-                logger.info(
+                self._log.info(
                     "AI triggered: %s (cooldown=%.0fs elapsed)",
                     reason,
                     elapsed,
@@ -370,7 +370,7 @@ class MarketMonitor:
                 results = compute_indicators(snapshot, self._feature_config, session_ctx)
                 indicators_dict = {r.name: {"value": r.value, "label": r.label} for r in results}
             except Exception:
-                logger.debug("Indicator computation failed for snapshot", exc_info=True)
+                self._log.debug("Indicator computation failed for snapshot", exc_info=True)
 
         row = SnapshotRow(
             candle_id=self._datastore.current_candle_id,
