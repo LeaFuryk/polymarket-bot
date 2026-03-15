@@ -106,7 +106,6 @@ class PreFilter:
 
     def check(
         self,
-        time_remaining: float,
         snapshot: MarketSnapshot,
         has_open_position: bool = False,
     ) -> PreFilterResult:
@@ -131,7 +130,6 @@ class PreFilter:
         # Run filter pipeline — first skip wins
         for f in self._filters:
             should_skip, reason = f.check(
-                time_remaining,
                 snapshot,
                 has_open_position=has_open_position,
                 streak=streak,
@@ -150,7 +148,6 @@ class PreFilter:
 
     def check_with_indicators(
         self,
-        time_remaining: float,
         snapshot: MarketSnapshot,
         indicator_results: IndicatorResults,
         has_open_position: bool = False,
@@ -166,8 +163,6 @@ class PreFilter:
         streak_dir = ""
         streak_result = indicator_results.get("Consecutive Streak")
         if streak_result is not None and streak > 0:
-            # Direction is the first word after the count in the label
-            # e.g. "3 UP candles (...)" — parse from btc_candles directly
             candles = snapshot.btc_candles
             if candles:
                 streak_dir = candles[-1].direction
@@ -185,7 +180,6 @@ class PreFilter:
 
         for f in self._filters:
             should_skip, reason = f.check(
-                time_remaining,
                 snapshot,
                 has_open_position=has_open_position,
                 streak=streak,

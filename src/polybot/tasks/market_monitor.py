@@ -86,7 +86,7 @@ class MarketMonitor:
 
         # Run prefilter gate
         has_position = self._portfolio.has_open_position()
-        pf_result = self._prefilter.check(snapshot.time_remaining, snapshot, has_position)
+        pf_result = self._prefilter.check(snapshot, has_position)
 
         # Record tick (always — analytics + dashboard history)
         pf_snapshot = self._record_tick(snapshot, pf_result)
