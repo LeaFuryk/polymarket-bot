@@ -16,6 +16,8 @@ if TYPE_CHECKING:
     from polybot.agent.context import AgentContext
     from polybot.agent.rotation import RotationManager
     from polybot.tasks.ai_decision import AIDecision
+
+from polybot.dashboard import DashboardMessageBuilder
 from polybot.indicators import (
     SessionContext,
     compute_indicators,
@@ -275,10 +277,11 @@ class MarketMonitor:
         """Push lightweight market + status updates to WS clients."""
         if self._ctx is None:
             return
-        ws = self._ctx.ws_broadcaster
-        if ws.has_clients:
-            await ws.broadcast(ws.build_market_update(self._ctx))
-            await ws.broadcast(ws.build_status_update(self._ctx))
+        bc = self._ctx.broadcaster
+        if bc.has_clients:
+            builder = DashboardMessageBuilder()
+            await bc.broadcast(builder.build_market_update(self._ctx))
+            await bc.broadcast(builder.build_status_update(self._ctx, ws_client_count=bc.client_count))
 
     def _queue_snapshot(
         self,

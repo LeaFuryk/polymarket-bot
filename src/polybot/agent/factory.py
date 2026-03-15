@@ -28,7 +28,7 @@ from polybot.shared_state import SharedState
 from polybot.simulator.engine import ExecutionSimulator
 from polybot.simulator.orderbook import SimulatedOrderBook
 from polybot.simulator.portfolio import Portfolio
-from polybot.ws.broadcaster import DashboardBroadcaster
+from polybot.ws.broadcaster import Broadcaster
 
 
 class ContextFactory:
@@ -90,8 +90,8 @@ class ContextFactory:
         knowledge_manager = KnowledgeManager(config.logging.knowledge_dir, config.ai)
         feature_config = FeatureConfig(Path(config.logging.knowledge_dir).parent / "feature_config.json")
 
-        # WebSocket dashboard broadcaster (server owned by TradingAgent)
-        ws_broadcaster = DashboardBroadcaster()
+        # WebSocket broadcaster (server owned by TradingAgent)
+        broadcaster = Broadcaster()
 
         # SQLite analytics store
         datastore: DataStore | None = None
@@ -132,7 +132,7 @@ class ContextFactory:
             live_mode=live_mode,
             live_engine=live_engine,
             shadow_portfolio=shadow_portfolio,
-            ws_broadcaster=ws_broadcaster,
+            broadcaster=broadcaster,
             datastore=datastore,
             market_history=market_history,
             bot_version=__version__,

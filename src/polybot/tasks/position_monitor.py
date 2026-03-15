@@ -15,6 +15,7 @@ import logging
 import time
 from typing import TYPE_CHECKING
 
+from polybot.dashboard import DashboardMessageBuilder
 from polybot.shared_state import EntryContext
 
 if TYPE_CHECKING:
@@ -107,9 +108,10 @@ class PositionMonitor:
         """Push position update to WS clients."""
         if self._ctx is None:
             return
-        ws = self._ctx.ws_broadcaster
-        if ws.has_clients:
-            await ws.broadcast(ws.build_position_update(self._ctx))
+        bc = self._ctx.broadcaster
+        if bc.has_clients:
+            builder = DashboardMessageBuilder()
+            await bc.broadcast(builder.build_position_update(self._ctx))
 
     # --- BTC Velocity Helper ---
 

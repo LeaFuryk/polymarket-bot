@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     from polybot.models import CandleMarket
     from polybot.tasks.ai_decision import AIDecision
 
+from polybot.dashboard import DashboardMessageBuilder
 from polybot.shared_state import CandleMicrostructure
 
 
@@ -247,8 +248,9 @@ class RotationManager:
                 ctx.session_resolutions.append(resolution)  # uncapped — for dashboard
 
                 # Push resolution event to WS clients
-                if ctx.ws_broadcaster.has_clients:
-                    await ctx.ws_broadcaster.broadcast(ctx.ws_broadcaster.build_resolution_event(resolution))
+                if ctx.broadcaster.has_clients:
+                    builder = DashboardMessageBuilder()
+                    await ctx.broadcaster.broadcast(builder.build_resolution_event(resolution))
 
                 if len(ctx.recent_resolutions) > 20:
                     ctx.recent_resolutions[:] = ctx.recent_resolutions[-20:]

@@ -1,15 +1,18 @@
 # ws/
 
-WebSocket dashboard server — pushes live trading state to the Next.js frontend.
+WebSocket server — manages client connections and broadcasts messages.
 
 ## Architecture
 
 ```
 protocol.py     Message types (snapshot, trade, resolution, market, position, status)
-broadcaster.py  Client set management + message builders from agent state
+broadcaster.py  Client set management + broadcast (transport only, no message building)
 server.py       WebSocket server lifecycle (start, stop, handler)
 constants.py    Default host, port, ping settings
 ```
+
+Message building lives in `polybot.dashboard.message_builder` — the broadcaster
+is a generic transport layer; any client can consume the messages it sends.
 
 ## Message Types
 

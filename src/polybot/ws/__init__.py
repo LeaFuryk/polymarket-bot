@@ -1,6 +1,6 @@
-"""WebSocket dashboard server — pushes live state to Next.js frontend."""
+"""WebSocket server — pushes live state to connected clients."""
 
-from polybot.ws.broadcaster import DashboardBroadcaster
+from polybot.ws.broadcaster import Broadcaster
 from polybot.ws.constants import (
     DEFAULT_WS_HOST,
     DEFAULT_WS_PORT,
@@ -21,9 +21,9 @@ from polybot.ws.server import DashboardWSServer
 
 __all__ = [
     "ALL_TYPES",
+    "Broadcaster",
     "DEFAULT_WS_HOST",
     "DEFAULT_WS_PORT",
-    "DashboardBroadcaster",
     "DashboardWSServer",
     "MSG_MARKET",
     "MSG_POSITION",
