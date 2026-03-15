@@ -1,4 +1,4 @@
-"""Tests for MarketMonitor — parallel-fetch pipeline and trigger logic."""
+"""Tests for MarketMonitor — fetch pipeline and trigger logic."""
 
 from __future__ import annotations
 
@@ -10,8 +10,6 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from polybot.models.core import (
-    BetData,
-    BtcData,
     BtcPrice,
     CandleMarket,
     MarketSnapshot,
@@ -43,23 +41,6 @@ def _make_candle_market(condition_id="cond_test", remaining=120.0, slug="btc-5mi
         title="BTC 5min",
         start_time=time.time() - 180,
         end_time=time.time() + remaining,
-    )
-
-
-def _make_bet_data(condition_id="cond_test", remaining=120.0, up_bid=0.48, up_ask=0.52, down_bid=0.46, down_ask=0.50):
-    market = _make_candle_market(condition_id=condition_id, remaining=remaining)
-    return BetData(
-        market=market,
-        orderbook=_make_orderbook(up_bid, up_ask),
-        down_orderbook=_make_orderbook(down_bid, down_ask),
-        last_trade_price=0.50,
-    )
-
-
-def _make_btc_data(btc_price=65000.0):
-    return BtcData(
-        price=BtcPrice(price_usd=btc_price) if btc_price else None,
-        candles=[],
     )
 
 
@@ -126,16 +107,11 @@ def _make_monitor():
     ctx.prefilter = MagicMock()
     ctx.prefilter.check.return_value = _make_prefilter_result()
 
-    # Market data — polymarket + btc repos
-    polymarket = AsyncMock()
-    polymarket.fetch = AsyncMock(return_value=_make_bet_data())
-    btc_repo = AsyncMock()
-    btc_repo.fetch = AsyncMock(return_value=_make_btc_data())
-
-    ctx.market_data = MagicMock()
-    ctx.market_data.polymarket = polymarket
-    ctx.market_data.btc_repo = btc_repo
-    ctx.market_data.build_snapshot = MagicMock(return_value=_make_snapshot())
+    # Market data provider
+    market = _make_candle_market()
+    ctx.market_data = AsyncMock()
+    ctx.market_data.get_snapshot = AsyncMock(return_value=_make_snapshot())
+    ctx.market_data.fetched_market = market
 
     # Resolution tracker
     ctx.resolution_tracker = MagicMock()
@@ -278,7 +254,7 @@ class TestEvaluateTrigger:
         )
 
     def _run_trigger(self, monitor, ctx, pf_result=None, snapshot=None, pf_snapshot=None):
-        """Helper: build defaults and call _evaluate_trigger (no AI trigger expected)."""
+        """Helper: build defaults and call _evaluate_trigger."""
         if snapshot is None:
             snapshot = _make_snapshot(up_ask=0.30, down_ask=0.40)
         if pf_result is None:
@@ -289,7 +265,7 @@ class TestEvaluateTrigger:
 
     def test_prefilter_fail_no_trigger(self):
         monitor, ctx, ai_decision, _ = _make_monitor()
-        ctx.shared.ai_last_call_time = 0.0  # no cooldown
+        ctx.shared.ai_last_call_time = 0.0
         pf_result = _make_prefilter_result(should_skip=True, reason="spread too wide")
 
         self._run_trigger(monitor, ctx, pf_result=pf_result)
@@ -300,9 +276,8 @@ class TestEvaluateTrigger:
     def test_rr_below_threshold_no_trigger(self):
         monitor, ctx, ai_decision, _ = _make_monitor()
         ctx.shared.ai_last_call_time = 0.0
-        monitor._rr_threshold = 5.0  # very high threshold
+        monitor._rr_threshold = 5.0
 
-        # up_ask=0.90 → R/R = 0.11, well below 5.0
         snapshot = _make_snapshot(up_ask=0.90, down_ask=0.90)
         pf_result = _make_prefilter_result(should_skip=False)
 
@@ -313,8 +288,8 @@ class TestEvaluateTrigger:
 
     def test_cooldown_active_no_trigger(self):
         monitor, ctx, ai_decision, _ = _make_monitor()
-        ctx.shared.ai_last_call_time = time.time()  # just called
-        monitor._rr_threshold = 0.1  # low threshold
+        ctx.shared.ai_last_call_time = time.time()
+        monitor._rr_threshold = 0.1
 
         snapshot = _make_snapshot(up_ask=0.30, down_ask=0.40)
         pf_result = _make_prefilter_result(should_skip=False)
@@ -344,13 +319,13 @@ class TestEvaluateTrigger:
         ctx.shared.ai_last_call_time = 0.0
         ai_decision.busy = False
         monitor._rr_threshold = 0.1
-        monitor._cooldown = 0.0  # no cooldown
+        monitor._cooldown = 0.0
 
         snapshot = _make_snapshot(up_ask=0.30, down_ask=0.40)
         pf_result = _make_prefilter_result(should_skip=False)
 
         self._run_trigger(monitor, ctx, pf_result=pf_result, snapshot=snapshot)
-        await asyncio.sleep(0)  # let create_task fire
+        await asyncio.sleep(0)
 
         ai_decision.evaluate_entry.assert_called_once()
         assert ctx.shared.monitor_status["ai_triggered"] is True
@@ -373,7 +348,7 @@ class TestEvaluateTrigger:
         pf_result = _make_prefilter_result(should_skip=False)
 
         self._run_trigger(monitor, ctx, pf_result=pf_result, snapshot=snapshot)
-        await asyncio.sleep(0)  # let create_task fire
+        await asyncio.sleep(0)
 
         adaptive.should_trigger.assert_called_once()
         ai_decision.evaluate_entry.assert_called_once()
@@ -411,7 +386,7 @@ class TestEvaluateTrigger:
         pf_result = _make_prefilter_result(should_skip=False)
 
         self._run_trigger(monitor, ctx, pf_result=pf_result, snapshot=snapshot)
-        await asyncio.sleep(0)  # let create_task fire
+        await asyncio.sleep(0)
 
         status = ctx.shared.monitor_status
         assert "timestamp" in status
@@ -431,12 +406,11 @@ class TestEvaluateTrigger:
         monitor._rr_threshold = 0.1
         monitor._cooldown = 0.0
 
-        # down_ask=0.30 → rr_down=2.33, up_ask=0.60 → rr_up=0.67
         snapshot = _make_snapshot(up_ask=0.60, down_ask=0.30)
         pf_result = _make_prefilter_result(should_skip=False)
 
         self._run_trigger(monitor, ctx, pf_result=pf_result, snapshot=snapshot)
-        await asyncio.sleep(0)  # let create_task fire
+        await asyncio.sleep(0)
 
         assert ctx.shared.monitor_status["best_side"] == "down"
 
@@ -447,12 +421,12 @@ class TestEvaluateTrigger:
 
 
 class TestTickIntegration:
-    """Tests that _tick() orchestrates the parallel-fetch pipeline correctly."""
+    """Tests that _tick() uses the provider as a facade."""
 
     @pytest.mark.asyncio
     async def test_tick_discovery_failure_delegates_to_rotation(self):
         monitor, ctx, ai_decision, rotation = _make_monitor()
-        ctx.market_data.polymarket.fetch.return_value = None
+        ctx.market_data.get_snapshot.return_value = None
 
         await monitor._tick()
 
@@ -461,36 +435,20 @@ class TestTickIntegration:
         ai_decision.evaluate_entry.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_tick_success_delegates_to_rotation(self):
-        """On successful fetch, handle_fetched_market receives the market."""
+    async def test_tick_success_delegates_market_to_rotation(self):
         monitor, ctx, _, rotation = _make_monitor()
-
-        bet_data = _make_bet_data()
-        ctx.market_data.polymarket.fetch.return_value = bet_data
-
-        await monitor._tick()
-
-        rotation.handle_fetched_market.assert_awaited_once_with(bet_data.market)
-
-    @pytest.mark.asyncio
-    async def test_tick_builds_snapshot_from_repos(self):
-        """Verify build_snapshot is called with the fetched bet_data and btc_data."""
-        monitor, ctx, _, _ = _make_monitor()
-
-        bet_data = _make_bet_data(condition_id="cond_test")
-        btc_data = _make_btc_data(65500.0)
-        ctx.market_data.polymarket.fetch.return_value = bet_data
-        ctx.market_data.btc_repo.fetch.return_value = btc_data
+        market = _make_candle_market()
+        ctx.market_data.fetched_market = market
 
         await monitor._tick()
 
-        ctx.market_data.build_snapshot.assert_called_once_with(bet_data, btc_data)
+        rotation.handle_fetched_market.assert_awaited_once_with(market)
 
     @pytest.mark.asyncio
     async def test_tick_stores_snapshot_on_shared_state(self):
         monitor, ctx, _, _ = _make_monitor()
         expected = _make_snapshot()
-        ctx.market_data.build_snapshot.return_value = expected
+        ctx.market_data.get_snapshot.return_value = expected
 
         await monitor._tick()
 
@@ -499,14 +457,12 @@ class TestTickIntegration:
 
     @pytest.mark.asyncio
     async def test_tick_full_pipeline_triggers_ai(self):
-        """Full tick — all gates pass, AI triggered."""
         monitor, ctx, ai_decision, _ = _make_monitor()
         ctx.shared.ai_last_call_time = 0.0
         ctx.shared.candle_open_btc = 65000.0
 
-        # Good R/R snapshot
         snapshot = _make_snapshot(up_ask=0.30, down_ask=0.40, btc_price=65100.0)
-        ctx.market_data.build_snapshot.return_value = snapshot
+        ctx.market_data.get_snapshot.return_value = snapshot
 
         ctx.prefilter.check.return_value = _make_prefilter_result(should_skip=False)
         monitor._rr_threshold = 0.1
@@ -515,7 +471,5 @@ class TestTickIntegration:
 
         await monitor._tick()
 
-        # Prefilter history updated
         assert len(ctx.shared.prefilter_history) == 1
-        # AI triggered
         ai_decision.evaluate_entry.assert_called_once()

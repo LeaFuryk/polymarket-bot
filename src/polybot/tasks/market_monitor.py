@@ -16,8 +16,6 @@ if TYPE_CHECKING:
     from polybot.agent.context import AgentContext
     from polybot.agent.rotation import RotationManager
     from polybot.indicators.results import IndicatorResults
-    from polybot.market_data.btc_repository import BtcRepository
-    from polybot.market_data.polymarket_repository import PolymarketRepository
     from polybot.tasks.ai_decision import AIDecision
 
 from polybot.indicators import SessionContext
@@ -39,8 +37,6 @@ class MarketMonitor:
         self._config = ctx.config
         self._shared = ctx.shared
         self._market_data = ctx.market_data
-        self._polymarket: PolymarketRepository = ctx.market_data.polymarket
-        self._btc_repo: BtcRepository = ctx.market_data.btc_repo
         self._prefilter = ctx.prefilter
         self._portfolio = ctx.portfolio
         self._resolution_tracker = ctx.resolution_tracker
@@ -77,21 +73,16 @@ class MarketMonitor:
     async def _tick(self) -> None:
         """Single monitoring cycle.
 
-        Pipeline: parallel fetch → rotation / outage handling → build snapshot
-        → compute indicators → prefilter → evaluate AI trigger.
+        Pipeline: fetch snapshot → rotation handling → compute indicators
+        → prefilter → evaluate AI trigger.
         """
-        bet_data, btc_data = await asyncio.gather(
-            self._polymarket.fetch(),
-            self._btc_repo.fetch(),
-        )
+        snapshot = await self._market_data.get_snapshot()
 
-        if bet_data is None:
+        if snapshot is None:
             self._rotation.record_discovery_failure()
             return
 
-        await self._rotation.handle_fetched_market(bet_data.market)
-
-        snapshot = self._market_data.build_snapshot(bet_data, btc_data)
+        await self._rotation.handle_fetched_market(self._market_data.fetched_market)
 
         self._shared.latest_snapshot = snapshot
         self._shared.snapshot_timestamp = time.time()

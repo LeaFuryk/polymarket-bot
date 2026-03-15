@@ -44,15 +44,12 @@ class MarketDataProvider:
         self._price_history: deque[float] = deque(maxlen=PRICE_HISTORY_SIZE)
         self._btc_price_history: deque[float] = deque(maxlen=PRICE_HISTORY_SIZE)
 
-    # --- Public properties for sub-component access ---
+    # --- Public properties ---
 
     @property
-    def polymarket(self) -> PolymarketRepository:
-        return self._polymarket
-
-    @property
-    def btc_repo(self) -> BtcRepository:
-        return self._btc_repo
+    def fetched_market(self) -> CandleMarket | None:
+        """The CandleMarket used in the last successful fetch (or None)."""
+        return self._polymarket.market
 
     @property
     def btc_feed(self) -> BtcPriceFeed:
@@ -62,7 +59,7 @@ class MarketDataProvider:
     def rest_client(self) -> PolymarketRestClient:
         return self._polymarket.rest_client
 
-    # --- Backward-compat delegations ---
+    # --- Delegations ---
 
     def set_market(self, candle: CandleMarket) -> None:
         """Update internal market and config for a new candle market."""
@@ -90,58 +87,41 @@ class MarketDataProvider:
 
     # --- Core fetch ---
 
-    async def get_snapshot(self) -> MarketSnapshot:
-        """Fetch Polymarket + BTC data in parallel, merge into MarketSnapshot."""
+    async def get_snapshot(self) -> MarketSnapshot | None:
+        """Fetch Polymarket + BTC data in parallel, merge into MarketSnapshot.
+
+        Returns None when market discovery fails (no active market found).
+        """
         bet_data, btc_data = await asyncio.gather(
             self._polymarket.fetch(),
             self._btc_repo.fetch(),
         )
-        return self.build_snapshot(bet_data, btc_data)
+        if bet_data is None:
+            return None
+        return self._build_snapshot(bet_data, btc_data)
 
-    def build_snapshot(self, bet_data: BetData | None, btc_data: BtcData) -> MarketSnapshot:
+    def _build_snapshot(self, bet_data: BetData, btc_data: BtcData) -> MarketSnapshot:
         """Merge BetData + BtcData into a MarketSnapshot, tracking price history."""
-        from polybot.models import OrderbookSnapshot
-
-        if bet_data is not None:
-            market = bet_data.market
-            up_orderbook = bet_data.orderbook
-            down_orderbook = bet_data.down_orderbook
-            last_price = bet_data.last_trade_price
-            condition_id = market.condition_id
-            token_id = market.up_token_id
-            up_token_id = market.up_token_id
-            down_token_id = market.down_token_id
-            time_remaining = market.time_remaining()
-            slug = market.slug
-        else:
-            up_orderbook = OrderbookSnapshot()
-            down_orderbook = OrderbookSnapshot()
-            last_price = None
-            condition_id = self._config.market.condition_id
-            token_id = self._config.market.token_id
-            up_token_id = ""
-            down_token_id = ""
-            time_remaining = 0.0
-            slug = ""
+        market = bet_data.market
 
         # Track midpoint history (Up token)
-        if up_orderbook.midpoint is not None:
-            self._price_history.append(up_orderbook.midpoint)
+        if bet_data.orderbook.midpoint is not None:
+            self._price_history.append(bet_data.orderbook.midpoint)
 
         # Track BTC price history (persists across market rotations)
         if btc_data.price is not None:
             self._btc_price_history.append(btc_data.price.price_usd)
 
         return MarketSnapshot(
-            condition_id=condition_id,
-            token_id=token_id,
-            orderbook=up_orderbook,
-            down_orderbook=down_orderbook,
-            up_token_id=up_token_id,
-            down_token_id=down_token_id,
-            time_remaining=time_remaining,
-            slug=slug,
-            last_trade_price=last_price,
+            condition_id=market.condition_id,
+            token_id=market.up_token_id,
+            orderbook=bet_data.orderbook,
+            down_orderbook=bet_data.down_orderbook,
+            up_token_id=market.up_token_id,
+            down_token_id=market.down_token_id,
+            time_remaining=market.time_remaining(),
+            slug=market.slug,
+            last_trade_price=bet_data.last_trade_price,
             timestamp=time.time(),
             btc_price=btc_data.price,
             price_history=list(self._price_history),

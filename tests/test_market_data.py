@@ -517,13 +517,11 @@ class TestProviderParallelFetch:
 
     @patch("polybot.market_data.client.ClobClient")
     @pytest.mark.asyncio
-    async def test_get_snapshot_handles_none_bet_data(self, mock_clob):
+    async def test_get_snapshot_returns_none_on_discovery_failure(self, mock_clob):
         from polybot.market_data.provider import MarketDataProvider
 
         config = MagicMock()
         config.monitor.btc_price_cache_ttl = 30
-        config.market.condition_id = "fallback_cond"
-        config.market.token_id = "fallback_tok"
         provider = MarketDataProvider(config)
 
         from polybot.models import BtcData
@@ -534,9 +532,7 @@ class TestProviderParallelFetch:
 
         snapshot = await provider.get_snapshot()
 
-        assert snapshot.condition_id == "fallback_cond"
-        assert snapshot.btc_price.price_usd == 65000.0
-        assert snapshot.time_remaining == 0.0
+        assert snapshot is None
 
     @patch("polybot.market_data.client.ClobClient")
     @pytest.mark.asyncio
@@ -565,6 +561,34 @@ class TestProviderParallelFetch:
 
         assert len(snapshot.price_history) == 1
         assert len(snapshot.btc_price_history) == 1
+
+    @patch("polybot.market_data.client.ClobClient")
+    @pytest.mark.asyncio
+    async def test_fetched_market_available_after_get_snapshot(self, mock_clob):
+        from polybot.market_data.provider import MarketDataProvider
+
+        config = MagicMock()
+        config.monitor.btc_price_cache_ttl = 30
+        provider = MarketDataProvider(config)
+
+        market = _make_candle_market()
+        from polybot.models import BetData, BtcData
+
+        bet_data = BetData(
+            market=market,
+            orderbook=_make_orderbook(0.48, 0.52),
+            down_orderbook=_make_orderbook(0.46, 0.50),
+            last_trade_price=0.50,
+        )
+        btc_data = BtcData(price=BtcPrice(price_usd=65000.0), candles=[])
+
+        provider._polymarket.fetch = AsyncMock(return_value=bet_data)
+        provider._polymarket._market = market  # simulates what fetch() does internally
+        provider._btc_repo.fetch = AsyncMock(return_value=btc_data)
+
+        await provider.get_snapshot()
+
+        assert provider.fetched_market is market
 
     @patch("polybot.market_data.client.ClobClient")
     def test_set_market_delegates(self, mock_clob):
