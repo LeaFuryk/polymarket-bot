@@ -247,7 +247,7 @@ class RotationManager:
                 ctx.session_resolutions.append(resolution)  # uncapped — for dashboard
 
                 # Push resolution event to WS clients
-                if ctx.ws_broadcaster and ctx.ws_broadcaster.has_clients:
+                if ctx.ws_broadcaster.has_clients:
                     await ctx.ws_broadcaster.broadcast(ctx.ws_broadcaster.build_resolution_event(resolution))
 
                 if len(ctx.recent_resolutions) > 20:

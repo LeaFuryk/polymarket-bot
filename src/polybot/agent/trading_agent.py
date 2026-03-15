@@ -6,14 +6,14 @@ import asyncio
 import signal
 
 from polybot.agent.factory import ContextFactory
-from polybot.agent.helpers import load_startup_data, resolve_pending_bets
+from polybot.agent.helpers import resolve_pending_bets
 from polybot.agent.rotation import RotationManager
+from polybot.agent.startup_loader import StartupLoader
 from polybot.config import AppConfig
 from polybot.logging import create_logger
 from polybot.tasks.ai_decision import AIDecision
 from polybot.tasks.market_monitor import MarketMonitor
 from polybot.tasks.position_monitor import PositionMonitor
-from polybot.ws.broadcaster import DashboardBroadcaster
 from polybot.ws.server import DashboardWSServer
 
 
@@ -24,18 +24,18 @@ class TradingAgent:
         self._log = create_logger(config)
 
         # Load persisted state before building context
-        startup_data = load_startup_data(config, log=self._log)
+        startup_data = StartupLoader(config, log=self._log).load()
 
         # Build AgentContext via factory (all sub-component wiring)
         factory = ContextFactory(config, startup_data, logger=self._log)
         self._ctx = factory.build()
 
         # WebSocket server — lifecycle owned by TradingAgent, not shared context
-        broadcaster = self._ctx.ws_broadcaster or DashboardBroadcaster()
         self._ws_server = DashboardWSServer(
-            broadcaster=broadcaster,
-            port=config.logging.ws_port,
+            broadcaster=self._ctx.ws_broadcaster,
             ctx=self._ctx,
+            logger=self._log,
+            port=config.logging.ws_port,
         )
 
     async def run(self) -> None:
@@ -52,8 +52,7 @@ class TradingAgent:
         if ctx.datastore is not None:
             ctx.datastore.open()
         # Open persistent market history store
-        if ctx.market_history is not None:
-            ctx.market_history.open()
+        ctx.market_history.open()
 
         # Live trading startup validation
         if ctx.live_mode and ctx.live_engine:
@@ -124,8 +123,7 @@ class TradingAgent:
         await self._ws_server.stop()
         if ctx.datastore is not None:
             await ctx.datastore.close()
-        if ctx.market_history is not None:
-            await ctx.market_history.close()
+        await ctx.market_history.close()
         await ctx.discovery.close()
         await ctx.market_data.close()
         ctx.trade_log.close()

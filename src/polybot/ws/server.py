@@ -22,15 +22,15 @@ class DashboardWSServer:
     def __init__(
         self,
         broadcaster: DashboardBroadcaster,
+        ctx: AgentContext,
+        logger: logging.Logger,
         host: str = DEFAULT_WS_HOST,
         port: int = DEFAULT_WS_PORT,
-        logger: logging.Logger | None = None,
-        ctx: AgentContext | None = None,
     ) -> None:
         self._broadcaster = broadcaster
         self._host = host
         self._port = port
-        self._logger = logger or logging.getLogger(__name__)
+        self._logger = logger
         self._server: websockets.WebSocketServer | None = None
         self._ctx = ctx
 
@@ -52,10 +52,8 @@ class DashboardWSServer:
             await self._server.wait_closed()
             self._logger.info("WS server stopped")
 
-    def _build_initial_snapshot(self) -> str | None:
+    def _build_initial_snapshot(self) -> str:
         """Build a full dashboard snapshot message for newly connected clients."""
-        if self._ctx is None:
-            return None
         from polybot.agent.dashboard import build_snapshot_message
 
         return build_snapshot_message(self._ctx, log=self._logger)
@@ -66,9 +64,7 @@ class DashboardWSServer:
         try:
             # Send initial full snapshot on connect
             try:
-                snapshot_msg = self._build_initial_snapshot()
-                if snapshot_msg is not None:
-                    await ws.send(snapshot_msg)
+                await ws.send(self._build_initial_snapshot())
             except Exception:
                 self._logger.debug("Failed to send initial snapshot", exc_info=True)
 
