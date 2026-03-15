@@ -20,6 +20,7 @@ if TYPE_CHECKING:
 
 from polybot.dashboard import DashboardMessageBuilder
 from polybot.indicators import SessionContext
+from polybot.indicators.helpers import compute_rr
 from polybot.shared_state import PreFilterSnapshot
 
 logger = logging.getLogger(__name__)
@@ -144,26 +145,17 @@ class MarketMonitor:
 
     def _run_prefilter(self, snapshot, time_remaining: float, indicator_results: IndicatorResults | None = None):
         """Compute R/R, BTC move, run prefilter checks, build PreFilterSnapshot."""
-        # Use indicator results for derived values when available, fallback to direct computation
-        if indicator_results is not None:
-            rr_up = indicator_results.rr_up
-            rr_down = indicator_results.rr_down
-            btc_move = indicator_results.btc_move_from_open
-        else:
-            up_ob = snapshot.orderbook
-            down_ob = snapshot.down_orderbook
-            up_ask = up_ob.best_ask or 1.0
-            down_ask = down_ob.best_ask or 1.0
-            rr_up = (1.0 - up_ask) / up_ask if up_ask > 0 else 0
-            rr_down = (1.0 - down_ask) / down_ask if down_ask > 0 else 0
-            btc_move = 0.0
-            btc_price_val = snapshot.btc_price.price_usd if snapshot.btc_price else 0.0
-            candle_open = self._shared.candle_open_btc
-            if candle_open is not None and btc_price_val > 0:
-                btc_move = btc_price_val - candle_open
-
         up_ob = snapshot.orderbook
         down_ob = snapshot.down_orderbook
+
+        rr_up = compute_rr(up_ob.best_ask or 1.0)
+        rr_down = compute_rr(down_ob.best_ask or 1.0)
+
+        btc_move = 0.0
+        btc_price_val = snapshot.btc_price.price_usd if snapshot.btc_price else 0.0
+        candle_open = self._shared.candle_open_btc
+        if candle_open is not None and btc_price_val > 0:
+            btc_move = btc_price_val - candle_open
 
         # Run prefilter checks (1-5, no R/R gate)
         has_position = self._portfolio.up_position.shares > 0 or self._portfolio.down_position.shares > 0

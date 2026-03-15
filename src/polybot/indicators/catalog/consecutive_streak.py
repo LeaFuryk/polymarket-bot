@@ -11,10 +11,6 @@ class ConsecutiveStreakIndicator:
     name = "consecutive_streak"
     display_name = "Consecutive Streak"
 
-    def __init__(self) -> None:
-        self.last_streak: int = 0
-        self.last_direction: str = ""
-
     def compute(self, ctx: IndicatorContext) -> IndicatorResult | None:
         candles = ctx.snapshot.btc_candles
         if not candles:
@@ -26,10 +22,6 @@ class ConsecutiveStreakIndicator:
                 streak += 1
             else:
                 break
-
-        self.last_streak = streak
-        self.last_direction = direction
-
         if streak >= STREAK_STRONG:
             signal = f"strong {direction} streak — mean reversion likely"
         elif streak >= STREAK_MODERATE:

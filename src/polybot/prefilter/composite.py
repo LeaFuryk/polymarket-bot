@@ -162,10 +162,17 @@ class PreFilter:
         """
         self.total_checks += 1
 
-        streak = indicator_results.consecutive_streak
-        streak_dir = indicator_results.streak_direction
-        btc_range = indicator_results.btc_range_30m
-        best_entry = indicator_results.best_entry_price
+        streak = int(indicator_results.get_value("Consecutive Streak", 0))
+        streak_dir = ""
+        streak_result = indicator_results.get("Consecutive Streak")
+        if streak_result is not None and streak > 0:
+            # Direction is the first word after the count in the label
+            # e.g. "3 UP candles (...)" — parse from btc_candles directly
+            candles = snapshot.btc_candles
+            if candles:
+                streak_dir = candles[-1].direction
+        btc_range = indicator_results.get_value("BTC Range 30m", 0.0)
+        best_entry = indicator_results.get_value("Best Entry", 1.0)
 
         result = PreFilterResult(
             should_skip=False,
