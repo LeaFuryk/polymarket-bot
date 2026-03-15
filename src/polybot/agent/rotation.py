@@ -136,11 +136,83 @@ class RotationManager:
 
         return ctx.current_market
 
-    async def handle_transition(self) -> None:
-        """Public entry point for market transition — called by monitor on rotation."""
-        await self._handle_market_transition()
+    def record_discovery_failure(self) -> None:
+        """Track consecutive discovery failures and detect outages.
 
-    async def setup_new_market(self, new_market: CandleMarket) -> None:
+        Increments the failure counter on each call.  After 3 consecutive
+        failures, records an outage start timestamp.  During an ongoing outage,
+        logs a progress warning every 12 failures (~60 s at 5 s tick rate).
+        """
+        ctx = self._ctx
+        ctx.discovery_failures += 1
+        if ctx.discovery_failures >= 3 and ctx.outage_start is None:
+            ctx.outage_start = time.time()
+            self._log.warning(
+                "Polymarket outage detected: %d consecutive discovery failures",
+                ctx.discovery_failures,
+            )
+        elif ctx.outage_start is not None and ctx.discovery_failures % 12 == 0:
+            elapsed = time.time() - ctx.outage_start
+            self._log.warning(
+                "Polymarket outage ongoing: %.0fs elapsed (%d failures)",
+                elapsed,
+                ctx.discovery_failures,
+            )
+
+    async def handle_fetched_market(self, new_market: CandleMarket) -> None:
+        """Process a successfully fetched market — outage recovery, rotation, setup.
+
+        Called by the monitor on every tick where discovery succeeded.  Handles
+        clearing outage state, detecting rotation (condition_id change),
+        running the transition (or skipping it post-outage), and setting up
+        the new market.
+        """
+        ctx = self._ctx
+        recovering = ctx.outage_start is not None
+        self._clear_outage()
+
+        rotated = ctx.current_market is not None and new_market.condition_id != ctx.current_market.condition_id
+        new_market_needed = ctx.current_market is None or rotated
+
+        if rotated:
+            if recovering:
+                self._log.info(
+                    "Post-outage recovery: skipping resolution of %s, jumping to %s",
+                    ctx.current_market.slug,
+                    new_market.slug,
+                )
+                cancelled = ctx.orderbook.cancel_all()
+                if cancelled:
+                    self._log.info("Cancelled %d stale orders from pre-outage market", cancelled)
+            else:
+                self._log.info(
+                    "Market rotation: %s → %s",
+                    ctx.current_market.slug,
+                    new_market.slug,
+                )
+                await self._handle_market_transition()
+
+        if new_market_needed:
+            await self._setup_new_market(new_market)
+
+    def _clear_outage(self) -> None:
+        """Clear outage state on successful discovery."""
+        ctx = self._ctx
+        if ctx.outage_start is not None:
+            duration = time.time() - ctx.outage_start
+            ctx.last_outage_duration = duration
+            ctx.outage_recovered = time.time()
+            self._log.info(
+                "Polymarket outage recovered after %.0fs (%d failures)",
+                duration,
+                ctx.discovery_failures,
+            )
+        ctx.discovery_failures = 0
+        ctx.outage_start = None
+        if ctx.outage_recovered and time.time() - ctx.outage_recovered > 60:
+            ctx.outage_recovered = None
+
+    async def _setup_new_market(self, new_market: CandleMarket) -> None:
         """Set up a newly discovered market — set provider, record BTC open, begin candle."""
         ctx = self._ctx
         ctx.current_market = new_market

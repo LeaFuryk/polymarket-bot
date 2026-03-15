@@ -18,7 +18,6 @@ if TYPE_CHECKING:
     from polybot.indicators.results import IndicatorResults
     from polybot.market_data.btc_repository import BtcRepository
     from polybot.market_data.polymarket_repository import PolymarketRepository
-    from polybot.models import BetData
     from polybot.tasks.ai_decision import AIDecision
 
 from polybot.indicators import SessionContext
@@ -78,7 +77,7 @@ class MarketMonitor:
     async def _tick(self) -> None:
         """Single monitoring cycle.
 
-        Pipeline: parallel fetch → rotation detection → build snapshot
+        Pipeline: parallel fetch → rotation / outage handling → build snapshot
         → compute indicators → prefilter → evaluate AI trigger.
         """
         bet_data, btc_data = await asyncio.gather(
@@ -87,36 +86,10 @@ class MarketMonitor:
         )
 
         if bet_data is None:
-            self._handle_discovery_failure()
+            self._rotation.record_discovery_failure()
             return
 
-        recovering = self._ctx.outage_start is not None
-        self._handle_discovery_success()
-
-        # Detect market rotation
-        rotated = self._rotated(bet_data)
-        new_market_needed = self._ctx.current_market is None or rotated
-
-        if rotated:
-            if recovering:
-                logger.info(
-                    "Post-outage recovery: skipping resolution of %s, jumping to %s",
-                    self._ctx.current_market.slug,
-                    bet_data.market.slug,
-                )
-                cancelled = self._ctx.orderbook.cancel_all()
-                if cancelled:
-                    logger.info("Cancelled %d stale orders from pre-outage market", cancelled)
-            else:
-                logger.info(
-                    "Market rotation: %s → %s",
-                    self._ctx.current_market.slug,
-                    bet_data.market.slug,
-                )
-                await self._rotation.handle_transition()
-
-        if new_market_needed:
-            await self._rotation.setup_new_market(bet_data.market)
+        await self._rotation.handle_fetched_market(bet_data.market)
 
         snapshot = self._market_data.build_snapshot(bet_data, btc_data)
 
@@ -138,53 +111,6 @@ class MarketMonitor:
 
         # Evaluate AI trigger (always updates dashboard; only fires AI if all gates pass)
         self._evaluate_trigger(snapshot, pf_snapshot, pf_result)
-
-    # --- Rotation / outage helpers ---
-
-    def _rotated(self, bet_data: BetData) -> bool:
-        """Check if the fetched market differs from the current one."""
-        current = self._ctx.current_market
-        return current is not None and bet_data.market.condition_id != current.condition_id
-
-    def _handle_discovery_failure(self) -> None:
-        """Track consecutive discovery failures and detect outages.
-
-        Increments the failure counter on each call.  After 3 consecutive
-        failures, records an outage start timestamp.  During an ongoing outage,
-        logs a progress warning every 12 failures (~60 s at 5 s tick rate).
-        """
-        ctx = self._ctx
-        ctx.discovery_failures += 1
-        if ctx.discovery_failures >= 3 and ctx.outage_start is None:
-            ctx.outage_start = time.time()
-            logger.warning(
-                "Polymarket outage detected: %d consecutive discovery failures",
-                ctx.discovery_failures,
-            )
-        elif ctx.outage_start is not None and ctx.discovery_failures % 12 == 0:
-            elapsed = time.time() - ctx.outage_start
-            logger.warning(
-                "Polymarket outage ongoing: %.0fs elapsed (%d failures)",
-                elapsed,
-                ctx.discovery_failures,
-            )
-
-    def _handle_discovery_success(self) -> None:
-        """Clear outage state on successful discovery."""
-        ctx = self._ctx
-        if ctx.outage_start is not None:
-            duration = time.time() - ctx.outage_start
-            ctx.last_outage_duration = duration
-            ctx.outage_recovered = time.time()
-            logger.info(
-                "Polymarket outage recovered after %.0fs (%d failures)",
-                duration,
-                ctx.discovery_failures,
-            )
-        ctx.discovery_failures = 0
-        ctx.outage_start = None
-        if ctx.outage_recovered and time.time() - ctx.outage_recovered > 60:
-            ctx.outage_recovered = None
 
     # --- Indicators ---
 
