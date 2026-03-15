@@ -5,14 +5,15 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
+from typing import Any, cast
 
 
-def read_json(directory: Path, filename: str, log: logging.Logger) -> dict | None:
+def read_json(directory: Path, filename: str, log: logging.Logger) -> dict[str, Any] | None:
     """Read a single JSON file from *directory*. Returns ``None`` if missing or corrupt."""
     path = directory / filename
     try:
         if path.exists():
-            return json.loads(path.read_text())
+            return cast(dict[str, Any], json.loads(path.read_text()))
     except Exception:
         log.warning("Could not load %s", filename)
     return None
