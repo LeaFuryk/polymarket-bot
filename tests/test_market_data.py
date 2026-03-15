@@ -1,10 +1,12 @@
-"""Tests for the market_data package — constants, injectable loggers, pure functions."""
+"""Tests for the market_data package — constants, injectable loggers, repos, pure functions."""
 
 from __future__ import annotations
 
 import logging
 import time
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 from polybot.market_data.constants import (
     BTC_CANDLE_REFRESH_INTERVAL,
@@ -16,6 +18,13 @@ from polybot.market_data.constants import (
     COINGECKO_REFRESH_INTERVAL,
     GAMMA_API_BASE,
     PRICE_HISTORY_SIZE,
+)
+from polybot.models.core import (
+    BtcCandle,
+    BtcPrice,
+    CandleMarket,
+    OrderbookLevel,
+    OrderbookSnapshot,
 )
 
 # ── Constants ──────────────────────────────────────────────────────────
@@ -185,3 +194,435 @@ class TestPackageExports:
         from polybot.market_data import PolymarketRestClient
 
         assert PolymarketRestClient is not None
+
+    def test_import_btc_repository(self):
+        from polybot.market_data import BtcRepository
+
+        assert BtcRepository is not None
+
+    def test_import_polymarket_repository(self):
+        from polybot.market_data import PolymarketRepository
+
+        assert PolymarketRepository is not None
+
+
+# ── BtcRepository ─────────────────────────────────────────────────────
+
+
+def _make_btc_feed():
+    feed = AsyncMock()
+    feed.get_price = AsyncMock(return_value=BtcPrice(price_usd=65000.0))
+    feed.append_latest_candle = AsyncMock()
+    feed.candles = [
+        BtcCandle(
+            open_time=1.0,
+            open=64000.0,
+            high=65500.0,
+            low=63900.0,
+            close=65000.0,
+            volume=100.0,
+            close_time=301.0,
+        )
+    ]
+    feed.get_price_at = AsyncMock(return_value=64500.0)
+    feed.load_candle_history = AsyncMock()
+    feed.close = AsyncMock()
+    return feed
+
+
+class TestBtcRepository:
+    """Tests for BtcRepository."""
+
+    @pytest.mark.asyncio
+    async def test_fetch_returns_btc_data(self):
+        from polybot.market_data.btc_repository import BtcRepository
+
+        feed = _make_btc_feed()
+        repo = BtcRepository(feed)
+
+        result = await repo.fetch()
+
+        assert result.price is not None
+        assert result.price.price_usd == 65000.0
+        assert len(result.candles) == 1
+        feed.get_price.assert_awaited_once()
+        feed.append_latest_candle.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_fetch_with_none_price(self):
+        from polybot.market_data.btc_repository import BtcRepository
+
+        feed = _make_btc_feed()
+        feed.get_price.return_value = None
+        repo = BtcRepository(feed)
+
+        result = await repo.fetch()
+
+        assert result.price is None
+        assert len(result.candles) == 1
+
+    @pytest.mark.asyncio
+    async def test_delegate_get_price(self):
+        from polybot.market_data.btc_repository import BtcRepository
+
+        feed = _make_btc_feed()
+        repo = BtcRepository(feed)
+
+        price = await repo.get_price()
+        assert price.price_usd == 65000.0
+
+    @pytest.mark.asyncio
+    async def test_delegate_get_price_at(self):
+        from polybot.market_data.btc_repository import BtcRepository
+
+        feed = _make_btc_feed()
+        repo = BtcRepository(feed)
+
+        price = await repo.get_price_at(1000.0)
+        assert price == 64500.0
+
+    @pytest.mark.asyncio
+    async def test_delegate_load_history(self):
+        from polybot.market_data.btc_repository import BtcRepository
+
+        feed = _make_btc_feed()
+        repo = BtcRepository(feed)
+
+        await repo.load_history(100)
+        feed.load_candle_history.assert_awaited_once_with(100)
+
+    @pytest.mark.asyncio
+    async def test_delegate_close(self):
+        from polybot.market_data.btc_repository import BtcRepository
+
+        feed = _make_btc_feed()
+        repo = BtcRepository(feed)
+
+        await repo.close()
+        feed.close.assert_awaited_once()
+
+    def test_injectable_logger(self):
+        from polybot.market_data.btc_repository import BtcRepository
+
+        feed = _make_btc_feed()
+        custom = logging.getLogger("test.btc_repo")
+        repo = BtcRepository(feed, logger=custom)
+        assert repo._log is custom
+
+
+# ── PolymarketRepository ──────────────────────────────────────────────
+
+
+def _make_candle_market(condition_id="cond_1", remaining=120.0):
+    return CandleMarket(
+        condition_id=condition_id,
+        up_token_id="up_tok_1",
+        down_token_id="down_tok_1",
+        slug="btc-5min-candle-123",
+        title="BTC 5min candle",
+        start_time=time.time() - 180,
+        end_time=time.time() + remaining,
+    )
+
+
+def _make_orderbook(best_bid=0.48, best_ask=0.52):
+    return OrderbookSnapshot(
+        bids=[OrderbookLevel(price=best_bid, size=100.0)],
+        asks=[OrderbookLevel(price=best_ask, size=100.0)],
+    )
+
+
+class TestPolymarketRepository:
+    """Tests for PolymarketRepository."""
+
+    @pytest.mark.asyncio
+    async def test_fetch_with_set_market(self):
+        from polybot.market_data.polymarket_repository import PolymarketRepository
+
+        rest = AsyncMock()
+        rest.get_orderbook = AsyncMock(return_value=_make_orderbook())
+        rest.get_last_trade_price = AsyncMock(return_value=0.50)
+        discovery = AsyncMock()
+
+        repo = PolymarketRepository(rest, discovery)
+        market = _make_candle_market()
+        repo.set_market(market)
+
+        result = await repo.fetch()
+
+        assert result is not None
+        assert result.market is market
+        assert result.last_trade_price == 0.50
+        assert result.orderbook.best_bid == 0.48
+        assert result.down_orderbook.best_bid == 0.48
+
+    @pytest.mark.asyncio
+    async def test_fetch_discovers_when_no_market(self):
+        from polybot.market_data.polymarket_repository import PolymarketRepository
+
+        rest = AsyncMock()
+        rest.get_orderbook = AsyncMock(return_value=_make_orderbook())
+        rest.get_last_trade_price = AsyncMock(return_value=0.50)
+
+        market = _make_candle_market()
+        discovery = AsyncMock()
+        discovery.get_current_market = AsyncMock(return_value=market)
+
+        repo = PolymarketRepository(rest, discovery)
+
+        result = await repo.fetch()
+
+        assert result is not None
+        assert result.market is market
+        discovery.get_current_market.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_fetch_returns_none_when_discovery_fails(self):
+        from polybot.market_data.polymarket_repository import PolymarketRepository
+
+        rest = AsyncMock()
+        discovery = AsyncMock()
+        discovery.get_current_market = AsyncMock(return_value=None)
+        discovery.get_next_market = AsyncMock(return_value=None)
+
+        repo = PolymarketRepository(rest, discovery)
+
+        result = await repo.fetch()
+
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_fetch_fallback_to_next_market(self):
+        from polybot.market_data.polymarket_repository import PolymarketRepository
+
+        rest = AsyncMock()
+        rest.get_orderbook = AsyncMock(return_value=_make_orderbook())
+        rest.get_last_trade_price = AsyncMock(return_value=0.50)
+
+        market = _make_candle_market()
+        discovery = AsyncMock()
+        discovery.get_current_market = AsyncMock(return_value=None)
+        discovery.get_next_market = AsyncMock(return_value=market)
+
+        repo = PolymarketRepository(rest, discovery)
+
+        result = await repo.fetch()
+
+        assert result is not None
+        discovery.get_current_market.assert_awaited_once()
+        discovery.get_next_market.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_fetch_uses_ws_cache(self):
+        from polybot.market_data.polymarket_repository import PolymarketRepository
+
+        rest = AsyncMock()
+        rest.get_orderbook = AsyncMock(return_value=_make_orderbook())
+        rest.get_last_trade_price = AsyncMock(return_value=0.50)
+        discovery = AsyncMock()
+
+        ws_ob = _make_orderbook(best_bid=0.55, best_ask=0.60)
+        repo = PolymarketRepository(rest, discovery)
+        repo.set_market(_make_candle_market())
+        repo.update_from_ws(orderbook=ws_ob, last_price=0.57)
+
+        result = await repo.fetch()
+
+        assert result is not None
+        assert result.orderbook.best_bid == 0.55  # WS cache used for UP
+        assert result.last_trade_price == 0.57  # WS cache used for price
+
+    @pytest.mark.asyncio
+    async def test_fetch_rediscovers_expired_market(self):
+        from polybot.market_data.polymarket_repository import PolymarketRepository
+
+        rest = AsyncMock()
+        rest.get_orderbook = AsyncMock(return_value=_make_orderbook())
+        rest.get_last_trade_price = AsyncMock(return_value=0.50)
+
+        expired_market = _make_candle_market(remaining=-1.0)
+        new_market = _make_candle_market(condition_id="cond_2", remaining=120.0)
+
+        discovery = AsyncMock()
+        discovery.get_current_market = AsyncMock(return_value=new_market)
+
+        repo = PolymarketRepository(rest, discovery)
+        repo.set_market(expired_market)
+
+        result = await repo.fetch()
+
+        assert result is not None
+        assert result.market.condition_id == "cond_2"
+        discovery.get_current_market.assert_awaited_once()
+
+    def test_market_property(self):
+        from polybot.market_data.polymarket_repository import PolymarketRepository
+
+        repo = PolymarketRepository(AsyncMock(), AsyncMock())
+        assert repo.market is None
+
+        market = _make_candle_market()
+        repo.set_market(market)
+        assert repo.market is market
+
+    def test_injectable_logger(self):
+        from polybot.market_data.polymarket_repository import PolymarketRepository
+
+        custom = logging.getLogger("test.poly_repo")
+        repo = PolymarketRepository(AsyncMock(), AsyncMock(), logger=custom)
+        assert repo._log is custom
+
+
+# ── Provider parallel fetch ───────────────────────────────────────────
+
+
+class TestProviderParallelFetch:
+    """Tests that MarketDataProvider.get_snapshot() runs repos in parallel."""
+
+    @patch("polybot.market_data.client.ClobClient")
+    @pytest.mark.asyncio
+    async def test_get_snapshot_merges_bet_and_btc_data(self, mock_clob):
+        from polybot.market_data.provider import MarketDataProvider
+
+        config = MagicMock()
+        config.monitor.btc_price_cache_ttl = 30
+        provider = MarketDataProvider(config)
+
+        # Mock the repos
+        market = _make_candle_market()
+        from polybot.models import BetData, BtcData
+
+        bet_data = BetData(
+            market=market,
+            orderbook=_make_orderbook(0.48, 0.52),
+            down_orderbook=_make_orderbook(0.46, 0.50),
+            last_trade_price=0.50,
+        )
+        btc_data = BtcData(
+            price=BtcPrice(price_usd=65000.0),
+            candles=[],
+        )
+
+        provider._polymarket.fetch = AsyncMock(return_value=bet_data)
+        provider._btc_repo.fetch = AsyncMock(return_value=btc_data)
+
+        snapshot = await provider.get_snapshot()
+
+        assert snapshot.condition_id == market.condition_id
+        assert snapshot.orderbook.best_bid == 0.48
+        assert snapshot.down_orderbook.best_bid == 0.46
+        assert snapshot.btc_price.price_usd == 65000.0
+        assert snapshot.last_trade_price == 0.50
+        assert snapshot.time_remaining > 0
+
+    @patch("polybot.market_data.client.ClobClient")
+    @pytest.mark.asyncio
+    async def test_get_snapshot_handles_none_bet_data(self, mock_clob):
+        from polybot.market_data.provider import MarketDataProvider
+
+        config = MagicMock()
+        config.monitor.btc_price_cache_ttl = 30
+        config.market.condition_id = "fallback_cond"
+        config.market.token_id = "fallback_tok"
+        provider = MarketDataProvider(config)
+
+        from polybot.models import BtcData
+
+        btc_data = BtcData(price=BtcPrice(price_usd=65000.0), candles=[])
+        provider._polymarket.fetch = AsyncMock(return_value=None)
+        provider._btc_repo.fetch = AsyncMock(return_value=btc_data)
+
+        snapshot = await provider.get_snapshot()
+
+        assert snapshot.condition_id == "fallback_cond"
+        assert snapshot.btc_price.price_usd == 65000.0
+        assert snapshot.time_remaining == 0.0
+
+    @patch("polybot.market_data.client.ClobClient")
+    @pytest.mark.asyncio
+    async def test_price_history_tracked(self, mock_clob):
+        from polybot.market_data.provider import MarketDataProvider
+
+        config = MagicMock()
+        config.monitor.btc_price_cache_ttl = 30
+        provider = MarketDataProvider(config)
+
+        market = _make_candle_market()
+        from polybot.models import BetData, BtcData
+
+        bet_data = BetData(
+            market=market,
+            orderbook=_make_orderbook(0.48, 0.52),
+            down_orderbook=_make_orderbook(0.46, 0.50),
+            last_trade_price=0.50,
+        )
+        btc_data = BtcData(price=BtcPrice(price_usd=65000.0), candles=[])
+
+        provider._polymarket.fetch = AsyncMock(return_value=bet_data)
+        provider._btc_repo.fetch = AsyncMock(return_value=btc_data)
+
+        snapshot = await provider.get_snapshot()
+
+        assert len(snapshot.price_history) == 1
+        assert len(snapshot.btc_price_history) == 1
+
+    @patch("polybot.market_data.client.ClobClient")
+    def test_set_market_delegates(self, mock_clob):
+        from polybot.market_data.provider import MarketDataProvider
+
+        config = MagicMock()
+        config.monitor.btc_price_cache_ttl = 30
+        provider = MarketDataProvider(config)
+
+        market = _make_candle_market()
+        provider.set_market(market)
+
+        assert provider._polymarket.market is market
+        assert config.market.condition_id == market.condition_id
+
+    @patch("polybot.market_data.client.ClobClient")
+    def test_update_from_ws_delegates(self, mock_clob):
+        from polybot.market_data.provider import MarketDataProvider
+
+        config = MagicMock()
+        config.monitor.btc_price_cache_ttl = 30
+        provider = MarketDataProvider(config)
+
+        ob = _make_orderbook(0.55, 0.60)
+        provider.update_from_ws(orderbook=ob, last_price=0.57)
+
+        assert provider._polymarket._ws_orderbook is ob
+        assert provider._polymarket._ws_last_price == 0.57
+
+
+# ── Model data objects ────────────────────────────────────────────────
+
+
+class TestDataObjects:
+    """Tests for BetData and BtcData models."""
+
+    def test_bet_data_construction(self):
+        from polybot.models import BetData
+
+        market = _make_candle_market()
+        data = BetData(
+            market=market,
+            orderbook=_make_orderbook(),
+            down_orderbook=_make_orderbook(),
+            last_trade_price=0.50,
+        )
+        assert data.market is market
+        assert data.last_trade_price == 0.50
+
+    def test_btc_data_construction(self):
+        from polybot.models import BtcData
+
+        data = BtcData(price=BtcPrice(price_usd=65000.0), candles=[])
+        assert data.price.price_usd == 65000.0
+        assert data.candles == []
+
+    def test_btc_data_none_price(self):
+        from polybot.models import BtcData
+
+        data = BtcData(price=None, candles=[])
+        assert data.price is None

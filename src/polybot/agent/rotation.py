@@ -136,6 +136,48 @@ class RotationManager:
 
         return ctx.current_market
 
+    async def handle_transition(self) -> None:
+        """Public entry point for market transition — called by monitor on rotation."""
+        await self._handle_market_transition()
+
+    async def setup_new_market(self, new_market: CandleMarket) -> None:
+        """Set up a newly discovered market — set provider, record BTC open, begin candle."""
+        ctx = self._ctx
+        ctx.current_market = new_market
+        ctx.market_data.set_market(new_market)
+        ctx.shared.current_market = new_market
+
+        if ctx.live_engine:
+            ctx.live_engine.set_current_token_ids(
+                new_market.up_token_id,
+                new_market.down_token_id,
+            )
+
+        self._log.info("Active market: %s (ends in %.0fs)", new_market.title, new_market.time_remaining())
+
+        btc_snapshot = await ctx.market_data.btc_feed.get_price()
+        if btc_snapshot:
+            ctx.resolution_tracker.record_candle_open(new_market, btc_snapshot.price_usd)
+            ctx.shared.candle_open_btc = btc_snapshot.price_usd
+
+            if ctx.datastore is not None:
+                ctx.datastore.begin_candle(
+                    condition_id=new_market.condition_id,
+                    slug=new_market.slug,
+                    title=new_market.title,
+                    start_time=new_market.start_time,
+                    end_time=new_market.end_time,
+                    btc_open=btc_snapshot.price_usd,
+                )
+
+            ctx.market_history.begin_candle(
+                condition_id=new_market.condition_id,
+                slug=new_market.slug,
+                start_time=new_market.start_time,
+                end_time=new_market.end_time,
+                btc_open=btc_snapshot.price_usd,
+            )
+
     async def _handle_market_transition(self) -> None:
         """Handle transition between candle markets — resolve winner via BTC price."""
         from polybot.agent.helpers import save_agent_state

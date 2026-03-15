@@ -140,6 +140,22 @@ class OrderbookSnapshot(BaseModel):
         return sum(level.price * level.size for level in self.asks)
 
 
+class BetData(BaseModel):
+    """Polymarket fetch result — orderbooks + market context."""
+
+    market: CandleMarket
+    orderbook: OrderbookSnapshot
+    down_orderbook: OrderbookSnapshot
+    last_trade_price: float | None
+
+
+class BtcData(BaseModel):
+    """BTC fetch result — price + candle history."""
+
+    price: BtcPrice | None
+    candles: list[BtcCandle]
+
+
 class MarketSnapshot(BaseModel):
     condition_id: str
     token_id: str = ""

@@ -57,7 +57,7 @@ class ContextFactory:
         sd = self._startup_data
 
         discovery = MarketDiscovery(config)
-        market_data = MarketDataProvider(config)
+        market_data = MarketDataProvider(config, discovery=discovery)
         decision_engine = DecisionEngine(config.ai)
         execution_sim = ExecutionSimulator(config.simulator)
         orderbook = SimulatedOrderBook(config.simulator)
@@ -79,7 +79,7 @@ class ContextFactory:
 
         trade_log = TradeLog(config.logging)
         resolution_tracker = ResolutionTracker(
-            MarketDataResolutionRepo(market_data._btc, market_data._rest),
+            MarketDataResolutionRepo(market_data.btc_feed, market_data.rest_client),
         )
         prefilter = PreFilter()
         calibrator = ConfidenceCalibrator(data_dir=Path(config.logging.log_dir))
