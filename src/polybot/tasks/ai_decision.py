@@ -732,7 +732,7 @@ class AIDecision:
             )
 
         # Two-pass screening (entry only, not exits)
-        has_position = self._portfolio.up_position.shares > 0 or self._portfolio.down_position.shares > 0
+        has_position = self._portfolio.has_open_position()
         if self._config.ai.two_pass_enabled and not has_position and not extra_context:
             should_trade, screen_reason, screen_cost = await self._engine.screen(
                 features,
