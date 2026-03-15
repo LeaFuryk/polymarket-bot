@@ -16,7 +16,6 @@ class MarketFilter(Protocol):
 
     def check(
         self,
-        time_remaining: float,
         snapshot: MarketSnapshot,
         *,
         has_open_position: bool,

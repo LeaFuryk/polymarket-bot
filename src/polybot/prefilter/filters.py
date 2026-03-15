@@ -22,7 +22,6 @@ class OpenPositionFilter:
 
     def check(
         self,
-        time_remaining: float,
         snapshot: MarketSnapshot,
         *,
         has_open_position: bool,
@@ -44,7 +43,6 @@ class TimeRemainingFilter:
 
     def check(
         self,
-        time_remaining: float,
         snapshot: MarketSnapshot,
         *,
         has_open_position: bool,
@@ -53,10 +51,10 @@ class TimeRemainingFilter:
         btc_range: float,
         best_entry: float,
     ) -> tuple[bool, str]:
-        if time_remaining < self.min_time:
+        if snapshot.time_remaining < self.min_time:
             return (
                 True,
-                f"Time remaining {time_remaining:.0f}s < {self.min_time:.0f}s minimum",
+                f"Time remaining {snapshot.time_remaining:.0f}s < {self.min_time:.0f}s minimum",
             )
         return False, ""
 
@@ -69,7 +67,6 @@ class WideSpreadFilter:
 
     def check(
         self,
-        time_remaining: float,
         snapshot: MarketSnapshot,
         *,
         has_open_position: bool,
@@ -101,7 +98,6 @@ class ThinBookFilter:
 
     def check(
         self,
-        time_remaining: float,
         snapshot: MarketSnapshot,
         *,
         has_open_position: bool,
@@ -133,7 +129,6 @@ class ChoppyMarketFilter:
 
     def check(
         self,
-        time_remaining: float,
         snapshot: MarketSnapshot,
         *,
         has_open_position: bool,
@@ -159,7 +154,6 @@ class NoStreakFilter:
 
     def check(
         self,
-        time_remaining: float,
         snapshot: MarketSnapshot,
         *,
         has_open_position: bool,

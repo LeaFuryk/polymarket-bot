@@ -172,26 +172,30 @@ _COMMON_KWARGS = {
 class TestOpenPositionFilter:
     def test_skip_when_position_open(self):
         f = OpenPositionFilter()
-        skip, reason = f.check(100, _snapshot(), **{**_COMMON_KWARGS, "has_open_position": True})
+        skip, reason = f.check(_snapshot(), **{**_COMMON_KWARGS, "has_open_position": True})
         assert skip is True
         assert "Position open" in reason
 
     def test_pass_when_no_position(self):
         f = OpenPositionFilter()
-        skip, _ = f.check(100, _snapshot(), **_COMMON_KWARGS)
+        skip, _ = f.check(_snapshot(), **_COMMON_KWARGS)
         assert skip is False
 
 
 class TestTimeRemainingFilter:
     def test_skip_below_threshold(self):
         f = TimeRemainingFilter(min_time=45.0)
-        skip, reason = f.check(30, _snapshot(), **_COMMON_KWARGS)
+        snap = _snapshot()
+        snap.time_remaining = 30.0
+        skip, reason = f.check(snap, **_COMMON_KWARGS)
         assert skip is True
         assert "30s" in reason
 
     def test_pass_above_threshold(self):
         f = TimeRemainingFilter(min_time=45.0)
-        skip, _ = f.check(60, _snapshot(), **_COMMON_KWARGS)
+        snap = _snapshot()
+        snap.time_remaining = 60.0
+        skip, _ = f.check(snap, **_COMMON_KWARGS)
         assert skip is False
 
 
@@ -200,7 +204,7 @@ class TestWideSpreadFilter:
         f = WideSpreadFilter(max_spread_pct=0.05)
         # Both books have spread_pct ≈ 0.04/0.51 ≈ 0.078 > 0.05
         snap = _snapshot(up_bid=0.50, up_ask=0.54, down_bid=0.46, down_ask=0.50)
-        skip, reason = f.check(100, snap, **_COMMON_KWARGS)
+        skip, reason = f.check(snap, **_COMMON_KWARGS)
         assert skip is True
         assert "spreads wide" in reason
 
@@ -208,7 +212,7 @@ class TestWideSpreadFilter:
         f = WideSpreadFilter(max_spread_pct=0.05)
         # UP tight, DOWN wide
         snap = _snapshot(up_bid=0.50, up_ask=0.51, down_bid=0.46, down_ask=0.50)
-        skip, _ = f.check(100, snap, **_COMMON_KWARGS)
+        skip, _ = f.check(snap, **_COMMON_KWARGS)
         assert skip is False
 
 
@@ -216,50 +220,50 @@ class TestThinBookFilter:
     def test_skip_both_thin(self):
         f = ThinBookFilter(min_depth=50.0)
         snap = _snapshot(up_depth=20.0, down_depth=30.0)
-        skip, reason = f.check(100, snap, **_COMMON_KWARGS)
+        skip, reason = f.check(snap, **_COMMON_KWARGS)
         assert skip is True
         assert "books thin" in reason
 
     def test_pass_one_deep(self):
         f = ThinBookFilter(min_depth=50.0)
         snap = _snapshot(up_depth=100.0, down_depth=20.0)
-        skip, _ = f.check(100, snap, **_COMMON_KWARGS)
+        skip, _ = f.check(snap, **_COMMON_KWARGS)
         assert skip is False
 
 
 class TestChoppyMarketFilter:
     def test_skip_choppy_expensive(self):
         f = ChoppyMarketFilter(range_threshold=50.0, max_entry=0.28)
-        skip, reason = f.check(100, _snapshot(), **{**_COMMON_KWARGS, "btc_range": 30.0, "best_entry": 0.35})
+        skip, reason = f.check(_snapshot(), **{**_COMMON_KWARGS, "btc_range": 30.0, "best_entry": 0.35})
         assert skip is True
         assert "Choppy" in reason
 
     def test_pass_volatile(self):
         f = ChoppyMarketFilter(range_threshold=50.0, max_entry=0.28)
-        skip, _ = f.check(100, _snapshot(), **{**_COMMON_KWARGS, "btc_range": 80.0, "best_entry": 0.35})
+        skip, _ = f.check(_snapshot(), **{**_COMMON_KWARGS, "btc_range": 80.0, "best_entry": 0.35})
         assert skip is False
 
     def test_pass_cheap_entry(self):
         f = ChoppyMarketFilter(range_threshold=50.0, max_entry=0.28)
-        skip, _ = f.check(100, _snapshot(), **{**_COMMON_KWARGS, "btc_range": 30.0, "best_entry": 0.20})
+        skip, _ = f.check(_snapshot(), **{**_COMMON_KWARGS, "btc_range": 30.0, "best_entry": 0.20})
         assert skip is False
 
 
 class TestNoStreakFilter:
     def test_skip_no_streak_expensive(self):
         f = NoStreakFilter(max_entry=0.50)
-        skip, reason = f.check(100, _snapshot(), **{**_COMMON_KWARGS, "streak": 1, "best_entry": 0.60})
+        skip, reason = f.check(_snapshot(), **{**_COMMON_KWARGS, "streak": 1, "best_entry": 0.60})
         assert skip is True
         assert "No clear setup" in reason
 
     def test_pass_with_streak(self):
         f = NoStreakFilter(max_entry=0.50)
-        skip, _ = f.check(100, _snapshot(), **{**_COMMON_KWARGS, "streak": 3, "best_entry": 0.60})
+        skip, _ = f.check(_snapshot(), **{**_COMMON_KWARGS, "streak": 3, "best_entry": 0.60})
         assert skip is False
 
     def test_pass_cheap_entry(self):
         f = NoStreakFilter(max_entry=0.50)
-        skip, _ = f.check(100, _snapshot(), **{**_COMMON_KWARGS, "streak": 0, "best_entry": 0.30})
+        skip, _ = f.check(_snapshot(), **{**_COMMON_KWARGS, "streak": 0, "best_entry": 0.30})
         assert skip is False
 
 
@@ -271,27 +275,36 @@ class TestPreFilter:
         pf = PreFilter()
         candles = [_candle("up") for _ in range(4)]
         snap = _snapshot(up_ask=0.20, down_ask=0.22, candles=candles)
-        result = pf.check(120, snap)
+        snap.time_remaining = 120.0
+        result = pf.check(snap)
         assert result.should_skip is False
         assert result.consecutive_streak == 4
         assert result.streak_direction == "up"
 
     def test_skip_open_position(self):
         pf = PreFilter()
-        result = pf.check(120, _snapshot(), has_open_position=True)
+        snap = _snapshot()
+        snap.time_remaining = 120.0
+        result = pf.check(snap, has_open_position=True)
         assert result.should_skip is True
         assert "Position open" in result.reason
 
     def test_skip_time(self):
         pf = PreFilter()
-        result = pf.check(10, _snapshot())
+        snap = _snapshot()
+        snap.time_remaining = 10.0
+        result = pf.check(snap)
         assert result.should_skip is True
         assert "Time remaining" in result.reason
 
     def test_stats_tracking(self):
         pf = PreFilter()
-        pf.check(120, _snapshot(up_ask=0.20, down_ask=0.22, candles=[_candle("up")] * 3))
-        pf.check(10, _snapshot())
+        snap1 = _snapshot(up_ask=0.20, down_ask=0.22, candles=[_candle("up")] * 3)
+        snap1.time_remaining = 120.0
+        pf.check(snap1)
+        snap2 = _snapshot()
+        snap2.time_remaining = 10.0
+        pf.check(snap2)
         assert pf.total_checks == 2
         assert pf.total_skipped == 1
         assert pf.skip_rate == pytest.approx(0.5)
@@ -303,15 +316,18 @@ class TestPreFilter:
     def test_custom_filters(self):
         """Inject a custom filter list."""
         pf = PreFilter(filters=[OpenPositionFilter()])
-        # Only the open-position filter is active
-        result = pf.check(5, _snapshot())  # time < 45s but no time filter
+        snap = _snapshot()
+        snap.time_remaining = 5.0
+        # Only the open-position filter is active — time < 45s but no time filter
+        result = pf.check(snap)
         assert result.should_skip is False
 
     def test_result_carries_signals(self):
         candles = [_candle("down", high=65200, low=65000)] * 3
         snap = _snapshot(up_ask=0.25, down_ask=0.30, candles=candles)
+        snap.time_remaining = 120.0
         pf = PreFilter()
-        result = pf.check(120, snap)
+        result = pf.check(snap)
         assert result.consecutive_streak == 3
         assert result.streak_direction == "down"
         assert result.btc_range_30m == pytest.approx(200.0)
