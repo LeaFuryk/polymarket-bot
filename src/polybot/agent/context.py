@@ -20,6 +20,7 @@ if TYPE_CHECKING:
     from polybot.execution.live import LiveExecutionEngine
     from polybot.exit_tracker import ExitTracker
     from polybot.indicators import FeatureConfig
+    from polybot.indicators.processor import IndicatorsProcessor
     from polybot.knowledge import KnowledgeManager
     from polybot.logging.trade_log import TradeLog
     from polybot.market_data.discovery import MarketDiscovery
@@ -60,6 +61,7 @@ class AgentContext:
     ml_scorer: MLScorer
     knowledge_manager: KnowledgeManager
     feature_config: FeatureConfig
+    processor: IndicatorsProcessor
     shared: SharedState
 
     # WebSocket broadcaster
