@@ -12,6 +12,7 @@ import logging
 import time
 from typing import TYPE_CHECKING
 
+from polybot.dashboard import DashboardMessageBuilder
 from polybot.indicators import (
     SessionContext,
     compute_indicators,
@@ -95,8 +96,9 @@ class AIDecision:
         # Optional SQLite analytics
         self._datastore = ctx.datastore
 
-        # WebSocket dashboard broadcaster
-        self._ws_broadcaster = ctx.ws_broadcaster
+        # WebSocket broadcaster
+        self._broadcaster = ctx.broadcaster
+        self._message_builder = DashboardMessageBuilder()
 
         # Shared mutable state from agent
         self._recent_resolutions = ctx.recent_resolutions
@@ -173,9 +175,13 @@ class AIDecision:
         sync_from_ai_decision(ctx, self)
         write_dashboard_json(ctx, ai_decision=self, log=logger)
 
-        if ctx.ws_broadcaster.has_clients:
-            await ctx.ws_broadcaster.broadcast(build_snapshot_message(ctx, ai_decision=self, log=logger))
-            await ctx.ws_broadcaster.broadcast(ctx.ws_broadcaster.build_status_update(ctx, ai_decision=self))
+        if ctx.broadcaster.has_clients:
+            await ctx.broadcaster.broadcast(build_snapshot_message(ctx, ai_decision=self, log=logger))
+            await ctx.broadcaster.broadcast(
+                self._message_builder.build_status_update(
+                    ctx, ai_decision=self, ws_client_count=ctx.broadcaster.client_count
+                )
+            )
 
         # Live mode: sync wallet balance (at most every 60s) and check kill switch
         if ctx.live_mode and ctx.live_engine:
@@ -1126,10 +1132,10 @@ class AIDecision:
         self._session_trades.append(record)
 
         # Push trade event to WS clients
-        if self._ws_broadcaster.has_clients:
+        if self._broadcaster.has_clients:
             try:
                 asyncio.get_event_loop().create_task(
-                    self._ws_broadcaster.broadcast(self._ws_broadcaster.build_trade_event(record))
+                    self._broadcaster.broadcast(self._message_builder.build_trade_event(record))
                 )
             except Exception:
                 logger.debug("WS trade broadcast failed", exc_info=True)

@@ -1,4 +1,4 @@
-"""Tests for the WebSocket dashboard server."""
+"""Tests for the WebSocket server and broadcaster."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from polybot.ws.broadcaster import DashboardBroadcaster
+from polybot.ws.broadcaster import Broadcaster
 from polybot.ws.constants import (
     DEFAULT_WS_HOST,
     DEFAULT_WS_PORT,
@@ -54,17 +54,17 @@ class TestConstants:
 
 class TestInjectableLoggers:
     def test_broadcaster_default_logger(self):
-        b = DashboardBroadcaster()
+        b = Broadcaster()
         assert b._logger.name == "polybot.ws.broadcaster"
 
     def test_broadcaster_custom_logger(self):
         custom = logging.getLogger("test.broadcaster")
-        b = DashboardBroadcaster(logger=custom)
+        b = Broadcaster(logger=custom)
         assert b._logger is custom
 
     def test_server_uses_provided_logger(self):
         custom = logging.getLogger("test.server")
-        b = DashboardBroadcaster()
+        b = Broadcaster()
         s = DashboardWSServer(b, ctx=MagicMock(), logger=custom)
         assert s._logger is custom
 
@@ -99,7 +99,7 @@ class TestProtocol:
 
 class TestBroadcaster:
     def test_add_remove_client(self):
-        b = DashboardBroadcaster()
+        b = Broadcaster()
         mock_ws = MagicMock()
         b.add_client(mock_ws)
         assert b.client_count == 1
@@ -109,14 +109,14 @@ class TestBroadcaster:
         assert b.has_clients is False
 
     def test_remove_nonexistent_client(self):
-        b = DashboardBroadcaster()
+        b = Broadcaster()
         mock_ws = MagicMock()
         b.remove_client(mock_ws)  # should not raise
         assert b.client_count == 0
 
     @pytest.mark.asyncio
     async def test_broadcast_sends_to_all(self):
-        b = DashboardBroadcaster()
+        b = Broadcaster()
         ws1 = AsyncMock()
         ws2 = AsyncMock()
         b.add_client(ws1)
@@ -127,7 +127,7 @@ class TestBroadcaster:
 
     @pytest.mark.asyncio
     async def test_broadcast_removes_dead_clients(self):
-        b = DashboardBroadcaster()
+        b = Broadcaster()
         alive = AsyncMock()
         dead = AsyncMock()
         dead.send.side_effect = ConnectionError("gone")
@@ -140,117 +140,8 @@ class TestBroadcaster:
 
     @pytest.mark.asyncio
     async def test_broadcast_no_clients(self):
-        b = DashboardBroadcaster()
+        b = Broadcaster()
         await b.broadcast("test")  # should not raise
-
-    def test_build_trade_event(self):
-        b = DashboardBroadcaster()
-        trade = MagicMock()
-        trade.timestamp = 1709000000.0
-        trade.action.value = "BUY"
-        trade.token_side.value = "up"
-        trade.decision_size = 10.0
-        trade.fill_price = 0.45
-        trade.confidence = 0.72
-        trade.reasoning = "Strong momentum"
-        trade.candle_slug = "btc-updown-5m-123"
-        trade.risk_blocked = False
-        trade.cash = 990.0
-        trade.portfolio_value = 1000.0
-        trade.fee_amount = 0.09
-        trade.ai_cost = 0.003
-        trade.extra = {}
-
-        msg = b.build_trade_event(trade)
-        parsed = json.loads(msg)
-        assert parsed["type"] == "trade"
-        assert parsed["data"]["action"] == "BUY"
-        assert parsed["data"]["token_side"] == "up"
-        assert parsed["data"]["fill_price"] == 0.45
-        assert parsed["data"]["confidence"] == 0.72
-
-    def test_build_resolution_event(self):
-        b = DashboardBroadcaster()
-        resolution = MagicMock()
-        resolution.slug = "btc-updown-5m-123"
-        resolution.winner = "up"
-        resolution.btc_open = 85000.0
-        resolution.btc_close = 85100.0
-        resolution.total_pnl = 5.50
-
-        msg = b.build_resolution_event(resolution)
-        parsed = json.loads(msg)
-        assert parsed["type"] == "resolution"
-        assert parsed["data"]["winner"] == "up"
-        assert parsed["data"]["btc_move"] == pytest.approx(100.0)
-        assert parsed["data"]["pnl"] == 5.50
-
-    def test_build_market_update(self):
-        b = DashboardBroadcaster()
-        ctx = MagicMock()
-        ctx.current_market = MagicMock()
-        ctx.current_market.time_remaining.return_value = 120.0
-        ctx.current_market.slug = "btc-updown-5m-123"
-
-        snapshot = MagicMock()
-        snapshot.orderbook.midpoint = 0.45
-        snapshot.down_orderbook.midpoint = 0.55
-        snapshot.btc_price.price_usd = 85000.0
-        snapshot.btc_price.chainlink_price = 85001.0
-        snapshot.btc_price.price_source = "binance"
-        ctx.shared.latest_snapshot = snapshot
-
-        msg = b.build_market_update(ctx)
-        parsed = json.loads(msg)
-        assert parsed["type"] == "market"
-        assert parsed["data"]["time_remaining"] == 120.0
-        assert parsed["data"]["btc_price"] == 85000.0
-
-    def test_build_position_update(self):
-        b = DashboardBroadcaster()
-        ctx = MagicMock()
-        ctx.portfolio.up_position.shares = 10.0
-        ctx.portfolio.up_position.avg_entry_price = 0.45
-        ctx.portfolio.down_position.shares = 0.0
-        ctx.portfolio.down_position.avg_entry_price = 0.0
-        ctx.portfolio.cash = 955.0
-        ctx.shared.position_pnl_pct = {"up": 0.05}
-        ctx.shared.dynamic_sl = {"up": -0.25}
-        ctx.shared.dynamic_tp = {"up": 0.50}
-
-        msg = b.build_position_update(ctx)
-        parsed = json.loads(msg)
-        assert parsed["type"] == "position"
-        assert parsed["data"]["up_shares"] == 10.0
-        assert parsed["data"]["cash"] == 955.0
-
-    def test_build_status_update(self):
-        b = DashboardBroadcaster()
-        ctx = MagicMock()
-        ctx.shared.prefilter_history = [1] * 50
-        ctx.config.monitor.ai_cooldown_seconds = 60.0
-        ctx.shared.ai_last_call_time = 0.0
-        ctx.shared.ai_trigger_reason = "R/R threshold"
-        ctx.shared.monitor_status = {"gate": "open"}
-        ctx.risk.state.daily_pnl = -5.0
-        ctx.risk.state.daily_trades = 3
-        ctx.risk.state.daily_fees = 0.30
-        ctx.risk.state.max_drawdown = -8.0
-        ctx.risk.state.is_halted = False
-        ctx.shared.api_latencies = {"clob": 150}
-        ctx.shared.sqlite_queue_depth = 0
-        ctx.prefilter.skip_rate = 0.65
-        ctx.prefilter.total_skipped = 65
-        ctx.prefilter.total_checks = 100
-        ctx.ai_decision = MagicMock()
-        ctx.ai_decision._screen_calls = 10
-        ctx.ai_decision._screen_passes = 5
-
-        msg = b.build_status_update(ctx)
-        parsed = json.loads(msg)
-        assert parsed["type"] == "status"
-        assert parsed["data"]["risk"]["daily_pnl"] == -5.0
-        assert parsed["data"]["api_latencies"]["clob"] == 150
 
 
 # --- Server tests ---
@@ -259,7 +150,7 @@ class TestBroadcaster:
 class TestServer:
     @pytest.mark.asyncio
     async def test_server_starts_and_stops(self):
-        broadcaster = DashboardBroadcaster()
+        broadcaster = Broadcaster()
         server = DashboardWSServer(broadcaster, ctx=MagicMock(), logger=logging.getLogger("test"), port=0)
         await server.start()
         assert server._server is not None
@@ -269,7 +160,7 @@ class TestServer:
     async def test_server_accepts_connection(self):
         import websockets
 
-        broadcaster = DashboardBroadcaster()
+        broadcaster = Broadcaster()
         server = DashboardWSServer(broadcaster, ctx=MagicMock(), logger=logging.getLogger("test"), port=18765)
 
         # Override snapshot builder to return test data (no real ctx needed)
@@ -292,7 +183,7 @@ class TestServer:
     async def test_server_broadcasts_to_connected_client(self):
         import websockets
 
-        broadcaster = DashboardBroadcaster()
+        broadcaster = Broadcaster()
         server = DashboardWSServer(broadcaster, ctx=MagicMock(), logger=logging.getLogger("test"), port=18766)
 
         await server.start()
@@ -313,9 +204,9 @@ class TestServer:
 
 class TestReExports:
     def test_broadcaster_reexported(self):
-        from polybot.ws import DashboardBroadcaster
+        from polybot.ws import Broadcaster
 
-        assert DashboardBroadcaster is not None
+        assert Broadcaster is not None
 
     def test_server_reexported(self):
         from polybot.ws import DashboardWSServer

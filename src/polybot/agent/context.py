@@ -33,7 +33,7 @@ if TYPE_CHECKING:
     from polybot.simulator.engine import ExecutionSimulator
     from polybot.simulator.orderbook import SimulatedOrderBook
     from polybot.simulator.portfolio import Portfolio
-    from polybot.ws.broadcaster import DashboardBroadcaster
+    from polybot.ws.broadcaster import Broadcaster
 
 
 @dataclass
@@ -62,8 +62,8 @@ class AgentContext:
     feature_config: FeatureConfig
     shared: SharedState
 
-    # WebSocket dashboard
-    ws_broadcaster: DashboardBroadcaster
+    # WebSocket broadcaster
+    broadcaster: Broadcaster
 
     # Market history store
     market_history: MarketHistoryStore

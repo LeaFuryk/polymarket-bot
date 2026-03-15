@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 import websockets
 
-from polybot.ws.broadcaster import DashboardBroadcaster
+from polybot.ws.broadcaster import Broadcaster
 from polybot.ws.constants import DEFAULT_WS_HOST, DEFAULT_WS_PORT, PING_INTERVAL_SECONDS, PING_TIMEOUT_SECONDS
 
 if TYPE_CHECKING:
@@ -21,7 +21,7 @@ class DashboardWSServer:
 
     def __init__(
         self,
-        broadcaster: DashboardBroadcaster,
+        broadcaster: Broadcaster,
         ctx: AgentContext,
         logger: logging.Logger,
         host: str = DEFAULT_WS_HOST,

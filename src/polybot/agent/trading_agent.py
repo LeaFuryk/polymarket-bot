@@ -32,7 +32,7 @@ class TradingAgent:
 
         # WebSocket server — lifecycle owned by TradingAgent, not shared context
         self._ws_server = DashboardWSServer(
-            broadcaster=self._ctx.ws_broadcaster,
+            broadcaster=self._ctx.broadcaster,
             ctx=self._ctx,
             logger=self._log,
             port=config.logging.ws_port,
