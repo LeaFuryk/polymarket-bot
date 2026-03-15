@@ -9,7 +9,6 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
-from typing import Any
 
 import httpx
 
@@ -77,14 +76,18 @@ class AdaptiveEntryTracker:
         winner: str,
         btc_open: float,
         btc_close: float,
-        prefilter_history: list[Any],
+        btc_moves: list[float] | None = None,
+        best_entry_up: float = 1.0,
+        best_entry_down: float = 1.0,
     ) -> None:
         """Record a candle resolution and update adaptive thresholds."""
         result = detect_reversal(
             winner=winner,
             btc_open=btc_open,
             btc_close=btc_close,
-            prefilter_history=prefilter_history,
+            btc_moves=btc_moves or [],
+            best_entry_up=best_entry_up,
+            best_entry_down=best_entry_down,
             btc_threshold=self.btc_threshold,
         )
 

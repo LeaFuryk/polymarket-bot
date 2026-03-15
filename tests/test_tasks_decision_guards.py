@@ -16,7 +16,6 @@ from polybot.tasks.decision_guards import (
     force_exit_side,
     override_to_hold,
 )
-from polybot.tasks.prompt_context import VelocityConflict
 
 
 def _buy(
@@ -299,77 +298,47 @@ class TestApplyPositionSizing:
 # ---------------------------------------------------------------------------
 
 
-def _conflict(severity: float, mag_dir: str = "DOWN", vel_dir: str = "UP") -> VelocityConflict:
-    return VelocityConflict(
-        has_conflict=severity >= 0.4,
-        severity=severity,
-        magnitude_direction=mag_dir,
-        velocity_direction=vel_dir,
-        velocity_rate=2.0 if vel_dir == "UP" else -2.0,
-        btc_move=-50.0 if mag_dir == "DOWN" else 50.0,
-        drawback_pct=0.4,
-        time_remaining=180.0,
-        label="STRONG_CONFLICT" if severity >= 0.7 else "MODERATE_CONFLICT",
-        detail="test",
-    )
-
-
 class TestApplyVelocityConflictScaling:
     def test_no_op_for_hold(self):
         d = _hold()
-        assert apply_velocity_conflict_scaling(d, _conflict(0.8)) is d
+        assert apply_velocity_conflict_scaling(d, 0.8) is d
 
     def test_no_op_for_sell(self):
         d = _sell()
-        assert apply_velocity_conflict_scaling(d, _conflict(0.8)) is d
+        assert apply_velocity_conflict_scaling(d, 0.8) is d
 
     def test_no_op_when_no_conflict(self):
         d = _buy(side=TokenSide.DOWN)
-        no_conflict = _conflict(0.0, mag_dir="DOWN", vel_dir="DOWN")
-        assert apply_velocity_conflict_scaling(d, no_conflict) is d
+        assert apply_velocity_conflict_scaling(d, 0.0) is d
 
     def test_no_op_when_low_severity(self):
         d = _buy(side=TokenSide.DOWN)
-        low = _conflict(0.3)
-        assert apply_velocity_conflict_scaling(d, low) is d
-
-    def test_no_op_when_buy_opposes_magnitude(self):
-        """Buy UP when magnitude says DOWN → trading WITH velocity, no scaling."""
-        d = _buy(side=TokenSide.UP)
-        c = _conflict(0.8, mag_dir="DOWN", vel_dir="UP")
-        assert apply_velocity_conflict_scaling(d, c) is d
+        assert apply_velocity_conflict_scaling(d, 0.3) is d
 
     def test_moderate_conflict_scales_to_75pct(self):
-        """Buy DOWN when magnitude says DOWN but velocity is UP → scale to 75%."""
         d = _buy(side=TokenSide.DOWN, size=100.0)
-        c = _conflict(0.5, mag_dir="DOWN", vel_dir="UP")
-        result = apply_velocity_conflict_scaling(d, c)
+        result = apply_velocity_conflict_scaling(d, 0.5)
         assert result.size == 75.0
         assert result.action == Action.BUY
 
     def test_strong_conflict_scales_to_50pct(self):
         d = _buy(side=TokenSide.DOWN, size=100.0)
-        c = _conflict(0.8, mag_dir="DOWN", vel_dir="UP")
-        result = apply_velocity_conflict_scaling(d, c)
+        result = apply_velocity_conflict_scaling(d, 0.8)
         assert result.size == 50.0
 
     def test_strong_conflict_boundary(self):
         d = _buy(side=TokenSide.DOWN, size=100.0)
-        c = _conflict(0.7, mag_dir="DOWN", vel_dir="UP")
-        result = apply_velocity_conflict_scaling(d, c)
+        result = apply_velocity_conflict_scaling(d, 0.7)
         assert result.size == 50.0
 
     def test_up_side_conflict(self):
-        """Buy UP when magnitude says UP but velocity is DOWN."""
         d = _buy(side=TokenSide.UP, size=80.0)
-        c = _conflict(0.6, mag_dir="UP", vel_dir="DOWN")
-        result = apply_velocity_conflict_scaling(d, c)
+        result = apply_velocity_conflict_scaling(d, 0.6)
         assert result.size == 60.0  # 80 * 0.75
 
     def test_minimum_size_floor(self):
         d = _buy(side=TokenSide.DOWN, size=1.0)
-        c = _conflict(0.8, mag_dir="DOWN", vel_dir="UP")
-        result = apply_velocity_conflict_scaling(d, c)
+        result = apply_velocity_conflict_scaling(d, 0.8)
         assert result.size >= 1.0
 
 

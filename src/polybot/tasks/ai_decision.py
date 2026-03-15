@@ -35,9 +35,7 @@ from polybot.tasks.context_builder import (
     append_section,
     build_chainlink_warning,
     build_counter_trend_advisory,
-    build_reversal_regime_warning,
     build_stop_loss_warning,
-    build_velocity_conflict_warning,
     format_ml_line,
 )
 from polybot.tasks.decision_guards import (
@@ -52,14 +50,6 @@ from polybot.tasks.decision_guards import (
     compute_position_scale,
     force_exit_side,
     override_to_hold,
-)
-from polybot.tasks.prompt_context import (
-    compute_btc_trajectory,
-    compute_entry_timing_stats,
-    compute_retracement_context,
-    compute_reversal_regime,
-    detect_velocity_magnitude_conflict,
-    format_microstructure,
 )
 from polybot.tasks.trade_logger import build_decision_row, build_trade_record
 
@@ -340,12 +330,13 @@ class AIDecision:
 
             if trigger_type == "reversal_retracement":
                 # Single AI call: HOLD (keep position) or BUY opposite (auto-close + flip)
-                # Compute rich retracement analytics from per-second prefilter history
-                retracement_ctx = compute_retracement_context(
-                    list(self._shared.prefilter_history),
-                    token_side_str,
-                    snapshot,
-                )
+                # Read retracement analytics from pre-computed indicator results
+                retracement_ctx = ""
+                _ind_results = self._shared.latest_indicator_results
+                if _ind_results is not None:
+                    _ret = _ind_results.get("BTC Retracement")
+                    if _ret is not None:
+                        retracement_ctx = f"## Reversal Analysis\n- {_ret.label}"
 
                 opp_ob = snapshot.down_orderbook if sold_up else snapshot.orderbook
                 opp_ask = opp_ob.best_ask
@@ -633,26 +624,24 @@ class AIDecision:
             indicator_results = compute_indicators(snapshot, self._feature_config, session_ctx)
             indicators_text = format_indicators(indicator_results)
 
-        # Velocity conflict (computed early for ML features)
-        velocity_conflict = detect_velocity_magnitude_conflict(
-            list(self._shared.prefilter_history),
-            time_remaining=features.time_remaining,
-        )
-
-        # Reversal regime (computed early for ML features)
-        _prefilter_list = list(self._shared.prefilter_history)
-        _regime_result = compute_reversal_regime(
-            self._shared.microstructure_history,
-            current_prefilter_history=_prefilter_list if len(_prefilter_list) >= 10 else None,
-        )
+        # Read ML-relevant values from pre-computed indicator results
+        _ind_results = self._shared.latest_indicator_results
+        velocity_conflict_severity = 0.0
         reversal_score = 0.0
         zero_crossings_avg = 0.0
-        if _regime_result is not None:
-            reversal_score = _regime_result[0]
-            if self._shared.microstructure_history:
-                zero_crossings_avg = sum(h.zero_crossings for h in self._shared.microstructure_history) / len(
-                    self._shared.microstructure_history
-                )
+        if _ind_results is not None:
+            velocity_conflict_severity = _ind_results.get_value("btc_velocity_conflict", 0.0)
+            reversal_score = _ind_results.get_value("reversal_regime", 0.0)
+        if self._shared.microstructure_history:
+            zero_crossings_avg = sum(h.zero_crossings for h in self._shared.microstructure_history) / len(
+                self._shared.microstructure_history
+            )
+
+        # BTC velocity from price history
+        btc_velocity = 0.0
+        btc_history = snapshot.btc_price_history
+        if len(btc_history) >= 10:
+            btc_velocity = (btc_history[-1] - btc_history[-10]) / 10.0
 
         # ML prediction
         btc_price_val = snapshot.btc_price.price_usd if snapshot.btc_price else None
@@ -665,8 +654,8 @@ class AIDecision:
             up_bid_depth=snapshot.orderbook.bid_depth,
             up_ask_depth=snapshot.orderbook.ask_depth,
             reversal_rate=self._adaptive_entry.rolling_reversal_rate if self._adaptive_entry else 0.0,
-            btc_velocity=velocity_conflict.velocity_rate,
-            velocity_conflict_severity=velocity_conflict.severity,
+            btc_velocity=btc_velocity,
+            velocity_conflict_severity=velocity_conflict_severity,
             reversal_regime=reversal_score,
             zero_crossings_avg=zero_crossings_avg,
         )
@@ -693,24 +682,6 @@ class AIDecision:
                 abs_btc_move = abs(snapshot.btc_price.price_usd - candle_open_btc)
             reversal_ctx = self._adaptive_entry.get_ai_context(abs_btc_move=abs_btc_move)
             indicators_text = append_section(indicators_text, reversal_ctx)
-
-        # Inject BTC trajectory, microstructure, and entry timing
-        indicators_text = append_section(indicators_text, compute_btc_trajectory(list(self._shared.prefilter_history)))
-        indicators_text = append_section(indicators_text, format_microstructure(self._shared.microstructure_history))
-        indicators_text = append_section(
-            indicators_text, compute_entry_timing_stats(self._session_trades, self._recent_resolutions)
-        )
-
-        # Reversal regime warning (score already computed above for ML)
-        if _regime_result is not None:
-            _rev_score, _rev_label = _regime_result
-            indicators_text = append_section(
-                indicators_text,
-                build_reversal_regime_warning(_rev_score, _rev_label, self._shared.microstructure_history),
-            )
-
-        # Velocity-magnitude conflict warning
-        indicators_text = append_section(indicators_text, build_velocity_conflict_warning(velocity_conflict))
 
         # Safeguard warnings
         if snapshot.btc_price and snapshot.btc_price.price_divergence is not None:
@@ -789,7 +760,7 @@ class AIDecision:
             ai_cycle_cost=self._last_cycle_api_cost,
             ai_session_cost=self._total_api_cost,
             candle_open_btc=candle_open_btc,
-            velocity_conflict=velocity_conflict,
+            velocity_conflict=None,
         )
 
         self._portfolio.cash -= api_cost
@@ -911,7 +882,7 @@ class AIDecision:
 
         # Velocity conflict sizing guard
         if decision.action == Action.BUY:
-            decision = apply_velocity_conflict_scaling(decision, velocity_conflict)
+            decision = apply_velocity_conflict_scaling(decision, velocity_conflict_severity)
 
         # Reversal regime sizing guard
         if decision.action == Action.BUY:

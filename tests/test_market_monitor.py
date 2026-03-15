@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from collections import deque
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -16,7 +15,6 @@ from polybot.models.core import (
     OrderbookLevel,
     OrderbookSnapshot,
 )
-from polybot.shared_state import PreFilterSnapshot
 from polybot.tasks.market_monitor import MarketMonitor
 
 # ---------------------------------------------------------------------------
@@ -65,7 +63,8 @@ def _make_monitor():
     shared.current_market = None
     shared.latest_snapshot = None
     shared.snapshot_timestamp = 0.0
-    shared.prefilter_history = deque(maxlen=300)
+    shared.tick_spreads_up = []
+    shared.tick_spreads_down = []
     shared.ai_last_call_time = 0.0
     shared.candle_open_btc = 65000.0
     shared.monitor_status = {}
@@ -131,11 +130,8 @@ class TestPersistSnapshots:
         monitor._feature_config = None
 
         snapshot = _make_snapshot()
-        pf_snapshot = PreFilterSnapshot(
-            timestamp=time.time(), time_remaining=120.0, rr_up=1.0, rr_down=1.5, btc_move_from_open=100.0
-        )
         pf_result = _make_prefilter_result()
-        monitor._persist_snapshots(snapshot, pf_snapshot, pf_result)
+        monitor._persist_snapshots(snapshot, pf_result)
         datastore.queue_snapshot.assert_called_once()
 
     def test_skips_datastore_when_no_candle_id(self):
@@ -145,9 +141,8 @@ class TestPersistSnapshots:
         monitor._datastore = datastore
 
         snapshot = _make_snapshot()
-        pf_snapshot = PreFilterSnapshot(timestamp=time.time(), time_remaining=120.0)
         pf_result = _make_prefilter_result()
-        monitor._persist_snapshots(snapshot, pf_snapshot, pf_result)
+        monitor._persist_snapshots(snapshot, pf_result)
         datastore.queue_snapshot.assert_not_called()
 
     def test_skips_datastore_when_none(self):
@@ -155,20 +150,16 @@ class TestPersistSnapshots:
         monitor._datastore = None
 
         snapshot = _make_snapshot()
-        pf_snapshot = PreFilterSnapshot(timestamp=time.time(), time_remaining=120.0)
         pf_result = _make_prefilter_result()
-        monitor._persist_snapshots(snapshot, pf_snapshot, pf_result)
+        monitor._persist_snapshots(snapshot, pf_result)
 
     def test_queues_market_history_when_candle_id_set(self):
         monitor, ctx, _ = _make_monitor()
         ctx.market_history.current_candle_id = 7
 
         snapshot = _make_snapshot()
-        pf_snapshot = PreFilterSnapshot(
-            timestamp=time.time(), time_remaining=120.0, rr_up=1.0, rr_down=1.5, btc_move_from_open=100.0
-        )
         pf_result = _make_prefilter_result()
-        monitor._persist_snapshots(snapshot, pf_snapshot, pf_result)
+        monitor._persist_snapshots(snapshot, pf_result)
         ctx.market_history.queue_snapshot.assert_called_once()
 
     def test_skips_market_history_when_no_candle_id(self):
@@ -176,9 +167,8 @@ class TestPersistSnapshots:
         ctx.market_history.current_candle_id = None
 
         snapshot = _make_snapshot()
-        pf_snapshot = PreFilterSnapshot(timestamp=time.time(), time_remaining=120.0)
         pf_result = _make_prefilter_result()
-        monitor._persist_snapshots(snapshot, pf_snapshot, pf_result)
+        monitor._persist_snapshots(snapshot, pf_result)
         ctx.market_history.queue_snapshot.assert_not_called()
 
 
@@ -188,27 +178,12 @@ class TestPersistSnapshots:
 
 
 class TestEvaluateTrigger:
-    @staticmethod
-    def _build_pf_snapshot(snapshot):
-        return PreFilterSnapshot(
-            timestamp=time.time(),
-            time_remaining=120.0,
-            best_entry_up=snapshot.orderbook.best_ask or 1.0,
-            best_entry_down=snapshot.down_orderbook.best_ask or 1.0,
-            rr_up=(1.0 - (snapshot.orderbook.best_ask or 1.0)) / (snapshot.orderbook.best_ask or 1.0),
-            rr_down=(1.0 - (snapshot.down_orderbook.best_ask or 1.0)) / (snapshot.down_orderbook.best_ask or 1.0),
-            btc_price=65000.0,
-            btc_move_from_open=100.0,
-        )
-
-    def _run_trigger(self, monitor, ctx, pf_result=None, snapshot=None, pf_snapshot=None):
+    def _run_trigger(self, monitor, ctx, pf_result=None, snapshot=None):
         if snapshot is None:
             snapshot = _make_snapshot(up_ask=0.30, down_ask=0.40)
         if pf_result is None:
             pf_result = _make_prefilter_result()
-        if pf_snapshot is None:
-            pf_snapshot = self._build_pf_snapshot(snapshot)
-        monitor._evaluate_trigger(snapshot, pf_snapshot, pf_result)
+        monitor._evaluate_trigger(snapshot, pf_result)
 
     def test_prefilter_fail_no_trigger(self):
         monitor, ctx, ai = _make_monitor()
@@ -355,5 +330,4 @@ class TestTickIntegration:
 
         await monitor._tick()
 
-        assert len(ctx.shared.prefilter_history) == 1
         ai.evaluate_entry.assert_called_once()

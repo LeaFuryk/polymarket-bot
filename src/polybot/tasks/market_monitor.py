@@ -1,7 +1,7 @@
 """Market monitor task — fetches data every 1s, runs prefilter, triggers AI.
 
-Runs as an asyncio.Task. Records PreFilterSnapshots and sets the AI trigger
-event when conditions are favorable.
+Runs as an asyncio.Task. Computes indicators and evaluates the AI trigger
+gate when conditions are favorable.
 """
 
 from __future__ import annotations
@@ -20,7 +20,6 @@ if TYPE_CHECKING:
 
 from polybot.indicators import SessionContext
 from polybot.indicators.helpers import compute_rr
-from polybot.shared_state import PreFilterSnapshot
 
 
 class MarketMonitor:
@@ -72,11 +71,7 @@ class MarketMonitor:
         """Single monitoring cycle.
 
         Pipeline: fetch snapshot → compute indicators → prefilter
-        → evaluate AI trigger.
-
-        Discovery, outage tracking, and rotation are handled inside
-        the provider and rotation manager — the monitor just consumes
-        the resulting snapshot.
+        → persist → evaluate AI trigger.
         """
         snapshot = await self._fetch_snapshot()
         if snapshot is None:
@@ -85,12 +80,11 @@ class MarketMonitor:
         indicators = self._calculate_indicators(snapshot)
         pf_result = self._run_prefilter(snapshot)
 
-        # Record tick (always — analytics + dashboard history)
-        pf_snapshot = self._record_tick(snapshot, pf_result)
-        self._persist_snapshots(snapshot, pf_snapshot, pf_result, indicators)
+        # Track spreads for microstructure computation at rotation
+        self._record_spreads(snapshot)
 
-        # Evaluate AI trigger (always updates dashboard; only fires AI if all gates pass)
-        self._evaluate_trigger(snapshot, pf_snapshot, pf_result)
+        self._persist_snapshots(snapshot, pf_result, indicators)
+        self._evaluate_trigger(snapshot, pf_result)
 
     async def _fetch_snapshot(self) -> MarketSnapshot | None:
         """Fetch snapshot from provider and store on shared state."""
@@ -115,6 +109,15 @@ class MarketMonitor:
         self._broadcast_prefilter(pf_result)
         return pf_result
 
+    def _record_spreads(self, snapshot) -> None:
+        """Track per-tick spreads for candle microstructure computation."""
+        up_spread = snapshot.orderbook.spread_pct
+        down_spread = snapshot.down_orderbook.spread_pct
+        if up_spread is not None:
+            self._shared.tick_spreads_up.append(up_spread)
+        if down_spread is not None:
+            self._shared.tick_spreads_down.append(down_spread)
+
     # --- Indicators ---
 
     def _compute_indicators(self, snapshot) -> IndicatorResults | None:
@@ -123,6 +126,13 @@ class MarketMonitor:
             return None
         try:
             has_position = self._portfolio.has_open_position()
+            position_side = ""
+            if has_position:
+                if self._portfolio.up_position.shares > 0:
+                    position_side = "up"
+                elif self._portfolio.down_position.shares > 0:
+                    position_side = "down"
+
             session = SessionContext(
                 wins=self._shared.session_wins,
                 losses=self._shared.session_losses,
@@ -134,16 +144,24 @@ class MarketMonitor:
                 candle_open_btc=self._shared.candle_open_btc,
                 has_open_position=has_position,
                 time_remaining=snapshot.time_remaining,
+                position_side=position_side,
+                microstructure_history=self._shared.microstructure_history,
+                session_trades=getattr(self._ctx, "session_trades", None),
+                session_resolutions=getattr(self._ctx, "session_resolutions", None),
             )
         except Exception:
             self._log.debug("Indicator computation failed", exc_info=True)
             return None
 
-    def _record_tick(self, snapshot, pf_result) -> PreFilterSnapshot:
-        """Build a PreFilterSnapshot from the current tick and append to history."""
+    def _persist_snapshots(
+        self,
+        snapshot,
+        pf_result,
+        indicator_results: IndicatorResults | None = None,
+    ) -> None:
+        """Queue snapshots for SQLite analytics and persistent market history."""
         up_ob = snapshot.orderbook
         down_ob = snapshot.down_orderbook
-
         rr_up = compute_rr(up_ob.best_ask or 1.0)
         rr_down = compute_rr(down_ob.best_ask or 1.0)
 
@@ -153,79 +171,42 @@ class MarketMonitor:
         if candle_open is not None and btc_price_val > 0:
             btc_move = btc_price_val - candle_open
 
-        tr = snapshot.time_remaining
-        pf_snapshot = PreFilterSnapshot(
-            timestamp=snapshot.timestamp,
-            time_remaining=tr,
-            checks={
-                "time_ok": tr >= 45,
-                "spread_ok": not pf_result.should_skip or "spread" not in pf_result.reason.lower(),
-                "depth_ok": not pf_result.should_skip or "thin" not in pf_result.reason.lower(),
-                "choppy_ok": not pf_result.should_skip or "choppy" not in pf_result.reason.lower(),
-                "setup_ok": not pf_result.should_skip or "setup" not in pf_result.reason.lower(),
-                "prefilter_passed": not pf_result.should_skip,
-            },
-            reasons=[pf_result.reason] if pf_result.reason else [],
-            best_entry_up=up_ob.best_ask or 1.0,
-            best_entry_down=down_ob.best_ask or 1.0,
-            rr_up=rr_up,
-            rr_down=rr_down,
-            btc_price=btc_price_val,
-            up_mid=up_ob.midpoint,
-            down_mid=down_ob.midpoint,
-            up_spread_pct=up_ob.spread_pct,
-            down_spread_pct=down_ob.spread_pct,
-            streak=pf_result.consecutive_streak,
-            streak_direction=pf_result.streak_direction,
-            btc_move_from_open=btc_move,
-        )
-        self._shared.prefilter_history.append(pf_snapshot)
-        return pf_snapshot
-
-    def _persist_snapshots(
-        self,
-        snapshot,
-        pf_snapshot: PreFilterSnapshot,
-        pf_result,
-        indicator_results: IndicatorResults | None = None,
-    ) -> None:
-        """Queue snapshots for SQLite analytics and persistent market history."""
-        rr_up = pf_snapshot.rr_up
-        rr_down = pf_snapshot.rr_down
-        btc_move = pf_snapshot.btc_move_from_open
-
         if self._datastore is not None and self._datastore.current_candle_id is not None:
             self._queue_snapshot(
                 snapshot,
-                pf_snapshot,
                 pf_result,
                 rr_up,
                 rr_down,
                 btc_move,
+                btc_price_val,
                 indicator_results,
             )
 
         if self._market_history.current_candle_id is not None:
             self._queue_market_history_snapshot(
                 snapshot,
-                pf_snapshot,
+                pf_result,
                 rr_up,
                 rr_down,
                 btc_move,
+                btc_price_val,
             )
 
-    def _evaluate_trigger(self, snapshot, pf_snapshot: PreFilterSnapshot, pf_result) -> None:
+    def _evaluate_trigger(self, snapshot, pf_result) -> None:
         """Gate pipeline: adaptive/static R/R, cooldown, AI busy. Fires evaluate_entry task."""
-        up_ask = pf_snapshot.best_entry_up
-        down_ask = pf_snapshot.best_entry_down
-        rr_up = pf_snapshot.rr_up
-        rr_down = pf_snapshot.rr_down
-        btc_move = pf_snapshot.btc_move_from_open
-        btc_price_val = pf_snapshot.btc_price
-        candle_open = self._shared.candle_open_btc
-
         up_ob = snapshot.orderbook
         down_ob = snapshot.down_orderbook
+
+        up_ask = up_ob.best_ask or 1.0
+        down_ask = down_ob.best_ask or 1.0
+        rr_up = compute_rr(up_ask)
+        rr_down = compute_rr(down_ask)
+
+        btc_move = 0.0
+        btc_price_val = snapshot.btc_price.price_usd if snapshot.btc_price else 0.0
+        candle_open = self._shared.candle_open_btc
+        if candle_open is not None and btc_price_val > 0:
+            btc_move = btc_price_val - candle_open
 
         best_rr = max(rr_up, rr_down)
         prefilter_passed = not pf_result.should_skip
@@ -277,14 +258,14 @@ class MarketMonitor:
 
         self._shared.monitor_status = {
             "timestamp": now,
-            "time_remaining": pf_snapshot.time_remaining,
+            "time_remaining": snapshot.time_remaining,
             "btc_price": btc_price_val,
             "btc_move": btc_move,
             "candle_open_btc": candle_open or 0,
             "up_ask": up_ask,
             "down_ask": down_ask,
-            "up_mid": pf_snapshot.up_mid,
-            "down_mid": pf_snapshot.down_mid,
+            "up_mid": up_ob.midpoint,
+            "down_mid": down_ob.midpoint,
             "rr_up": round(rr_up, 3),
             "rr_down": round(rr_down, 3),
             "best_side": best_side,
@@ -368,11 +349,11 @@ class MarketMonitor:
     def _queue_snapshot(
         self,
         snapshot,
-        pf_snapshot: PreFilterSnapshot,
         pf_result,
         rr_up: float,
         rr_down: float,
         btc_move: float,
+        btc_price_val: float,
         indicator_results: IndicatorResults | None = None,
     ) -> None:
         """Build a SnapshotRow from current tick data and queue it."""
@@ -402,8 +383,8 @@ class MarketMonitor:
 
         row = SnapshotRow(
             candle_id=self._datastore.current_candle_id,
-            timestamp=pf_snapshot.timestamp,
-            time_remaining=pf_snapshot.time_remaining,
+            timestamp=snapshot.timestamp,
+            time_remaining=snapshot.time_remaining,
             up_best_bid=up_ob.best_bid,
             up_best_ask=up_ob.best_ask,
             up_mid=up_ob.midpoint,
@@ -418,12 +399,12 @@ class MarketMonitor:
             down_ask_depth=down_ob.ask_depth,
             rr_up=rr_up,
             rr_down=rr_down,
-            btc_price=pf_snapshot.btc_price,
+            btc_price=btc_price_val,
             btc_move_from_open=btc_move,
-            streak=pf_snapshot.streak,
-            streak_direction=pf_snapshot.streak_direction,
+            streak=pf_result.consecutive_streak,
+            streak_direction=pf_result.streak_direction,
             prefilter_passed=not pf_result.should_skip,
-            prefilter_reasons="; ".join(pf_snapshot.reasons),
+            prefilter_reasons=pf_result.reason if pf_result.reason else "",
             indicators_json=json.dumps(indicators_dict) if indicators_dict else "{}",
         )
         self._datastore.queue_snapshot(row)
@@ -431,10 +412,11 @@ class MarketMonitor:
     def _queue_market_history_snapshot(
         self,
         snapshot,
-        pf_snapshot: PreFilterSnapshot,
+        pf_result,
         rr_up: float,
         rr_down: float,
         btc_move: float,
+        btc_price_val: float,
     ) -> None:
         """Build a MarketSnapshotRow and queue it for persistent market history."""
         from polybot.datastore import MarketSnapshotRow
@@ -444,8 +426,8 @@ class MarketMonitor:
 
         row = MarketSnapshotRow(
             candle_id=self._market_history.current_candle_id,
-            timestamp=pf_snapshot.timestamp,
-            time_remaining=pf_snapshot.time_remaining,
+            timestamp=snapshot.timestamp,
+            time_remaining=snapshot.time_remaining,
             up_best_bid=up_ob.best_bid,
             up_best_ask=up_ob.best_ask,
             up_mid=up_ob.midpoint,
@@ -460,9 +442,9 @@ class MarketMonitor:
             down_ask_depth=down_ob.ask_depth,
             rr_up=rr_up,
             rr_down=rr_down,
-            btc_price=pf_snapshot.btc_price,
+            btc_price=btc_price_val,
             btc_move_from_open=btc_move,
-            streak=pf_snapshot.streak,
-            streak_direction=pf_snapshot.streak_direction,
+            streak=pf_result.consecutive_streak,
+            streak_direction=pf_result.streak_direction,
         )
         self._market_history.queue_snapshot(row)

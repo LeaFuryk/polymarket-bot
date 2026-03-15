@@ -307,7 +307,9 @@ class TestRotationManager:
         from polybot.agent.rotation import RotationManager
 
         ctx = MagicMock()
-        ctx.shared.prefilter_history = [MagicMock() for _ in range(5)]  # < 10
+        # btc_price_history with < 10 entries → should skip
+        ctx.shared.latest_snapshot.btc_price_history = [65000.0 + i for i in range(5)]
+        ctx.shared.candle_open_btc = 65000.0
         rm = RotationManager(ctx, logging.getLogger("test"))
         rm._save_candle_microstructure()
         # Should not append anything
@@ -318,15 +320,11 @@ class TestRotationManager:
 
         ctx = MagicMock()
 
-        # Create 15 prefilter snapshots
-        snapshots = []
-        for i in range(15):
-            s = MagicMock()
-            s.up_spread_pct = 0.02
-            s.down_spread_pct = 0.03
-            s.btc_move_from_open = float(i)
-            snapshots.append(s)
-        ctx.shared.prefilter_history = snapshots
+        # 15 BTC price ticks: candle_open=65000, moves = 0..14
+        ctx.shared.candle_open_btc = 65000.0
+        ctx.shared.latest_snapshot.btc_price_history = [65000.0 + float(i) for i in range(15)]
+        ctx.shared.tick_spreads_up = [0.02] * 15
+        ctx.shared.tick_spreads_down = [0.03] * 15
         ctx.shared.microstructure_history = []
 
         rm = RotationManager(ctx, logging.getLogger("test"))

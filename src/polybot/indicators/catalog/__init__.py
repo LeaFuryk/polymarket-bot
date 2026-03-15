@@ -9,6 +9,9 @@ from polybot.indicators.catalog.btc_candle_momentum import BtcCandleMomentumIndi
 from polybot.indicators.catalog.btc_momentum import BtcMomentumIndicator
 from polybot.indicators.catalog.btc_move_from_open import BtcMoveFromOpenIndicator
 from polybot.indicators.catalog.btc_range_30m import BtcRange30mIndicator
+from polybot.indicators.catalog.btc_retracement import BtcRetracementIndicator
+from polybot.indicators.catalog.btc_trajectory import BtcTrajectoryIndicator
+from polybot.indicators.catalog.btc_velocity_conflict import BtcVelocityConflictIndicator
 from polybot.indicators.catalog.btc_volatility import BtcVolatilityIndicator
 from polybot.indicators.catalog.btc_vs_candle_open import BtcVsCandleOpenIndicator
 from polybot.indicators.catalog.chainlink_divergence import ChainlinkDivergenceIndicator
@@ -16,9 +19,12 @@ from polybot.indicators.catalog.confidence_calibration import ConfidenceCalibrat
 from polybot.indicators.catalog.consecutive_streak import ConsecutiveStreakIndicator
 from polybot.indicators.catalog.cross_book_flow import CrossBookFlowIndicator
 from polybot.indicators.catalog.down_orderbook_imbalance import DownOrderbookImbalanceIndicator
+from polybot.indicators.catalog.entry_timing import EntryTimingIndicator
 from polybot.indicators.catalog.flat_market_edge import FlatMarketEdgeIndicator
 from polybot.indicators.catalog.market_trend import MarketTrendIndicator
+from polybot.indicators.catalog.microstructure import MicrostructureIndicator
 from polybot.indicators.catalog.orderbook_imbalance import OrderbookImbalanceIndicator
+from polybot.indicators.catalog.reversal_regime import ReversalRegimeIndicator
 from polybot.indicators.catalog.rr_ratio import RiskRewardIndicator
 from polybot.indicators.catalog.session_streak import SessionStreakIndicator
 from polybot.indicators.catalog.spread_trend import SpreadTrendIndicator
@@ -69,6 +75,13 @@ _ALL_INDICATORS = [
     BtcMoveFromOpenIndicator(),
     BtcRange30mIndicator(),
     BestEntryIndicator(),
+    # Prompt-context indicators (formerly ad-hoc computations)
+    BtcVelocityConflictIndicator(),
+    BtcTrajectoryIndicator(),
+    BtcRetracementIndicator(),
+    ReversalRegimeIndicator(),
+    EntryTimingIndicator(),
+    MicrostructureIndicator(),
 ]
 
 
@@ -101,6 +114,9 @@ __all__ = [
     "BtcMomentumIndicator",
     "BtcMoveFromOpenIndicator",
     "BtcRange30mIndicator",
+    "BtcRetracementIndicator",
+    "BtcTrajectoryIndicator",
+    "BtcVelocityConflictIndicator",
     "BtcVolatilityIndicator",
     "BtcVsCandleOpenIndicator",
     "ChainlinkDivergenceIndicator",
@@ -108,9 +124,12 @@ __all__ = [
     "ConsecutiveStreakIndicator",
     "CrossBookFlowIndicator",
     "DownOrderbookImbalanceIndicator",
+    "EntryTimingIndicator",
     "FlatMarketEdgeIndicator",
     "MarketTrendIndicator",
+    "MicrostructureIndicator",
     "OrderbookImbalanceIndicator",
+    "ReversalRegimeIndicator",
     "RiskRewardIndicator",
     "SessionStreakIndicator",
     "SpreadTrendIndicator",

@@ -8,7 +8,6 @@ with acceleration (reversal detected).
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
 
 from polybot.adaptive_entry.constants import (
     INITIAL_DIRECTION_MIN_MOVE,
@@ -36,7 +35,9 @@ def detect_reversal(
     winner: str,
     btc_open: float,
     btc_close: float,
-    prefilter_history: list[Any],
+    btc_moves: list[float],
+    best_entry_up: float,
+    best_entry_down: float,
     btc_threshold: float,
 ) -> ReversalResult:
     """Detect whether a candle reversed from its initial BTC commitment.
@@ -45,8 +46,9 @@ def detect_reversal(
         winner: "up" or "down" — the resolved winner.
         btc_open: BTC price at candle open.
         btc_close: BTC price at candle close.
-        prefilter_history: List of PreFilterSnapshot objects with
-            `btc_move_from_open`, `best_entry_up`, `best_entry_down`.
+        btc_moves: List of btc_move_from_open values (price - candle_open).
+        best_entry_up: Best ask for UP token (from latest snapshot).
+        best_entry_down: Best ask for DOWN token (from latest snapshot).
         btc_threshold: Current adaptive BTC threshold for momentum confirmation.
 
     Returns:
@@ -55,8 +57,7 @@ def detect_reversal(
     # 1. Compute peak up/down moves
     peak_up_move = 0.0
     peak_down_move = 0.0
-    for snap in prefilter_history:
-        move = snap.btc_move_from_open
+    for move in btc_moves:
         if move > peak_up_move:
             peak_up_move = move
         if move < 0 and abs(move) > peak_down_move:
@@ -64,22 +65,19 @@ def detect_reversal(
 
     # 2. Identify initial BTC direction
     initial_direction = ""
-    for snap in prefilter_history:
-        if abs(snap.btc_move_from_open) > INITIAL_DIRECTION_MIN_MOVE:
-            initial_direction = "up" if snap.btc_move_from_open > 0 else "down"
+    for move in btc_moves:
+        if abs(move) > INITIAL_DIRECTION_MIN_MOVE:
+            initial_direction = "up" if move > 0 else "down"
             break
     if not initial_direction:
         initial_direction = "up" if (btc_close - btc_open) >= 0 else "down"
 
-    # 3. Capture winner ask at threshold crossing
-    winner_ask_at_20 = 0.0
-    for snap in prefilter_history:
-        if abs(snap.btc_move_from_open) >= btc_threshold:
-            winner_ask_at_20 = snap.best_entry_up if winner == "up" else snap.best_entry_down
+    # 3. Capture winner ask at threshold crossing (use latest snapshot values)
+    winner_ask_at_20 = best_entry_up if winner == "up" else best_entry_down
+    for move in btc_moves:
+        if abs(move) >= btc_threshold:
+            # Threshold crossed — use the provided best entry
             break
-    if not winner_ask_at_20 and prefilter_history:
-        last_snap = prefilter_history[-1]
-        winner_ask_at_20 = last_snap.best_entry_up if winner == "up" else last_snap.best_entry_down
 
     # 4. Scan for threshold crossing or 80% retracement + acceleration
     sign = 1.0 if initial_direction == "up" else -1.0
@@ -89,8 +87,8 @@ def detect_reversal(
     retreat_positions: list[float] = []
     peak_index = 0
 
-    for i, snap in enumerate(prefilter_history):
-        dir_move = snap.btc_move_from_open * sign
+    for i, move in enumerate(btc_moves):
+        dir_move = move * sign
 
         if dir_move > max_dir_move:
             max_dir_move = dir_move

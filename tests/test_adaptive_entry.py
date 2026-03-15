@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
@@ -32,15 +31,6 @@ from polybot.adaptive_entry.threshold_calculator import compute_thresholds
 from polybot.adaptive_entry.tracker import AdaptiveEntryTracker
 
 # ── Helpers ───────────────────────────────────────────────────────────
-
-
-@dataclass
-class FakeSnap:
-    """Minimal PreFilterSnapshot for testing."""
-
-    btc_move_from_open: float
-    best_entry_up: float = 0.50
-    best_entry_down: float = 0.50
 
 
 def _make_outcome(
@@ -144,85 +134,90 @@ class TestReversalDetector:
             winner="up",
             btc_open=100_000.0,
             btc_close=100_050.0,
-            prefilter_history=[],
+            btc_moves=[],
+            best_entry_up=0.50,
+            best_entry_down=0.50,
             btc_threshold=30.0,
         )
         assert result.initial_direction == "up"
         assert result.reversed is False
 
     def test_threshold_crossed_momentum(self):
-        snaps = [FakeSnap(btc_move_from_open=i * 10) for i in range(5)]
+        btc_moves = [i * 10.0 for i in range(5)]
         result = detect_reversal(
             winner="up",
             btc_open=100_000.0,
             btc_close=100_050.0,
-            prefilter_history=snaps,
+            btc_moves=btc_moves,
+            best_entry_up=0.50,
+            best_entry_down=0.50,
             btc_threshold=30.0,
         )
         assert result.threshold_crossed is True
         assert result.reversed is False  # momentum confirmed, winner matched
 
     def test_threshold_crossed_reversal(self):
-        snaps = [FakeSnap(btc_move_from_open=i * 10) for i in range(5)]
+        btc_moves = [i * 10.0 for i in range(5)]
         result = detect_reversal(
             winner="down",  # winner opposite to initial direction
             btc_open=100_000.0,
             btc_close=99_950.0,
-            prefilter_history=snaps,
+            btc_moves=btc_moves,
+            best_entry_up=0.50,
+            best_entry_down=0.50,
             btc_threshold=30.0,
         )
         assert result.threshold_crossed is True
         assert result.reversed is True
 
     def test_near_zero_guard(self):
-        snaps = [FakeSnap(btc_move_from_open=i * 10) for i in range(5)]
+        btc_moves = [i * 10.0 for i in range(5)]
         result = detect_reversal(
             winner="down",
             btc_open=100_000.0,
             btc_close=100_002.0,  # very small final move
-            prefilter_history=snaps,
+            btc_moves=btc_moves,
+            best_entry_up=0.50,
+            best_entry_down=0.50,
             btc_threshold=30.0,
         )
         assert result.reversed is False  # near-zero guard
 
     def test_initial_direction_from_first_significant_move(self):
-        snaps = [
-            FakeSnap(btc_move_from_open=2.0),  # too small
-            FakeSnap(btc_move_from_open=-8.0),  # significant negative
-        ]
+        btc_moves = [2.0, -8.0]
         result = detect_reversal(
             winner="down",
             btc_open=100_000.0,
             btc_close=99_950.0,
-            prefilter_history=snaps,
+            btc_moves=btc_moves,
+            best_entry_up=0.50,
+            best_entry_down=0.50,
             btc_threshold=30.0,
         )
         assert result.initial_direction == "down"
 
     def test_winner_ask_captured(self):
-        snaps = [
-            FakeSnap(btc_move_from_open=10.0, best_entry_up=0.55),
-            FakeSnap(btc_move_from_open=35.0, best_entry_up=0.60),
-        ]
+        btc_moves = [10.0, 35.0]
         result = detect_reversal(
             winner="up",
             btc_open=100_000.0,
             btc_close=100_050.0,
-            prefilter_history=snaps,
+            btc_moves=btc_moves,
+            best_entry_up=0.60,
+            best_entry_down=0.50,
             btc_threshold=30.0,
         )
-        assert result.winner_ask_at_20 == 0.60  # captured at threshold crossing
+        assert result.winner_ask_at_20 == 0.60  # captured from best_entry_up
 
     def test_peak_moves(self):
-        snaps = [
-            FakeSnap(btc_move_from_open=50.0),
-            FakeSnap(btc_move_from_open=-20.0),
-        ]
+        btc_moves = [50.0, -20.0]
         result = detect_reversal(
             winner="up",
             btc_open=100_000.0,
             btc_close=100_050.0,
-            prefilter_history=snaps,
+            btc_moves=btc_moves,
+            best_entry_up=0.50,
+            best_entry_down=0.50,
             btc_threshold=60.0,  # high threshold so not crossed
         )
         assert result.peak_up_move == 50.0
@@ -230,18 +225,14 @@ class TestReversalDetector:
 
     def test_retracement_reversal_zero_crossing(self):
         """When price crosses zero after a significant peak, it's a reversal."""
-        snaps = [
-            FakeSnap(btc_move_from_open=30.0),  # above MIN_PEAK_COMMIT
-            FakeSnap(btc_move_from_open=20.0),  # retreating
-            FakeSnap(btc_move_from_open=10.0),  # still retreating
-            FakeSnap(btc_move_from_open=0.0),  # at zero
-            FakeSnap(btc_move_from_open=-5.0),  # crossed zero
-        ]
+        btc_moves = [30.0, 20.0, 10.0, 0.0, -5.0]
         result = detect_reversal(
             winner="down",
             btc_open=100_000.0,
             btc_close=99_950.0,
-            prefilter_history=snaps,
+            btc_moves=btc_moves,
+            best_entry_up=0.50,
+            best_entry_down=0.50,
             btc_threshold=100.0,  # never crosses threshold
         )
         assert result.retracement_reversal is True
@@ -448,27 +439,29 @@ class TestAdaptiveEntryTracker:
         assert tracker.should_trigger(abs_btc_move=35.0, min_ask=0.70) is False
 
     def test_record_outcome(self, tracker: AdaptiveEntryTracker):
-        snaps = [FakeSnap(btc_move_from_open=i * 10) for i in range(5)]
+        btc_moves = [i * 10.0 for i in range(5)]
         tracker.record_outcome(
             slug="test-1",
             winner="up",
             btc_open=100_000.0,
             btc_close=100_050.0,
-            prefilter_history=snaps,
+            btc_moves=btc_moves,
+            best_entry_up=0.50,
+            best_entry_down=0.50,
         )
         assert tracker.history_count == 1
 
     def test_dedup(self, tracker: AdaptiveEntryTracker):
-        snaps = [FakeSnap(btc_move_from_open=10.0)]
-        tracker.record_outcome("slug-1", "up", 100_000.0, 100_050.0, snaps)
-        tracker.record_outcome("slug-1", "up", 100_000.0, 100_050.0, snaps)  # dupe
+        btc_moves = [10.0]
+        tracker.record_outcome("slug-1", "up", 100_000.0, 100_050.0, btc_moves=btc_moves)
+        tracker.record_outcome("slug-1", "up", 100_000.0, 100_050.0, btc_moves=btc_moves)  # dupe
         assert tracker.history_count == 1
 
     def test_persistence(self, tmp_path: Path):
         tracker1 = AdaptiveEntryTracker(data_dir=tmp_path, window=5)
-        snaps = [FakeSnap(btc_move_from_open=30.0)]
+        btc_moves = [30.0]
         for i in range(5):
-            tracker1.record_outcome(f"candle-{i}", "up", 100_000.0, 100_050.0, snaps)
+            tracker1.record_outcome(f"candle-{i}", "up", 100_000.0, 100_050.0, btc_moves=btc_moves)
 
         tracker2 = AdaptiveEntryTracker(data_dir=tmp_path, window=5)
         assert tracker2.history_count == 5
@@ -491,9 +484,9 @@ class TestAdaptiveEntryTracker:
 
     def test_get_summary_with_history(self, tmp_path: Path):
         tracker = AdaptiveEntryTracker(data_dir=tmp_path, window=5)
-        snaps = [FakeSnap(btc_move_from_open=30.0)]
+        btc_moves = [30.0]
         for i in range(5):
-            tracker.record_outcome(f"c-{i}", "up", 100_000.0, 100_050.0, snaps)
+            tracker.record_outcome(f"c-{i}", "up", 100_000.0, 100_050.0, btc_moves=btc_moves)
         summary = tracker.get_summary()
         assert "reversal_rate=" in summary
         assert "btc_thresh=" in summary
@@ -515,8 +508,7 @@ class TestAdaptiveEntryTracker:
 
     def test_jsonl_format(self, tmp_path: Path):
         tracker = AdaptiveEntryTracker(data_dir=tmp_path, window=5)
-        snaps = [FakeSnap(btc_move_from_open=30.0)]
-        tracker.record_outcome("slug-1", "up", 100_000.0, 100_050.0, snaps)
+        tracker.record_outcome("slug-1", "up", 100_000.0, 100_050.0, btc_moves=[30.0])
 
         data_file = tmp_path / DATA_FILE_NAME
         assert data_file.exists()
@@ -528,9 +520,9 @@ class TestAdaptiveEntryTracker:
 
     def test_recompute_updates_thresholds(self, tmp_path: Path):
         tracker = AdaptiveEntryTracker(data_dir=tmp_path, window=5)
-        snaps = [FakeSnap(btc_move_from_open=30.0)]
+        btc_moves = [30.0]
         for i in range(5):
-            tracker.record_outcome(f"c-{i}", "up", 100_000.0, 100_050.0, snaps)
+            tracker.record_outcome(f"c-{i}", "up", 100_000.0, 100_050.0, btc_moves=btc_moves)
         assert tracker.has_enough_history is True
         # After enough history, thresholds should differ from defaults
         assert tracker._thresholds is not None
@@ -539,9 +531,9 @@ class TestAdaptiveEntryTracker:
         tracker = AdaptiveEntryTracker(data_dir=tmp_path, window=5)
         assert tracker.signal_type == "UNCERTAIN"  # before enough data
 
-        snaps = [FakeSnap(btc_move_from_open=30.0)]
+        btc_moves = [30.0]
         for i in range(5):
-            tracker.record_outcome(f"c-{i}", "up", 100_000.0, 100_050.0, snaps)
+            tracker.record_outcome(f"c-{i}", "up", 100_000.0, 100_050.0, btc_moves=btc_moves)
         # After enough momentum-style data, signal should be MOMENTUM
         assert tracker.signal_type in ("MOMENTUM", "UNCERTAIN", "CONTRARIAN")
 
@@ -550,26 +542,26 @@ class TestAdaptiveEntryTracker:
 
     def test_get_ai_context_with_history(self, tmp_path: Path):
         tracker = AdaptiveEntryTracker(data_dir=tmp_path, window=5)
-        snaps = [FakeSnap(btc_move_from_open=30.0)]
+        btc_moves = [30.0]
         for i in range(5):
-            tracker.record_outcome(f"c-{i}", "up", 100_000.0, 100_050.0, snaps)
+            tracker.record_outcome(f"c-{i}", "up", 100_000.0, 100_050.0, btc_moves=btc_moves)
         ctx = tracker.get_ai_context(abs_btc_move=35.0)
         assert ctx is not None
         assert "Reversal Rate Context" in ctx
 
     def test_fakeout_stats_with_history(self, tmp_path: Path):
         tracker = AdaptiveEntryTracker(data_dir=tmp_path, window=5)
-        snaps = [FakeSnap(btc_move_from_open=30.0)]
+        btc_moves = [30.0]
         for i in range(5):
-            tracker.record_outcome(f"c-{i}", "up", 100_000.0, 100_050.0, snaps)
+            tracker.record_outcome(f"c-{i}", "up", 100_000.0, 100_050.0, btc_moves=btc_moves)
         stats = tracker.fakeout_stats
         assert stats["using_fakeout"] is True
 
     def test_history_truncation(self, tmp_path: Path):
         tracker = AdaptiveEntryTracker(data_dir=tmp_path, window=3)
-        snaps = [FakeSnap(btc_move_from_open=30.0)]
+        btc_moves = [30.0]
         for i in range(20):
-            tracker.record_outcome(f"c-{i}", "up", 100_000.0, 100_050.0, snaps)
+            tracker.record_outcome(f"c-{i}", "up", 100_000.0, 100_050.0, btc_moves=btc_moves)
         # Should persist all, but reload truncates
         tracker2 = AdaptiveEntryTracker(data_dir=tmp_path, window=3)
         assert tracker2.history_count <= 3 * HISTORY_MAX_FACTOR

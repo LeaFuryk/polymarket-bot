@@ -20,3 +20,7 @@ class IndicatorContext:
     candle_open_btc: float | None = None
     has_open_position: bool = False
     time_remaining: float = 0.0
+    position_side: str = ""
+    microstructure_history: tuple = ()
+    session_trades: tuple = ()
+    session_resolutions: tuple = ()
