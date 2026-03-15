@@ -1,4 +1,4 @@
-"""Composite filter — chains individual MarketFilter implementations."""
+"""PreFilter — chains individual MarketFilter implementations."""
 
 from __future__ import annotations
 
@@ -29,8 +29,6 @@ from polybot.prefilter.signals import (
     compute_btc_range_30m,
     compute_streak,
 )
-
-logger = logging.getLogger(__name__)
 
 
 def default_filters(
@@ -72,7 +70,9 @@ class PreFilter:
         max_spread_pct: float = MAX_SPREAD_PCT,
         min_book_depth: float = MIN_BOOK_DEPTH,
         filters: Sequence[MarketFilter] | None = None,
+        logger: logging.Logger | None = None,
     ) -> None:
+        self._log = logger or logging.getLogger(__name__)
         self.min_time_remaining = min_time_remaining
         self.choppy_range_threshold = choppy_range_threshold
         self.choppy_max_entry = choppy_max_entry
@@ -137,7 +137,7 @@ class PreFilter:
                 result.should_skip = True
                 result.reason = reason
                 self.total_skipped += 1
-                logger.info("Pre-filter SKIP: %s", reason)
+                self._log.info("Pre-filter SKIP: %s", reason)
                 return result
 
         return result
