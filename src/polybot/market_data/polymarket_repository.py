@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 
@@ -69,20 +70,7 @@ class PolymarketRepository:
                 return None
             self._record_success()
 
-        # Fetch UP orderbook (WS cache or REST)
-        if self._ws_orderbook is not None:
-            up_orderbook = self._ws_orderbook
-        else:
-            up_orderbook = await self._rest.get_orderbook(token_id=self._market.up_token_id)
-
-        # Fetch DOWN orderbook (always REST)
-        down_orderbook = await self._rest.get_orderbook(token_id=self._market.down_token_id)
-
-        # Last trade price (WS cache or REST)
-        if self._ws_last_price is not None:
-            last_price = self._ws_last_price
-        else:
-            last_price = await self._rest.get_last_trade_price(token_id=self._market.up_token_id)
+        up_orderbook, down_orderbook, last_price = await self._fetch_market_data()
 
         return BetData(
             market=self._market,
@@ -90,6 +78,25 @@ class PolymarketRepository:
             down_orderbook=down_orderbook,
             last_trade_price=last_price,
         )
+
+    async def _fetch_market_data(self) -> tuple[OrderbookSnapshot, OrderbookSnapshot, float | None]:
+        """Fetch UP orderbook, DOWN orderbook, and last price in parallel."""
+        assert self._market is not None  # noqa: S101 — caller guarantees
+
+        # Build coroutines, using WS cache where available
+        up_coro = (
+            asyncio.sleep(0, result=self._ws_orderbook)
+            if self._ws_orderbook is not None
+            else self._rest.get_orderbook(token_id=self._market.up_token_id)
+        )
+        down_coro = self._rest.get_orderbook(token_id=self._market.down_token_id)
+        price_coro = (
+            asyncio.sleep(0, result=self._ws_last_price)
+            if self._ws_last_price is not None
+            else self._rest.get_last_trade_price(token_id=self._market.up_token_id)
+        )
+
+        return await asyncio.gather(up_coro, down_coro, price_coro)
 
     async def _discover(self) -> CandleMarket | None:
         """Try current boundary, fallback to next."""
