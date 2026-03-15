@@ -108,7 +108,7 @@ class PositionMonitor:
         if self._ctx is None:
             return
         ws = self._ctx.ws_broadcaster
-        if ws and ws.has_clients:
+        if ws.has_clients:
             await ws.broadcast(ws.build_position_update(self._ctx))
 
     # --- BTC Velocity Helper ---

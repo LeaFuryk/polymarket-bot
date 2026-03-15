@@ -173,7 +173,7 @@ class AIDecision:
         sync_from_ai_decision(ctx, self)
         write_dashboard_json(ctx, ai_decision=self, log=logger)
 
-        if ctx.ws_broadcaster and ctx.ws_broadcaster.has_clients:
+        if ctx.ws_broadcaster.has_clients:
             await ctx.ws_broadcaster.broadcast(build_snapshot_message(ctx, ai_decision=self, log=logger))
             await ctx.ws_broadcaster.broadcast(ctx.ws_broadcaster.build_status_update(ctx, ai_decision=self))
 
@@ -1126,7 +1126,7 @@ class AIDecision:
         self._session_trades.append(record)
 
         # Push trade event to WS clients
-        if self._ws_broadcaster and self._ws_broadcaster.has_clients:
+        if self._ws_broadcaster.has_clients:
             try:
                 asyncio.get_event_loop().create_task(
                     self._ws_broadcaster.broadcast(self._ws_broadcaster.build_trade_event(record))

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -16,8 +17,8 @@ class TestAgentPackageImports:
 
         assert TradingAgent.__name__ == "TradingAgent"
 
-    def test_import_trading_agent_from_core(self):
-        from polybot.agent.core import TradingAgent
+    def test_import_trading_agent_from_module(self):
+        from polybot.agent.trading_agent import TradingAgent
 
         assert TradingAgent.__name__ == "TradingAgent"
 
@@ -103,7 +104,7 @@ class TestEnrichIterationSummary:
     """Tests for enrich_iteration_summary."""
 
     def test_enriches_calibration(self):
-        from polybot.agent.helpers import enrich_iteration_summary
+        from polybot.agent.iteration_enricher import IterationSummaryEnricher
 
         summary: dict = {}
         dd = {
@@ -111,12 +112,12 @@ class TestEnrichIterationSummary:
             "exit_analysis": {},
             "ml_model": {},
         }
-        enrich_iteration_summary(summary, dd)
+        IterationSummaryEnricher(summary, dd).enrich()
         assert summary["calibration"]["total_records"] == 10
         assert summary["calibration"]["shadow_accuracy"] == 0.8
 
     def test_enriches_trade_analysis(self):
-        from polybot.agent.helpers import enrich_iteration_summary
+        from polybot.agent.iteration_enricher import IterationSummaryEnricher
 
         summary: dict = {}
         dd = {
@@ -130,13 +131,13 @@ class TestEnrichIterationSummary:
             ],
             "resolutions": [],
         }
-        enrich_iteration_summary(summary, dd)
+        IterationSummaryEnricher(summary, dd).enrich()
         assert summary["trade_analysis"]["total_buys"] == 2
         assert summary["trade_analysis"]["total_holds"] == 1
         assert summary["trade_analysis"]["cheap_entries"] == 1
 
     def test_enriches_resolution_analysis(self):
-        from polybot.agent.helpers import enrich_iteration_summary
+        from polybot.agent.iteration_enricher import IterationSummaryEnricher
 
         summary: dict = {}
         dd = {
@@ -149,15 +150,15 @@ class TestEnrichIterationSummary:
                 {"slug": "b", "btc_move": -50.0, "pnl": -2.0},
             ],
         }
-        enrich_iteration_summary(summary, dd)
+        IterationSummaryEnricher(summary, dd).enrich()
         assert summary["resolution_analysis"]["total"] == 2
         assert summary["resolution_analysis"]["biggest_win"] == 5.0
         assert summary["resolution_analysis"]["biggest_loss"] == -2.0
 
     def test_import_from_package(self):
-        from polybot.agent import enrich_iteration_summary
+        from polybot.agent import IterationSummaryEnricher
 
-        assert callable(enrich_iteration_summary)
+        assert callable(IterationSummaryEnricher)
 
     def test_compute_market_trend_no_data(self):
         from polybot.agent.dashboard import compute_market_trend
@@ -168,34 +169,39 @@ class TestEnrichIterationSummary:
 class TestStartupData:
     """Tests for StartupData and load_startup_data / save_agent_state."""
 
-    def test_compute_iteration_label_no_archive(self, tmp_path, monkeypatch):
-        from polybot.agent.helpers import compute_iteration_label
+    def test_compute_iteration_label_no_archive(self, tmp_path):
+        from polybot.agent.startup_loader import StartupLoader
 
-        monkeypatch.chdir(tmp_path)
-        assert compute_iteration_label() == "iter_001"
+        config = MagicMock()
+        config.logging.log_dir = str(tmp_path / "logs")
+        loader = StartupLoader(config, logging.getLogger("test"))
+        assert loader._compute_iteration_label() == "iter_001"
 
-    def test_compute_iteration_label_with_existing(self, tmp_path, monkeypatch):
-        from polybot.agent.helpers import compute_iteration_label
+    def test_compute_iteration_label_with_existing(self, tmp_path):
+        from polybot.agent.startup_loader import StartupLoader
 
-        monkeypatch.chdir(tmp_path)
         archive = tmp_path / "archive"
         (archive / "iter_001").mkdir(parents=True)
         (archive / "iter_002").mkdir(parents=True)
-        assert compute_iteration_label() == "iter_003"
+
+        config = MagicMock()
+        config.logging.log_dir = str(tmp_path / "logs")
+        loader = StartupLoader(config, logging.getLogger("test"))
+        assert loader._compute_iteration_label() == "iter_003"
 
     def test_load_startup_data_fresh(self, tmp_path):
-        from polybot.agent.helpers import load_startup_data
+        from polybot.agent.startup_loader import StartupLoader
 
         config = MagicMock()
         config.logging.log_dir = str(tmp_path)
 
-        data = load_startup_data(config)
+        data = StartupLoader(config, logging.getLogger("test")).load()
         assert data.resolutions_since_reflection == 0
         assert data.historical_resolutions == []
         assert data.historical_trades == []
 
     def test_load_startup_data_from_file(self, tmp_path):
-        from polybot.agent.helpers import load_startup_data
+        from polybot.agent.startup_loader import StartupLoader
 
         state_file = tmp_path / "agent_state.json"
         state_file.write_text(
@@ -210,7 +216,7 @@ class TestStartupData:
         config = MagicMock()
         config.logging.log_dir = str(tmp_path)
 
-        data = load_startup_data(config)
+        data = StartupLoader(config, logging.getLogger("test")).load()
         assert data.resolutions_since_reflection == 7
         assert data.knowledge_state == {"some": "data"}
 
@@ -231,7 +237,7 @@ class TestStartupData:
         assert data["knowledge"] == {"key": "val"}
 
     def test_load_history_from_logs(self, tmp_path):
-        from polybot.agent.helpers import load_startup_data
+        from polybot.agent.startup_loader import StartupLoader
 
         # Write a resolution log
         res_file = tmp_path / "resolutions_2024.jsonl"
@@ -281,7 +287,7 @@ class TestStartupData:
         config = MagicMock()
         config.logging.log_dir = str(tmp_path)
 
-        data = load_startup_data(config)
+        data = StartupLoader(config, logging.getLogger("test")).load()
         assert len(data.historical_resolutions) == 1
         assert data.historical_resolutions[0]["slug"] == "btc-5m-123"
         assert data.historical_resolutions[0]["pnl"] == 2.5

@@ -161,7 +161,7 @@ class MarketMonitor:
             )
 
         # Queue snapshot for persistent market history
-        if self._market_history is not None and self._market_history.current_candle_id is not None:
+        if self._market_history.current_candle_id is not None:
             self._queue_market_history_snapshot(
                 snapshot,
                 pf_snapshot,
@@ -276,7 +276,7 @@ class MarketMonitor:
         if self._ctx is None:
             return
         ws = self._ctx.ws_broadcaster
-        if ws and ws.has_clients:
+        if ws.has_clients:
             await ws.broadcast(ws.build_market_update(self._ctx))
             await ws.broadcast(ws.build_status_update(self._ctx))
 
