@@ -130,7 +130,9 @@ class MarketDataProvider:
                 await self._on_rotation()
             self._prev_condition_id = new_id
 
-        return self._build_snapshot(bet_data, btc_data)
+        snapshot = self._build_snapshot(bet_data, btc_data)
+        self._broadcast_snapshot(snapshot)
+        return snapshot
 
     def _build_snapshot(self, bet_data: BetData, btc_data: BtcData) -> MarketSnapshot:
         """Merge BetData + BtcData into a MarketSnapshot, tracking price history."""
@@ -160,6 +162,29 @@ class MarketDataProvider:
             btc_price_history=list(self._btc_price_history),
             btc_candles=btc_data.candles,
         )
+
+    def _broadcast_snapshot(self, snapshot: MarketSnapshot) -> None:
+        """Broadcast fresh market snapshot to WS clients."""
+        if self._broadcaster is None or not self._broadcaster.has_clients:
+            return
+
+        from polybot.ws.protocol import MSG_MARKET, make_message
+
+        data: dict = {
+            "timestamp": snapshot.timestamp,
+            "time_remaining": snapshot.time_remaining,
+            "slug": snapshot.slug,
+            "up_mid": snapshot.orderbook.midpoint,
+            "down_mid": snapshot.down_orderbook.midpoint,
+        }
+
+        if snapshot.btc_price:
+            data["btc_price"] = snapshot.btc_price.price_usd
+            data["chainlink_price"] = snapshot.btc_price.chainlink_price
+            data["price_source"] = snapshot.btc_price.price_source
+
+        msg = make_message(MSG_MARKET, data)
+        asyncio.create_task(self._broadcaster.broadcast(msg))
 
     def _broadcast_outage(self) -> None:
         """Broadcast outage status to WS clients when discovery fails."""

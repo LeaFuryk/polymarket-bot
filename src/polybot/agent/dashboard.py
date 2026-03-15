@@ -371,6 +371,7 @@ def assemble_dashboard_data(
             if ai_decision
             else 0,
         },
+        "indicators": ctx.shared.latest_indicator_results.to_dict() if ctx.shared.latest_indicator_results else {},
         "outage": {
             "is_down": ctx.market_data.outage_start is not None,
             "since": ctx.market_data.outage_start,

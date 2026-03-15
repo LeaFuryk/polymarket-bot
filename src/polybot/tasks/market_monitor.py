@@ -83,11 +83,11 @@ class MarketMonitor:
 
         self._shared.latest_snapshot = snapshot
         self._shared.snapshot_timestamp = time.time()
-        self._broadcast_snapshot(snapshot)
 
         # Compute indicators once for the whole tick
         indicators = self._compute_indicators(snapshot)
         self._shared.latest_indicator_results = indicators
+        self._broadcast_indicators(indicators)
 
         # Run prefilter gate
         has_position = self._portfolio.up_position.shares > 0 or self._portfolio.down_position.shares > 0
@@ -313,28 +313,17 @@ class MarketMonitor:
                     elapsed,
                 )
 
-    def _broadcast_snapshot(self, snapshot) -> None:
-        """Fire-and-forget broadcast of fresh market snapshot to WS clients."""
-        from polybot.ws.protocol import MSG_MARKET, make_message
-
+    def _broadcast_indicators(self, indicators) -> None:
+        """Broadcast computed indicators to WS clients."""
+        if indicators is None:
+            return
         bc = self._ctx.broadcaster
         if not bc.has_clients:
             return
 
-        data: dict = {
-            "timestamp": snapshot.timestamp,
-            "time_remaining": snapshot.time_remaining,
-            "slug": snapshot.slug,
-            "up_mid": snapshot.orderbook.midpoint,
-            "down_mid": snapshot.down_orderbook.midpoint,
-        }
+        from polybot.ws.protocol import MSG_STATUS, make_message
 
-        if snapshot.btc_price:
-            data["btc_price"] = snapshot.btc_price.price_usd
-            data["chainlink_price"] = snapshot.btc_price.chainlink_price
-            data["price_source"] = snapshot.btc_price.price_source
-
-        msg = make_message(MSG_MARKET, data)
+        msg = make_message(MSG_STATUS, {"indicators": indicators.to_dict()})
         asyncio.create_task(bc.broadcast(msg))
 
     def _queue_snapshot(
