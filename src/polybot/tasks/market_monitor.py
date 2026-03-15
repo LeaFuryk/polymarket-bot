@@ -82,11 +82,8 @@ class MarketMonitor:
         if snapshot is None:
             return
 
-        indicators = self._update_indicators(snapshot)
-
-        # Run prefilter gate
-        has_position = self._portfolio.has_open_position()
-        pf_result = self._prefilter.check(snapshot, has_position)
+        indicators = self._calculate_indicators(snapshot)
+        pf_result = self._run_prefilter(snapshot)
 
         # Record tick (always — analytics + dashboard history)
         pf_snapshot = self._record_tick(snapshot, pf_result)
@@ -104,12 +101,19 @@ class MarketMonitor:
         self._shared.snapshot_timestamp = time.time()
         return snapshot
 
-    def _update_indicators(self, snapshot) -> IndicatorResults | None:
+    def _calculate_indicators(self, snapshot) -> IndicatorResults | None:
         """Compute indicators, store on shared state, and broadcast."""
         indicators = self._compute_indicators(snapshot)
         self._shared.latest_indicator_results = indicators
         self._broadcast_indicators(indicators)
         return indicators
+
+    def _run_prefilter(self, snapshot):
+        """Run prefilter gate and broadcast result."""
+        has_position = self._portfolio.has_open_position()
+        pf_result = self._prefilter.check(snapshot, has_position)
+        self._broadcast_prefilter(pf_result)
+        return pf_result
 
     # --- Indicators ---
 
@@ -335,6 +339,30 @@ class MarketMonitor:
         from polybot.ws.protocol import MSG_STATUS, make_message
 
         msg = make_message(MSG_STATUS, {"indicators": indicators.to_dict()})
+        asyncio.create_task(bc.broadcast(msg))
+
+    def _broadcast_prefilter(self, pf_result) -> None:
+        """Broadcast prefilter result to WS clients when it passes."""
+        if pf_result.should_skip:
+            return
+        bc = self._ctx.broadcaster
+        if not bc.has_clients:
+            return
+
+        from polybot.ws.protocol import MSG_STATUS, make_message
+
+        msg = make_message(
+            MSG_STATUS,
+            {
+                "prefilter": {
+                    "passed": True,
+                    "streak": pf_result.consecutive_streak,
+                    "streak_direction": pf_result.streak_direction,
+                    "btc_range_30m": pf_result.btc_range_30m,
+                    "best_entry": pf_result.best_entry_price,
+                }
+            },
+        )
         asyncio.create_task(bc.broadcast(msg))
 
     def _queue_snapshot(
