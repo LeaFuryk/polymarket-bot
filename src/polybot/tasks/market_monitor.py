@@ -37,10 +37,8 @@ class MarketMonitor:
         self._market_data = ctx.market_data
         self._prefilter = ctx.prefilter
         self._portfolio = ctx.portfolio
-        self._resolution_tracker = ctx.resolution_tracker
         self._ai_decision = ai_decision
         self._datastore = ctx.datastore
-        self._feature_config = ctx.feature_config if ctx.datastore else None
         self._processor = ctx.processor
         self._market_history = ctx.market_history
         self._adaptive_entry = ctx.adaptive_entry
@@ -350,24 +348,9 @@ class MarketMonitor:
         up_ob = snapshot.orderbook
         down_ob = snapshot.down_orderbook
 
-        # Use pre-computed indicator results when available
         indicators_dict: dict = {}
         if indicator_results is not None:
             indicators_dict = indicator_results.to_dict()
-        elif self._feature_config is not None:
-            try:
-                from polybot.indicators import SessionContext, compute_indicators
-
-                self._feature_config.load()
-                session_ctx = SessionContext(
-                    wins=self._shared.session_wins,
-                    losses=self._shared.session_losses,
-                    candle_open_btc=self._shared.candle_open_btc,
-                )
-                results = compute_indicators(snapshot, self._feature_config, session_ctx)
-                indicators_dict = {r.name: {"value": r.value, "label": r.label} for r in results}
-            except Exception:
-                self._log.debug("Indicator computation failed for snapshot", exc_info=True)
 
         row = SnapshotRow(
             candle_id=self._datastore.current_candle_id,
