@@ -75,36 +75,52 @@ class MarketMonitor:
 
     async def _tick(self) -> None:
         """Single monitoring cycle."""
+        if not await self._ensure_market():
+            return
+
+        snapshot = await self._fetch_snapshot()
+        if snapshot is None:
+            return
+
+        time_remaining = self._shared.current_market.time_remaining()
+        pf_snapshot, pf_result = self._run_prefilter(snapshot, time_remaining)
+        self._persist_snapshots(snapshot, pf_snapshot, pf_result)
+        self._evaluate_trigger(snapshot, pf_snapshot, pf_result, time_remaining)
+
+    async def _ensure_market(self) -> bool:
+        """Discovery/rotation guard. Returns True if ready to monitor."""
         market = self._shared.current_market
         if market is None:
             await self._rotation.discover_market()
-            return
+            return False
 
-        time_remaining = market.time_remaining()
-        if time_remaining <= 0:
+        if market.time_remaining() <= 0:
             await self._rotation.discover_market()
-            return
+            return False
 
-        # Periodic discovery during normal operation (every 5 ticks ≈ 5s)
         self._discovery_counter += 1
         if self._discovery_counter >= 5:
             self._discovery_counter = 0
             await self._rotation.discover_market()
 
-        # Fetch market snapshot
+        return True
+
+    async def _fetch_snapshot(self):
+        """Fetch from provider, store on shared state. Returns None on failure."""
         try:
             snapshot = await self._market_data.get_snapshot()
         except Exception:
             logger.debug("MarketMonitor: data fetch failed", exc_info=True)
-            return
+            return None
 
         self._shared.latest_snapshot = snapshot
         self._shared.snapshot_timestamp = time.time()
+        return snapshot
 
+    def _run_prefilter(self, snapshot, time_remaining: float):
+        """Compute R/R, BTC move, run prefilter checks, build PreFilterSnapshot."""
         up_ob = snapshot.orderbook
         down_ob = snapshot.down_orderbook
-        up_mid = up_ob.midpoint
-        down_mid = down_ob.midpoint
 
         # Compute R/R for both tokens
         up_ask = up_ob.best_ask or 1.0
@@ -141,8 +157,8 @@ class MarketMonitor:
             rr_up=rr_up,
             rr_down=rr_down,
             btc_price=btc_price_val,
-            up_mid=up_mid,
-            down_mid=down_mid,
+            up_mid=up_ob.midpoint,
+            down_mid=down_ob.midpoint,
             up_spread_pct=up_ob.spread_pct,
             down_spread_pct=down_ob.spread_pct,
             streak=pf_result.consecutive_streak,
@@ -150,8 +166,14 @@ class MarketMonitor:
             btc_move_from_open=btc_move,
         )
         self._shared.prefilter_history.append(pf_snapshot)
+        return pf_snapshot, pf_result
 
-        # Queue snapshot for SQLite analytics
+    def _persist_snapshots(self, snapshot, pf_snapshot: PreFilterSnapshot, pf_result) -> None:
+        """Queue snapshots for SQLite analytics and persistent market history."""
+        rr_up = pf_snapshot.rr_up
+        rr_down = pf_snapshot.rr_down
+        btc_move = pf_snapshot.btc_move_from_open
+
         if self._datastore is not None and self._datastore.current_candle_id is not None:
             self._queue_snapshot(
                 snapshot,
@@ -162,7 +184,6 @@ class MarketMonitor:
                 btc_move,
             )
 
-        # Queue snapshot for persistent market history
         if self._market_history.current_candle_id is not None:
             self._queue_market_history_snapshot(
                 snapshot,
@@ -172,11 +193,24 @@ class MarketMonitor:
                 btc_move,
             )
 
-        # Decide whether to trigger AI (entry only — exits come from PositionMonitor's queue)
+    def _evaluate_trigger(self, snapshot, pf_snapshot: PreFilterSnapshot, pf_result, time_remaining: float) -> None:
+        """Gate pipeline: adaptive/static R/R, cooldown, AI busy. Fires evaluate_entry task."""
+        up_ask = pf_snapshot.best_entry_up
+        down_ask = pf_snapshot.best_entry_down
+        rr_up = pf_snapshot.rr_up
+        rr_down = pf_snapshot.rr_down
+        btc_move = pf_snapshot.btc_move_from_open
+        btc_price_val = pf_snapshot.btc_price
+        candle_open = self._shared.candle_open_btc
+
+        up_ob = snapshot.orderbook
+        down_ob = snapshot.down_orderbook
+
         best_rr = max(rr_up, rr_down)
         prefilter_passed = not pf_result.should_skip
         min_ask = min(up_ask, down_ask)
         best_side = "up" if rr_up >= rr_down else "down"
+        has_position = self._portfolio.up_position.shares > 0 or self._portfolio.down_position.shares > 0
 
         # Adaptive trigger: uses rolling reversal rate to set BTC threshold + max entry
         adaptive_passed = False
@@ -228,8 +262,8 @@ class MarketMonitor:
             "candle_open_btc": candle_open or 0,
             "up_ask": up_ask,
             "down_ask": down_ask,
-            "up_mid": up_mid,
-            "down_mid": down_mid,
+            "up_mid": pf_snapshot.up_mid,
+            "down_mid": pf_snapshot.down_mid,
             "rr_up": round(rr_up, 3),
             "rr_down": round(rr_down, 3),
             "best_side": best_side,
