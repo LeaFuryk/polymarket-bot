@@ -15,10 +15,10 @@ class BtcRepository:
     def __init__(
         self,
         feed: BtcPriceFeed,
-        logger: logging.Logger | None = None,
+        logger: logging.Logger,
     ) -> None:
         self._feed = feed
-        self._log = logger or logging.getLogger(__name__)
+        self._log = logger
 
     async def fetch(self) -> BtcData:
         """Fetch BTC price + append latest candle. Always returns (price may be None)."""

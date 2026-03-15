@@ -27,7 +27,7 @@ class TradingAgent:
         startup_data = StartupLoader(config, log=self._log).load()
 
         # Build AgentContext via factory (all sub-component wiring)
-        factory = ContextFactory(config, startup_data, logger=self._log)
+        factory = ContextFactory(config, self._log, startup_data)
         self._ctx = factory.build()
 
         # WebSocket server — lifecycle owned by TradingAgent, not shared context
@@ -86,10 +86,10 @@ class TradingAgent:
 
         # Create task objects — AIDecision first (monitors reference it)
         ai_decision = AIDecision(ctx)
-        rotation_manager = RotationManager(ctx, ai_decision=ai_decision, logger=self._log)
+        rotation_manager = RotationManager(ctx, self._log, ai_decision=ai_decision)
         ctx.market_data.set_on_rotation(rotation_manager.handle_rotation)
         ctx.market_data.set_broadcaster(ctx.broadcaster)
-        market_monitor = MarketMonitor(ctx, ai_decision=ai_decision)
+        market_monitor = MarketMonitor(ctx, ai_decision, logger=self._log)
         position_monitor = PositionMonitor(ctx, ai_decision=ai_decision)
 
         # Start WebSocket server

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 import pytest
 
 from polybot.models import BtcCandle, MarketSnapshot, OrderbookSnapshot
@@ -77,7 +79,7 @@ def _snapshot(
 
 class TestConstants:
     def test_defaults_are_used_by_prefilter(self):
-        pf = PreFilter()
+        pf = PreFilter(logger=logging.getLogger("test"))
         assert pf.min_time_remaining == MIN_TIME_REMAINING
         assert pf.max_spread_pct == MAX_SPREAD_PCT
         assert pf.min_book_depth == MIN_BOOK_DEPTH
@@ -272,7 +274,7 @@ class TestNoStreakFilter:
 
 class TestPreFilter:
     def test_all_pass(self):
-        pf = PreFilter()
+        pf = PreFilter(logger=logging.getLogger("test"))
         candles = [_candle("up") for _ in range(4)]
         snap = _snapshot(up_ask=0.20, down_ask=0.22, candles=candles)
         snap.time_remaining = 120.0
@@ -282,7 +284,7 @@ class TestPreFilter:
         assert result.streak_direction == "up"
 
     def test_skip_open_position(self):
-        pf = PreFilter()
+        pf = PreFilter(logger=logging.getLogger("test"))
         snap = _snapshot()
         snap.time_remaining = 120.0
         result = pf.check(snap, has_open_position=True)
@@ -290,7 +292,7 @@ class TestPreFilter:
         assert "Position open" in result.reason
 
     def test_skip_time(self):
-        pf = PreFilter()
+        pf = PreFilter(logger=logging.getLogger("test"))
         snap = _snapshot()
         snap.time_remaining = 10.0
         result = pf.check(snap)
@@ -298,7 +300,7 @@ class TestPreFilter:
         assert "Time remaining" in result.reason
 
     def test_stats_tracking(self):
-        pf = PreFilter()
+        pf = PreFilter(logger=logging.getLogger("test"))
         snap1 = _snapshot(up_ask=0.20, down_ask=0.22, candles=[_candle("up")] * 3)
         snap1.time_remaining = 120.0
         pf.check(snap1)
@@ -310,12 +312,12 @@ class TestPreFilter:
         assert pf.skip_rate == pytest.approx(0.5)
 
     def test_skip_rate_zero_checks(self):
-        pf = PreFilter()
+        pf = PreFilter(logger=logging.getLogger("test"))
         assert pf.skip_rate == 0.0
 
     def test_custom_filters(self):
         """Inject a custom filter list."""
-        pf = PreFilter(filters=[OpenPositionFilter()])
+        pf = PreFilter(logger=logging.getLogger("test"), filters=[OpenPositionFilter()])
         snap = _snapshot()
         snap.time_remaining = 5.0
         # Only the open-position filter is active — time < 45s but no time filter
@@ -326,7 +328,7 @@ class TestPreFilter:
         candles = [_candle("down", high=65200, low=65000)] * 3
         snap = _snapshot(up_ask=0.25, down_ask=0.30, candles=candles)
         snap.time_remaining = 120.0
-        pf = PreFilter()
+        pf = PreFilter(logger=logging.getLogger("test"))
         result = pf.check(snap)
         assert result.consecutive_streak == 3
         assert result.streak_direction == "down"

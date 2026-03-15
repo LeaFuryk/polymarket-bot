@@ -22,12 +22,12 @@ class RotationManager:
     def __init__(
         self,
         ctx: AgentContext,
+        logger: logging.Logger,
         ai_decision: AIDecision | None = None,
-        logger: logging.Logger | None = None,
     ) -> None:
         self._ctx = ctx
         self._ai_decision = ai_decision
-        self._log = logger or logging.getLogger(__name__)
+        self._log = logger
 
     async def discover_market(self) -> CandleMarket | None:
         """Discover the current candle market, handling rotation and outages."""

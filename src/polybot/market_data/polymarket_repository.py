@@ -30,11 +30,11 @@ class PolymarketRepository:
         self,
         rest: PolymarketRestClient,
         discovery: MarketDiscovery,
-        logger: logging.Logger | None = None,
+        logger: logging.Logger,
     ) -> None:
         self._rest = rest
         self._discovery = discovery
-        self._log = logger or logging.getLogger(__name__)
+        self._log = logger
         self._market: CandleMarket | None = None
         self._ws_orderbook: OrderbookSnapshot | None = None
         self._ws_last_price: float | None = None

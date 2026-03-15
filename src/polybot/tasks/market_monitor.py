@@ -30,9 +30,9 @@ class MarketMonitor:
         self,
         ctx: AgentContext,
         ai_decision: AIDecision,
-        logger: logging.Logger | None = None,
+        logger: logging.Logger,
     ) -> None:
-        self._log = logger or logging.getLogger(__name__)
+        self._log = logger
         self._config = ctx.config
         self._shared = ctx.shared
         self._market_data = ctx.market_data

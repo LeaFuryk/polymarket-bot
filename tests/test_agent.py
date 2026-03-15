@@ -308,7 +308,7 @@ class TestRotationManager:
 
         ctx = MagicMock()
         ctx.shared.prefilter_history = [MagicMock() for _ in range(5)]  # < 10
-        rm = RotationManager(ctx)
+        rm = RotationManager(ctx, logging.getLogger("test"))
         rm._save_candle_microstructure()
         # Should not append anything
         ctx.shared.microstructure_history.append.assert_not_called()
@@ -329,7 +329,7 @@ class TestRotationManager:
         ctx.shared.prefilter_history = snapshots
         ctx.shared.microstructure_history = []
 
-        rm = RotationManager(ctx)
+        rm = RotationManager(ctx, logging.getLogger("test"))
         rm._save_candle_microstructure()
         assert len(ctx.shared.microstructure_history) == 1
         summary = ctx.shared.microstructure_history[0]
@@ -349,7 +349,7 @@ class TestRotationManager:
         ctx.outage_start = None
         ctx.current_market = None
 
-        rm = RotationManager(ctx)
+        rm = RotationManager(ctx, logging.getLogger("test"))
         result = await rm.discover_market()
         assert ctx.discovery_failures == 1
         assert result is None
@@ -365,7 +365,7 @@ class TestRotationManager:
         ctx.outage_start = None
         ctx.current_market = None
 
-        rm = RotationManager(ctx)
+        rm = RotationManager(ctx, logging.getLogger("test"))
         await rm.discover_market()
         assert ctx.discovery_failures == 3
         assert ctx.outage_start is not None  # outage detected at threshold

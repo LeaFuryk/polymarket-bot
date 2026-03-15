@@ -44,20 +44,21 @@ class ContextFactory:
     def __init__(
         self,
         config: AppConfig,
+        logger: logging.Logger,
         startup_data: StartupData | None = None,
-        logger: logging.Logger | None = None,
     ) -> None:
         self._config = config
         self._startup_data = startup_data or StartupData()
-        self._log = logger or logging.getLogger(__name__)
+        self._log = logger
 
     def build(self) -> AgentContext:
         """Create all components and return a populated AgentContext."""
         config = self._config
         sd = self._startup_data
 
-        discovery = MarketDiscovery(config)
-        market_data = MarketDataProvider(config, discovery=discovery)
+        log = self._log
+        discovery = MarketDiscovery(config, logger=log)
+        market_data = MarketDataProvider(config, logger=log, discovery=discovery)
         decision_engine = DecisionEngine(config.ai)
         execution_sim = ExecutionSimulator(config.simulator)
         orderbook = SimulatedOrderBook(config.simulator)
@@ -81,7 +82,7 @@ class ContextFactory:
         resolution_tracker = ResolutionTracker(
             MarketDataResolutionRepo(market_data.btc_feed, market_data.rest_client),
         )
-        prefilter = PreFilter()
+        prefilter = PreFilter(logger=log)
         calibrator = ConfidenceCalibrator(data_dir=Path(config.logging.log_dir))
         exit_tracker = ExitTracker(data_dir=Path(config.logging.log_dir))
         adaptive_entry = AdaptiveEntryTracker(

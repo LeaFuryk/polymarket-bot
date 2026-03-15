@@ -36,10 +36,10 @@ class BtcPriceFeed:
     def __init__(
         self,
         api_config: ApiConfig,
+        logger: logging.Logger,
         cache_ttl: float = BTC_PRICE_CACHE_TTL,
-        logger: logging.Logger | None = None,
     ) -> None:
-        self._log = logger or logging.getLogger(__name__)
+        self._log = logger
         self._coingecko_url = api_config.coingecko_url
         self._rpc_url = api_config.ethereum_rpc_url
         self._chainlink_address = api_config.chainlink_btcusd_address
