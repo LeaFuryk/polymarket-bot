@@ -57,6 +57,8 @@ from polybot.indicators.core import (
     get_registry,
     register,
 )
+from polybot.indicators.processor import IndicatorsProcessor
+from polybot.indicators.results import IndicatorResults
 
 __all__ = [
     # Data types
@@ -64,6 +66,9 @@ __all__ = [
     "SessionContext",
     "FeatureConfigEntry",
     "FeatureConfig",
+    # New types
+    "IndicatorsProcessor",
+    "IndicatorResults",
     # Registry
     "register",
     "get_registry",

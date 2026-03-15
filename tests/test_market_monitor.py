@@ -110,6 +110,9 @@ def _make_monitor():
     # Adaptive entry
     ctx.adaptive_entry = None
 
+    # Indicators processor
+    ctx.processor = None
+
     # Broadcaster
     ctx.broadcaster = MagicMock()
     ctx.broadcaster.has_clients = False

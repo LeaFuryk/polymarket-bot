@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import logging
 import time
+from typing import TYPE_CHECKING
 
 from polybot.indicators import FeatureConfig, SessionContext, compute_indicators
 from polybot.models import (
@@ -17,6 +18,9 @@ from polybot.models import (
     TradeRecord,
     TradingDecision,
 )
+
+if TYPE_CHECKING:
+    from polybot.indicators.results import IndicatorResults
 
 logger = logging.getLogger(__name__)
 
@@ -149,10 +153,11 @@ def build_decision_row(
     cycle: int,
     snapshot,
     portfolio,
-    feature_config: FeatureConfig,
-    session_wins: int,
-    session_losses: int,
-    candle_open_btc: float | None,
+    feature_config: FeatureConfig | None = None,
+    indicator_results: IndicatorResults | None = None,
+    session_wins: int = 0,
+    session_losses: int = 0,
+    candle_open_btc: float | None = None,
     decision: TradingDecision | None = None,
     latency_ms: float = 0.0,
     fill=None,
@@ -164,24 +169,28 @@ def build_decision_row(
 ):
     """Build a DecisionRow for SQLite analytics.
 
-    Returns None-safe: imports DecisionRow lazily and returns the row.
+    Accepts pre-computed ``indicator_results`` when available, falling back to
+    computing indicators from ``feature_config`` for backward compatibility.
     """
     from polybot.datastore import DecisionRow
 
     _log = log or logger
 
     indicators_dict: dict = {}
-    try:
-        feature_config.load()
-        session_ctx = SessionContext(
-            wins=session_wins,
-            losses=session_losses,
-            candle_open_btc=candle_open_btc,
-        )
-        results = compute_indicators(snapshot, feature_config, session_ctx)
-        indicators_dict = {r.name: {"value": r.value, "label": r.label} for r in results}
-    except Exception:
-        _log.debug("Indicator computation failed for decision", exc_info=True)
+    if indicator_results is not None:
+        indicators_dict = indicator_results.to_dict()
+    elif feature_config is not None:
+        try:
+            feature_config.load()
+            session_ctx = SessionContext(
+                wins=session_wins,
+                losses=session_losses,
+                candle_open_btc=candle_open_btc,
+            )
+            results = compute_indicators(snapshot, feature_config, session_ctx)
+            indicators_dict = {r.name: {"value": r.value, "label": r.label} for r in results}
+        except Exception:
+            _log.debug("Indicator computation failed for decision", exc_info=True)
 
     return DecisionRow(
         candle_id=datastore_candle_id,

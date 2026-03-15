@@ -618,15 +618,20 @@ class AIDecision:
         if extra_context:
             feedback_context = extra_context + "\n" + feedback_context
 
-        # Compute indicators
-        self._feature_config.load()
-        session_ctx = SessionContext(
-            wins=self.session_wins,
-            losses=self.session_losses,
-            candle_open_btc=candle_open_btc,
-        )
-        indicator_results = compute_indicators(snapshot, self._feature_config, session_ctx)
-        indicators_text = format_indicators(indicator_results)
+        # Read pre-computed indicators from shared state, fallback to computing
+        shared_results = self._shared.latest_indicator_results
+        if shared_results is not None:
+            indicator_results = shared_results.results
+            indicators_text = shared_results.format_markdown()
+        else:
+            self._feature_config.load()
+            session_ctx = SessionContext(
+                wins=self.session_wins,
+                losses=self.session_losses,
+                candle_open_btc=candle_open_btc,
+            )
+            indicator_results = compute_indicators(snapshot, self._feature_config, session_ctx)
+            indicators_text = format_indicators(indicator_results)
 
         # Velocity conflict (computed early for ML features)
         velocity_conflict = detect_velocity_magnitude_conflict(
@@ -1113,6 +1118,7 @@ class AIDecision:
                 snapshot=snapshot,
                 portfolio=self._portfolio,
                 feature_config=self._feature_config,
+                indicator_results=self._shared.latest_indicator_results,
                 session_wins=self.session_wins,
                 session_losses=self.session_losses,
                 candle_open_btc=self._shared.candle_open_btc,

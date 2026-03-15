@@ -11,6 +11,7 @@ from __future__ import annotations
 from collections import deque
 from typing import Any
 
+from polybot.indicators.results import IndicatorResults
 from polybot.models import CandleMarket, MarketSnapshot
 from polybot.shared_state.candle_microstructure import CandleMicrostructure
 from polybot.shared_state.constants import (
@@ -79,6 +80,9 @@ class SharedState:
         self.api_latencies: dict[str, float] = {}
         self.ws_client_count: int = 0
         self.sqlite_queue_depth: int = 0
+
+        # -- Latest indicator results (computed once per tick by MarketMonitor) --
+        self.latest_indicator_results: IndicatorResults | None = None
 
         # -- Lifecycle --
         self.shutdown: bool = False

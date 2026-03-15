@@ -16,6 +16,8 @@ from polybot.decision_engine.engine import DecisionEngine
 from polybot.execution.live import LiveExecutionEngine
 from polybot.exit_tracker import ExitTracker
 from polybot.indicators import FeatureConfig
+from polybot.indicators.catalog import all_indicators
+from polybot.indicators.processor import IndicatorsProcessor
 from polybot.knowledge import KnowledgeManager
 from polybot.logging.trade_log import TradeLog
 from polybot.market_data.discovery import MarketDiscovery
@@ -89,6 +91,7 @@ class ContextFactory:
         ml_scorer = MLScorer(data_dir=Path(config.logging.log_dir))
         knowledge_manager = KnowledgeManager(config.logging.knowledge_dir, config.ai)
         feature_config = FeatureConfig(Path(config.logging.knowledge_dir).parent / "feature_config.json")
+        processor = IndicatorsProcessor(all_indicators(), feature_config)
 
         # WebSocket broadcaster (server owned by TradingAgent)
         broadcaster = Broadcaster()
@@ -128,6 +131,7 @@ class ContextFactory:
             ml_scorer=ml_scorer,
             knowledge_manager=knowledge_manager,
             feature_config=feature_config,
+            processor=processor,
             shared=shared,
             live_mode=live_mode,
             live_engine=live_engine,

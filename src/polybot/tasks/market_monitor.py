@@ -15,13 +15,11 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from polybot.agent.context import AgentContext
     from polybot.agent.rotation import RotationManager
+    from polybot.indicators.results import IndicatorResults
     from polybot.tasks.ai_decision import AIDecision
 
 from polybot.dashboard import DashboardMessageBuilder
-from polybot.indicators import (
-    SessionContext,
-    compute_indicators,
-)
+from polybot.indicators import SessionContext
 from polybot.shared_state import PreFilterSnapshot
 
 logger = logging.getLogger(__name__)
@@ -46,6 +44,7 @@ class MarketMonitor:
         self._rotation = rotation_manager
         self._datastore = ctx.datastore
         self._feature_config = ctx.feature_config if ctx.datastore else None
+        self._processor = ctx.processor
         self._market_history = ctx.market_history
         self._adaptive_entry = ctx.adaptive_entry
         self._ctx = ctx
@@ -83,8 +82,12 @@ class MarketMonitor:
             return
 
         time_remaining = self._shared.current_market.time_remaining()
-        pf_snapshot, pf_result = self._run_prefilter(snapshot, time_remaining)
-        self._persist_snapshots(snapshot, pf_snapshot, pf_result)
+
+        indicator_results = self._compute_indicators(snapshot, time_remaining)
+        self._shared.latest_indicator_results = indicator_results
+
+        pf_snapshot, pf_result = self._run_prefilter(snapshot, time_remaining, indicator_results)
+        self._persist_snapshots(snapshot, pf_snapshot, pf_result, indicator_results)
         self._evaluate_trigger(snapshot, pf_snapshot, pf_result, time_remaining)
 
     async def _ensure_market(self) -> bool:
@@ -117,27 +120,56 @@ class MarketMonitor:
         self._shared.snapshot_timestamp = time.time()
         return snapshot
 
-    def _run_prefilter(self, snapshot, time_remaining: float):
+    def _compute_indicators(self, snapshot, time_remaining: float) -> IndicatorResults | None:
+        """Compute all indicators once using the processor."""
+        if self._processor is None:
+            return None
+        try:
+            has_position = self._portfolio.up_position.shares > 0 or self._portfolio.down_position.shares > 0
+            session = SessionContext(
+                wins=self._shared.session_wins,
+                losses=self._shared.session_losses,
+                candle_open_btc=self._shared.candle_open_btc,
+            )
+            return self._processor.compute(
+                snapshot,
+                session,
+                candle_open_btc=self._shared.candle_open_btc,
+                has_open_position=has_position,
+                time_remaining=time_remaining,
+            )
+        except Exception:
+            logger.debug("Indicator computation failed", exc_info=True)
+            return None
+
+    def _run_prefilter(self, snapshot, time_remaining: float, indicator_results: IndicatorResults | None = None):
         """Compute R/R, BTC move, run prefilter checks, build PreFilterSnapshot."""
+        # Use indicator results for derived values when available, fallback to direct computation
+        if indicator_results is not None:
+            rr_up = indicator_results.rr_up
+            rr_down = indicator_results.rr_down
+            btc_move = indicator_results.btc_move_from_open
+        else:
+            up_ob = snapshot.orderbook
+            down_ob = snapshot.down_orderbook
+            up_ask = up_ob.best_ask or 1.0
+            down_ask = down_ob.best_ask or 1.0
+            rr_up = (1.0 - up_ask) / up_ask if up_ask > 0 else 0
+            rr_down = (1.0 - down_ask) / down_ask if down_ask > 0 else 0
+            btc_move = 0.0
+            btc_price_val = snapshot.btc_price.price_usd if snapshot.btc_price else 0.0
+            candle_open = self._shared.candle_open_btc
+            if candle_open is not None and btc_price_val > 0:
+                btc_move = btc_price_val - candle_open
+
         up_ob = snapshot.orderbook
         down_ob = snapshot.down_orderbook
-
-        # Compute R/R for both tokens
-        up_ask = up_ob.best_ask or 1.0
-        down_ask = down_ob.best_ask or 1.0
-        rr_up = (1.0 - up_ask) / up_ask if up_ask > 0 else 0
-        rr_down = (1.0 - down_ask) / down_ask if down_ask > 0 else 0
-
-        # Compute BTC move from candle open
-        btc_move = 0.0
-        btc_price_val = snapshot.btc_price.price_usd if snapshot.btc_price else 0.0
-        candle_open = self._shared.candle_open_btc
-        if candle_open is not None and btc_price_val > 0:
-            btc_move = btc_price_val - candle_open
 
         # Run prefilter checks (1-5, no R/R gate)
         has_position = self._portfolio.up_position.shares > 0 or self._portfolio.down_position.shares > 0
         pf_result = self._prefilter.check(time_remaining, snapshot, has_position)
+
+        btc_price_val = snapshot.btc_price.price_usd if snapshot.btc_price else 0.0
 
         # Build snapshot record
         pf_snapshot = PreFilterSnapshot(
@@ -152,8 +184,8 @@ class MarketMonitor:
                 "prefilter_passed": not pf_result.should_skip,
             },
             reasons=[pf_result.reason] if pf_result.reason else [],
-            best_entry_up=up_ask,
-            best_entry_down=down_ask,
+            best_entry_up=up_ob.best_ask or 1.0,
+            best_entry_down=down_ob.best_ask or 1.0,
             rr_up=rr_up,
             rr_down=rr_down,
             btc_price=btc_price_val,
@@ -168,7 +200,13 @@ class MarketMonitor:
         self._shared.prefilter_history.append(pf_snapshot)
         return pf_snapshot, pf_result
 
-    def _persist_snapshots(self, snapshot, pf_snapshot: PreFilterSnapshot, pf_result) -> None:
+    def _persist_snapshots(
+        self,
+        snapshot,
+        pf_snapshot: PreFilterSnapshot,
+        pf_result,
+        indicator_results: IndicatorResults | None = None,
+    ) -> None:
         """Queue snapshots for SQLite analytics and persistent market history."""
         rr_up = pf_snapshot.rr_up
         rr_down = pf_snapshot.rr_down
@@ -182,6 +220,7 @@ class MarketMonitor:
                 rr_up,
                 rr_down,
                 btc_move,
+                indicator_results,
             )
 
         if self._market_history.current_candle_id is not None:
@@ -325,6 +364,7 @@ class MarketMonitor:
         rr_up: float,
         rr_down: float,
         btc_move: float,
+        indicator_results: IndicatorResults | None = None,
     ) -> None:
         """Build a SnapshotRow from current tick data and queue it."""
         from polybot.datastore import SnapshotRow
@@ -332,10 +372,14 @@ class MarketMonitor:
         up_ob = snapshot.orderbook
         down_ob = snapshot.down_orderbook
 
-        # Compute indicators if feature_config is available
+        # Use pre-computed indicator results when available
         indicators_dict: dict = {}
-        if self._feature_config is not None:
+        if indicator_results is not None:
+            indicators_dict = indicator_results.to_dict()
+        elif self._feature_config is not None:
             try:
+                from polybot.indicators import SessionContext, compute_indicators
+
                 self._feature_config.load()
                 session_ctx = SessionContext(
                     wins=self._shared.session_wins,
