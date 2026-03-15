@@ -18,7 +18,6 @@ if TYPE_CHECKING:
     from polybot.indicators.results import IndicatorResults
     from polybot.tasks.ai_decision import AIDecision
 
-from polybot.dashboard import DashboardMessageBuilder
 from polybot.indicators import SessionContext
 from polybot.indicators.helpers import compute_rr
 from polybot.shared_state import PreFilterSnapshot
@@ -130,7 +129,7 @@ class MarketMonitor:
 
         self._shared.latest_snapshot = snapshot
         self._shared.snapshot_timestamp = time.time()
-        self._broadcast_snapshot()
+        self._broadcast_snapshot(snapshot)
         return snapshot
 
     def _compute_indicators(self, snapshot, time_remaining: float) -> IndicatorResults | None:
@@ -343,18 +342,31 @@ class MarketMonitor:
                     elapsed,
                 )
 
-    def _broadcast_snapshot(self) -> None:
-        """Fire-and-forget broadcast of fresh market data to WS clients."""
+    def _broadcast_snapshot(self, snapshot) -> None:
+        """Fire-and-forget broadcast of fresh market snapshot to WS clients."""
+        from polybot.ws.protocol import MSG_MARKET, make_message
+
         bc = self._ctx.broadcaster
         if not bc.has_clients:
             return
-        builder = DashboardMessageBuilder()
 
-        async def _send() -> None:
-            await bc.broadcast(builder.build_market_update(self._ctx))
-            await bc.broadcast(builder.build_status_update(self._ctx, ws_client_count=bc.client_count))
+        market = self._shared.current_market
+        data: dict = {"timestamp": time.time()}
 
-        asyncio.create_task(_send())
+        if market:
+            data["time_remaining"] = market.time_remaining()
+            data["slug"] = market.slug
+
+        data["up_mid"] = snapshot.orderbook.midpoint
+        data["down_mid"] = snapshot.down_orderbook.midpoint
+
+        if snapshot.btc_price:
+            data["btc_price"] = snapshot.btc_price.price_usd
+            data["chainlink_price"] = snapshot.btc_price.chainlink_price
+            data["price_source"] = snapshot.btc_price.price_source
+
+        msg = make_message(MSG_MARKET, data)
+        asyncio.create_task(bc.broadcast(msg))
 
     def _queue_snapshot(
         self,
