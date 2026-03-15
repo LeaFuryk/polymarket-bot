@@ -38,6 +38,10 @@ class IndicatorsProcessor:
         candle_open_btc: float | None = None,
         has_open_position: bool = False,
         time_remaining: float = 0.0,
+        position_side: str = "",
+        microstructure_history: Sequence | None = None,
+        session_trades: Sequence | None = None,
+        session_resolutions: Sequence | None = None,
     ) -> IndicatorResults:
         """Run all indicators and return results."""
         if self._feature_config is not None:
@@ -62,6 +66,10 @@ class IndicatorsProcessor:
                 candle_open_btc=candle_open_btc,
                 has_open_position=has_open_position,
                 time_remaining=time_remaining,
+                position_side=position_side,
+                microstructure_history=tuple(microstructure_history) if microstructure_history else (),
+                session_trades=tuple(session_trades) if session_trades else (),
+                session_resolutions=tuple(session_resolutions) if session_resolutions else (),
             )
             try:
                 result = indicator.compute(ctx)

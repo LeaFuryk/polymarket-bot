@@ -261,12 +261,23 @@ class RotationManager:
 
                 ctx.calibrator.record_outcome(resolution.slug, resolution.winner)
                 ctx.exit_tracker.record_outcome(resolution.slug, resolution.winner)
+                # Compute btc_moves from btc_price_history for reversal detection
+                _btc_moves: list[float] = []
+                _best_entry_up = 1.0
+                _best_entry_down = 1.0
+                _snap = ctx.shared.latest_snapshot
+                if _snap is not None and ctx.shared.candle_open_btc is not None:
+                    _btc_moves = [p - ctx.shared.candle_open_btc for p in _snap.btc_price_history]
+                    _best_entry_up = _snap.orderbook.best_ask or 1.0
+                    _best_entry_down = _snap.down_orderbook.best_ask or 1.0
                 ctx.adaptive_entry.record_outcome(
                     slug=resolution.slug,
                     winner=resolution.winner,
                     btc_open=resolution.btc_open,
                     btc_close=resolution.btc_close,
-                    prefilter_history=list(ctx.shared.prefilter_history),
+                    btc_moves=_btc_moves,
+                    best_entry_up=_best_entry_up,
+                    best_entry_down=_best_entry_down,
                 )
 
                 # Train ML model
@@ -372,7 +383,8 @@ class RotationManager:
             # Reset shared state for new candle
             ctx.shared.candle_open_btc = None
             ctx.shared.position_pnl_pct.clear()
-            ctx.shared.prefilter_history.clear()
+            ctx.shared.tick_spreads_up.clear()
+            ctx.shared.tick_spreads_down.clear()
             ctx.shared.last_stop_loss = None
             ctx.shared.entry_context.clear()
             ctx.shared.dynamic_sl.clear()
@@ -382,15 +394,21 @@ class RotationManager:
             ctx.shared.rotation_in_progress = False
 
     def _save_candle_microstructure(self) -> None:
-        """Compute and save microstructure summary from current candle's prefilter history."""
+        """Compute and save microstructure summary from current candle data."""
         ctx = self._ctx
-        history = list(ctx.shared.prefilter_history)
-        if len(history) < 10:
+        snapshot = ctx.shared.latest_snapshot
+        candle_open = ctx.shared.candle_open_btc
+
+        # Compute BTC moves from btc_price_history
+        moves: list[float] = []
+        if snapshot is not None and candle_open is not None:
+            moves = [p - candle_open for p in snapshot.btc_price_history]
+
+        if len(moves) < 10:
             return
 
-        spreads_up = [s.up_spread_pct for s in history if s.up_spread_pct is not None]
-        spreads_down = [s.down_spread_pct for s in history if s.down_spread_pct is not None]
-        moves = [s.btc_move_from_open for s in history]
+        spreads_up = ctx.shared.tick_spreads_up
+        spreads_down = ctx.shared.tick_spreads_down
 
         btc_range = max(moves) - min(moves) if moves else 0.0
         btc_final_move = moves[-1] if moves else 0.0
@@ -411,7 +429,7 @@ class RotationManager:
             timestamp=time.time(),
             avg_spread_up=statistics.mean(spreads_up) if spreads_up else 0.0,
             avg_spread_down=statistics.mean(spreads_down) if spreads_down else 0.0,
-            avg_depth=0.0,  # filled from snapshot if available
+            avg_depth=0.0,
             avg_imbalance=1.0,
             btc_range=btc_range,
             btc_final_move=btc_final_move,

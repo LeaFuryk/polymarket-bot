@@ -76,7 +76,9 @@ class DashboardMessageBuilder:
         data = {
             "timestamp": time.time(),
             "monitor": {
-                "prefilter_snapshots": len(ctx.shared.prefilter_history),
+                "btc_price_ticks": len(ctx.shared.latest_snapshot.btc_price_history)
+                if ctx.shared.latest_snapshot
+                else 0,
                 "ai_cooldown_remaining": max(
                     0,
                     ctx.config.monitor.ai_cooldown_seconds - (time.time() - ctx.shared.ai_last_call_time),

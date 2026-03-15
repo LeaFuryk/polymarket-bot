@@ -5,18 +5,15 @@ from __future__ import annotations
 from polybot.shared_state import (
     CandleMicrostructure,
     EntryContext,
-    PreFilterSnapshot,
     SharedState,
     StopLossRecord,
 )
 from polybot.shared_state.constants import (
     DEFAULT_AVG_IMBALANCE,
-    DEFAULT_BEST_ENTRY,
     DEFAULT_ML_CONFIDENCE,
     DEFAULT_ML_UP_PROBABILITY,
     DEFAULT_REGIME,
     DEFAULT_SIGNAL_TYPE,
-    PREFILTER_HISTORY_MAXLEN,
 )
 
 # -- Constants -----------------------------------------------------------------
@@ -33,11 +30,6 @@ class TestConstants:
     def test_microstructure_defaults(self):
         ms = CandleMicrostructure()
         assert ms.avg_imbalance == DEFAULT_AVG_IMBALANCE
-
-    def test_prefilter_defaults(self):
-        snap = PreFilterSnapshot(timestamp=1.0, time_remaining=299.0)
-        assert snap.best_entry_up == DEFAULT_BEST_ENTRY
-        assert snap.best_entry_down == DEFAULT_BEST_ENTRY
 
 
 # -- Dataclass construction ---------------------------------------------------
@@ -63,24 +55,6 @@ class TestStopLossRecord:
         assert rec.timestamp == 1000.0
 
 
-class TestPreFilterSnapshot:
-    def test_required_fields(self):
-        snap = PreFilterSnapshot(timestamp=100.0, time_remaining=200.0)
-        assert snap.timestamp == 100.0
-        assert snap.checks == {}
-        assert snap.reasons == []
-
-    def test_optional_fields(self):
-        snap = PreFilterSnapshot(
-            timestamp=100.0,
-            time_remaining=200.0,
-            rr_up=1.5,
-            btc_price=65000.0,
-        )
-        assert snap.rr_up == 1.5
-        assert snap.btc_price == 65000.0
-
-
 class TestCandleMicrostructure:
     def test_defaults(self):
         ms = CandleMicrostructure()
@@ -101,10 +75,6 @@ class TestSharedStateInit:
         assert state.session_wins == 0
         assert state.session_losses == 0
 
-    def test_prefilter_history_maxlen(self):
-        state = SharedState()
-        assert state.prefilter_history.maxlen == PREFILTER_HISTORY_MAXLEN
-
     def test_last_stop_loss_initially_none(self):
         state = SharedState()
         assert state.last_stop_loss is None
@@ -118,3 +88,8 @@ class TestSharedStateInit:
         state = SharedState()
         assert state.signal_type == DEFAULT_SIGNAL_TYPE
         assert state.regime == DEFAULT_REGIME
+
+    def test_tick_spreads_initially_empty(self):
+        state = SharedState()
+        assert state.tick_spreads_up == []
+        assert state.tick_spreads_down == []

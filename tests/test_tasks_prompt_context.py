@@ -1,50 +1,39 @@
-"""Tests for tasks/prompt_context.py — pure prompt-building helpers."""
+"""Tests for indicator classes that replaced tasks/prompt_context.py helpers."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from polybot.indicators.catalog.btc_retracement import BtcRetracementIndicator
+from polybot.indicators.catalog.btc_trajectory import BtcTrajectoryIndicator
+from polybot.indicators.catalog.entry_timing import EntryTimingIndicator
+from polybot.indicators.catalog.microstructure import MicrostructureIndicator
+from polybot.indicators.context import IndicatorContext
 from polybot.models import Action, TokenSide
-from polybot.shared_state import PreFilterSnapshot
-from polybot.tasks.prompt_context import (
-    compute_btc_trajectory,
-    compute_entry_timing_stats,
-    compute_retracement_context,
-    format_microstructure,
-)
+from polybot.models.core import MarketSnapshot
+from polybot.shared_state.candle_microstructure import CandleMicrostructure
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
+CANDLE_OPEN = 65000.0
 
-def _make_snapshots(
+
+def _make_ctx(
     moves: list[float],
     *,
-    start_ts: float = 1000.0,
-) -> list[PreFilterSnapshot]:
-    """Build PreFilterSnapshot list with given BTC moves from open."""
-    return [
-        PreFilterSnapshot(
-            timestamp=start_ts + i,
-            time_remaining=300.0 - i,
-            btc_move_from_open=m,
-        )
-        for i, m in enumerate(moves)
-    ]
-
-
-@dataclass
-class _FakeOrderBook:
-    best_ask: float | None = 0.45
-    best_bid: float | None = 0.40
-    midpoint: float | None = 0.425
-
-
-@dataclass
-class _FakeSnapshot:
-    orderbook: _FakeOrderBook = field(default_factory=_FakeOrderBook)
-    down_orderbook: _FakeOrderBook = field(default_factory=_FakeOrderBook)
+    position_side: str = "",
+) -> IndicatorContext:
+    """Build IndicatorContext with btc_price_history derived from BTC moves."""
+    return IndicatorContext(
+        snapshot=MarketSnapshot(
+            condition_id="test",
+            btc_price_history=[CANDLE_OPEN + m for m in moves],
+        ),
+        candle_open_btc=CANDLE_OPEN,
+        position_side=position_side,
+    )
 
 
 @dataclass
@@ -70,159 +59,190 @@ class _FakeResolution:
 
 
 # ---------------------------------------------------------------------------
-# compute_btc_trajectory
+# BtcTrajectoryIndicator (was compute_btc_trajectory)
 # ---------------------------------------------------------------------------
 
 
-class TestComputeBtcTrajectory:
+class TestBtcTrajectoryIndicator:
     def test_returns_none_when_insufficient_data(self):
-        assert compute_btc_trajectory(_make_snapshots([1.0] * 10)) is None
+        indicator = BtcTrajectoryIndicator()
+        assert indicator.compute(_make_ctx([1.0] * 10)) is None
 
-    def test_returns_none_when_no_velocity_data(self):
-        # 15 identical moves → velocity is 0, but enough data to compute
-        result = compute_btc_trajectory(_make_snapshots([0.0] * 15))
+    def test_returns_result_when_enough_data(self):
+        indicator = BtcTrajectoryIndicator()
+        result = indicator.compute(_make_ctx([0.0] * 15))
         assert result is not None
-        assert "BTC Trajectory" in result
+        assert result.name == "BTC Trajectory"
 
-    def test_returns_trajectory_section(self):
-        # 30 snapshots: slow start then accelerating
+    def test_returns_trajectory_result(self):
+        indicator = BtcTrajectoryIndicator()
         moves = [float(i) * 2.0 for i in range(30)]
-        result = compute_btc_trajectory(_make_snapshots(moves))
+        result = indicator.compute(_make_ctx(moves))
         assert result is not None
-        assert "## BTC Trajectory" in result
-        assert "Velocity" in result
+        assert result.name == "BTC Trajectory"
+        assert "/s" in result.label  # velocity shown
 
     def test_drawback_shown_when_significant(self):
-        # Peak then pullback of 10
+        indicator = BtcTrajectoryIndicator()
         moves = [0.0] * 15 + [20.0, 18.0, 15.0, 12.0, 10.0]
-        result = compute_btc_trajectory(_make_snapshots(moves))
+        result = indicator.compute(_make_ctx(moves))
         assert result is not None
-        assert "drawback" in result.lower()
+        assert "drawback" in result.label.lower()
 
     def test_no_drawback_when_small(self):
+        indicator = BtcTrajectoryIndicator()
         moves = [float(i) for i in range(20)]
-        result = compute_btc_trajectory(_make_snapshots(moves))
+        result = indicator.compute(_make_ctx(moves))
         assert result is not None
-        assert "No significant drawback" in result
+        assert "no significant drawback" in result.label.lower()
 
     def test_negative_moves(self):
+        indicator = BtcTrajectoryIndicator()
         moves = [float(-i) * 3.0 for i in range(20)]
-        result = compute_btc_trajectory(_make_snapshots(moves))
+        result = indicator.compute(_make_ctx(moves))
         assert result is not None
 
 
 # ---------------------------------------------------------------------------
-# compute_retracement_context
+# BtcRetracementIndicator (was compute_retracement_context)
 # ---------------------------------------------------------------------------
 
 
-class TestComputeRetracementContext:
-    def test_returns_empty_when_insufficient_data(self):
-        assert compute_retracement_context(_make_snapshots([1.0] * 3), "up", _FakeSnapshot()) == ""
+class TestBtcRetracementIndicator:
+    def test_returns_none_when_no_position(self):
+        indicator = BtcRetracementIndicator()
+        moves = [0.0, 10.0, 30.0, 50.0, 40.0, 30.0, 20.0]
+        result = indicator.compute(_make_ctx(moves, position_side=""))
+        assert result is None
+
+    def test_returns_none_when_insufficient_data(self):
+        indicator = BtcRetracementIndicator()
+        result = indicator.compute(_make_ctx([1.0] * 3, position_side="up"))
+        assert result is None
 
     def test_up_position_basic(self):
-        # Peak at +50, then retrace to +20
+        indicator = BtcRetracementIndicator()
         moves = [0.0, 10.0, 30.0, 50.0, 40.0, 30.0, 20.0]
-        result = compute_retracement_context(
-            _make_snapshots(moves),
-            "up",
-            _FakeSnapshot(),
-        )
-        assert "Reversal Analysis" in result
-        assert "Peak BTC move" in result
-        assert "Retracement" in result
+        result = indicator.compute(_make_ctx(moves, position_side="up"))
+        assert result is not None
+        assert result.name == "BTC Retracement"
+        assert "peak" in result.label.lower()
+        assert "retrace" in result.label.lower()
 
     def test_down_position(self):
+        indicator = BtcRetracementIndicator()
         moves = [0.0, -10.0, -30.0, -50.0, -40.0, -30.0, -20.0]
-        result = compute_retracement_context(
-            _make_snapshots(moves),
-            "down",
-            _FakeSnapshot(),
-        )
-        assert "Reversal Analysis" in result
+        result = indicator.compute(_make_ctx(moves, position_side="down"))
+        assert result is not None
+        assert result.name == "BTC Retracement"
 
     def test_zero_crossing_detected(self):
+        indicator = BtcRetracementIndicator()
         # UP position, BTC moved positive then crossed to negative
         moves = [0.0, 10.0, 20.0, 10.0, 0.0, -5.0, -10.0]
-        result = compute_retracement_context(
-            _make_snapshots(moves),
-            "up",
-            _FakeSnapshot(),
-        )
-        assert "YES" in result  # zero crossing
+        result = indicator.compute(_make_ctx(moves, position_side="up"))
+        assert result is not None
+        assert "YES" in result.label
 
     def test_no_zero_crossing(self):
+        indicator = BtcRetracementIndicator()
         moves = [0.0, 10.0, 20.0, 15.0, 12.0, 10.0, 8.0]
-        result = compute_retracement_context(
-            _make_snapshots(moves),
-            "up",
-            _FakeSnapshot(),
+        result = indicator.compute(_make_ctx(moves, position_side="up"))
+        assert result is not None
+        assert "NO" in result.label
+
+
+# ---------------------------------------------------------------------------
+# MicrostructureIndicator (was format_microstructure)
+# ---------------------------------------------------------------------------
+
+
+class TestMicrostructureIndicator:
+    def _make_micro_ctx(self, history: list) -> IndicatorContext:
+        return IndicatorContext(
+            snapshot=MarketSnapshot(condition_id="test"),
+            microstructure_history=tuple(
+                CandleMicrostructure(
+                    avg_spread_up=h.avg_spread_up,
+                    avg_spread_down=h.avg_spread_down,
+                    btc_range=h.btc_range,
+                )
+                for h in history
+            ),
         )
-        assert "NO" in result
 
-    def test_opposite_ask_included(self):
-        snap = _FakeSnapshot()
-        snap.down_orderbook = _FakeOrderBook(best_ask=0.35)
-        moves = [0.0, 10.0, 20.0, 15.0, 10.0, 5.0, 3.0]
-        result = compute_retracement_context(_make_snapshots(moves), "up", snap)
-        assert "DOWN ask" in result
-
-
-# ---------------------------------------------------------------------------
-# format_microstructure
-# ---------------------------------------------------------------------------
-
-
-class TestFormatMicrostructure:
     def test_returns_none_for_single_candle(self):
-        assert format_microstructure([_FakeMicro()]) is None
+        indicator = MicrostructureIndicator()
+        assert indicator.compute(self._make_micro_ctx([_FakeMicro()])) is None
 
     def test_returns_none_for_empty(self):
-        assert format_microstructure([]) is None
+        indicator = MicrostructureIndicator()
+        assert indicator.compute(self._make_micro_ctx([])) is None
 
     def test_basic_output(self):
+        indicator = MicrostructureIndicator()
         history = [_FakeMicro(0.02, 0.03, 90), _FakeMicro(0.025, 0.035, 110)]
-        result = format_microstructure(history)
+        result = indicator.compute(self._make_micro_ctx(history))
         assert result is not None
-        assert "Cross-Candle Microstructure" in result
-        assert "Spreads" in result
+        assert result.name == "Cross-Candle Microstructure"
+        assert "spread" in result.label.lower() or "Spread" in result.label
 
     def test_spread_widening(self):
+        indicator = MicrostructureIndicator()
         history = [_FakeMicro(0.01, 0.01, 100), _FakeMicro(0.02, 0.02, 100)]
-        result = format_microstructure(history)
-        assert "widening" in result
+        result = indicator.compute(self._make_micro_ctx(history))
+        assert result is not None
+        assert "widening" in result.label
 
     def test_spread_narrowing(self):
+        indicator = MicrostructureIndicator()
         history = [_FakeMicro(0.03, 0.03, 100), _FakeMicro(0.01, 0.01, 100)]
-        result = format_microstructure(history)
-        assert "narrowing" in result
+        result = indicator.compute(self._make_micro_ctx(history))
+        assert result is not None
+        assert "narrowing" in result.label
 
     def test_range_direction(self):
+        indicator = MicrostructureIndicator()
         history = [
             _FakeMicro(0.02, 0.02, 50),
             _FakeMicro(0.02, 0.02, 50),
-            _FakeMicro(0.02, 0.02, 200),  # big spike
+            _FakeMicro(0.02, 0.02, 200),
         ]
-        result = format_microstructure(history)
-        assert "increasing" in result
+        result = indicator.compute(self._make_micro_ctx(history))
+        assert result is not None
+        assert "increasing" in result.label
 
 
 # ---------------------------------------------------------------------------
-# compute_entry_timing_stats
+# EntryTimingIndicator (was compute_entry_timing_stats)
 # ---------------------------------------------------------------------------
 
 
-class TestComputeEntryTimingStats:
+class TestEntryTimingIndicator:
+    def _make_timing_ctx(
+        self,
+        trades: list,
+        resolutions: list,
+    ) -> IndicatorContext:
+        return IndicatorContext(
+            snapshot=MarketSnapshot(condition_id="test"),
+            session_trades=tuple(trades),
+            session_resolutions=tuple(resolutions),
+        )
+
     def test_returns_none_for_few_trades(self):
+        indicator = EntryTimingIndicator()
         trades = [_FakeTrade(), _FakeTrade()]
         resolutions = [_FakeResolution()]
-        assert compute_entry_timing_stats(trades, resolutions) is None
+        assert indicator.compute(self._make_timing_ctx(trades, resolutions)) is None
 
     def test_returns_none_for_no_resolutions(self):
+        indicator = EntryTimingIndicator()
         trades = [_FakeTrade() for _ in range(5)]
-        assert compute_entry_timing_stats(trades, []) is None
+        assert indicator.compute(self._make_timing_ctx(trades, [])) is None
 
     def test_basic_output_with_wins(self):
+        indicator = EntryTimingIndicator()
         trades = [
             _FakeTrade(candle_slug="s1", extra={"time_remaining": 180}),
             _FakeTrade(candle_slug="s2", extra={"time_remaining": 120}),
@@ -233,12 +253,13 @@ class TestComputeEntryTimingStats:
             _FakeResolution(slug="s2", winner="up"),
             _FakeResolution(slug="s3", winner="up"),
         ]
-        result = compute_entry_timing_stats(trades, resolutions)
+        result = indicator.compute(self._make_timing_ctx(trades, resolutions))
         assert result is not None
-        assert "Entry Timing Performance" in result
-        assert "3W/0L" in result or "W/" in result
+        assert result.name == "Entry Timing"
+        assert "3W" in result.label or "W/" in result.label
 
     def test_mixed_wins_and_losses(self):
+        indicator = EntryTimingIndicator()
         trades = [
             _FakeTrade(candle_slug="s1", extra={"time_remaining": 180}),
             _FakeTrade(candle_slug="s2", extra={"time_remaining": 120}),
@@ -249,32 +270,34 @@ class TestComputeEntryTimingStats:
             _FakeResolution(slug="s2", winner="down"),  # loss
             _FakeResolution(slug="s3", winner="down"),  # loss
         ]
-        result = compute_entry_timing_stats(trades, resolutions)
+        result = indicator.compute(self._make_timing_ctx(trades, resolutions))
         assert result is not None
-        assert "1W/" in result  # at least 1 win somewhere
+        assert "1W/" in result.label
 
     def test_hold_trades_excluded(self):
+        indicator = EntryTimingIndicator()
         trades = [
             _FakeTrade(action=Action.HOLD, candle_slug="s1"),
             _FakeTrade(action=Action.HOLD, candle_slug="s2"),
             _FakeTrade(action=Action.HOLD, candle_slug="s3"),
         ]
         resolutions = [_FakeResolution(slug="s1")]
-        assert compute_entry_timing_stats(trades, resolutions) is None
+        assert indicator.compute(self._make_timing_ctx(trades, resolutions)) is None
 
     def test_sell_trades_excluded(self):
+        indicator = EntryTimingIndicator()
         trades = [
             _FakeTrade(action=Action.SELL, candle_slug="s1"),
             _FakeTrade(action=Action.SELL, candle_slug="s2"),
             _FakeTrade(action=Action.SELL, candle_slug="s3"),
         ]
         resolutions = [_FakeResolution(slug="s1")]
-        assert compute_entry_timing_stats(trades, resolutions) is None
+        assert indicator.compute(self._make_timing_ctx(trades, resolutions)) is None
 
     def test_best_bucket_shown(self):
-        # All in >200s bucket
+        indicator = EntryTimingIndicator()
         trades = [_FakeTrade(candle_slug=f"s{i}", extra={"time_remaining": 220}) for i in range(4)]
         resolutions = [_FakeResolution(slug=f"s{i}", winner="up") for i in range(4)]
-        result = compute_entry_timing_stats(trades, resolutions)
+        result = indicator.compute(self._make_timing_ctx(trades, resolutions))
         assert result is not None
-        assert "Best bucket" in result
+        assert "best" in result.label.lower()

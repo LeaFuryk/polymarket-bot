@@ -119,15 +119,17 @@ class PositionMonitor:
         """Compute BTC velocity and whether it favors the position.
 
         Returns (velocity_magnitude, favors_position).
-        velocity is the rate of change in btc_move_from_open over last ~10s.
+        velocity is the rate of change in BTC price over last ~10s.
         """
-        history = list(self._shared.prefilter_history)
+        snapshot = self._shared.latest_snapshot
+        if snapshot is None:
+            return 0.0, True
+
+        history = snapshot.btc_price_history
         if len(history) < 10:
             return 0.0, True  # no data → neutral
 
-        recent = history[-1]
-        earlier = history[-10]
-        velocity = (recent.btc_move_from_open - earlier.btc_move_from_open) / 10.0
+        velocity = (history[-1] - history[-10]) / 10.0
 
         # UP position benefits from positive BTC move, DOWN from negative
         if token_side == "up":
@@ -320,10 +322,14 @@ class PositionMonitor:
         If BTC favors the bet, a token price drop is likely orderbook
         noise — not a real loss — so stop-loss should be suppressed.
         """
-        history = list(self._shared.prefilter_history)
-        if not history:
+        snapshot = self._shared.latest_snapshot
+        candle_open = self._shared.candle_open_btc
+        if snapshot is None or candle_open is None:
             return False  # no data → don't suppress
-        btc_move = history[-1].btc_move_from_open
+        history = snapshot.btc_price_history
+        if not history:
+            return False
+        btc_move = history[-1] - candle_open
         if token_side == "up":
             return btc_move > 0
         else:
@@ -386,15 +392,24 @@ class PositionMonitor:
             # Only use BTC data from AFTER this position was opened —
             # stale history from a previous position can show an already-
             # completed retracement and fire immediately after a flip
-            history = [s for s in self._shared.prefilter_history if s.timestamp >= entry_ctx.entry_time]
-            if len(history) >= 10:
+            snapshot = self._shared.latest_snapshot
+            candle_open = self._shared.candle_open_btc
+            if snapshot is None or candle_open is None:
+                return
+            btc_history = snapshot.btc_price_history
+            # Approximate entry index: entry was ~N seconds ago, ticks ≈ 1/s
+            entry_age = time.time() - entry_ctx.entry_time
+            entry_idx = max(0, len(btc_history) - int(entry_age) - 1)
+            post_entry = btc_history[entry_idx:]
+            if len(post_entry) >= 10:
+                moves = [p - candle_open for p in post_entry]
                 # Compute peak move in the position's favored direction
                 if token_side == "up":
-                    peak_move = max(s.btc_move_from_open for s in history)
-                    current_move = history[-1].btc_move_from_open
+                    peak_move = max(moves)
+                    current_move = moves[-1]
                 else:
-                    peak_move = min(s.btc_move_from_open for s in history)
-                    current_move = history[-1].btc_move_from_open
+                    peak_move = min(moves)
+                    current_move = moves[-1]
 
                 # Need a meaningful peak ($25+) before checking retracement
                 if abs(peak_move) >= 25.0:

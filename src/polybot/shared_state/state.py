@@ -8,7 +8,6 @@ safe without locks.
 
 from __future__ import annotations
 
-from collections import deque
 from typing import Any
 
 from polybot.indicators.results import IndicatorResults
@@ -17,10 +16,8 @@ from polybot.shared_state.candle_microstructure import CandleMicrostructure
 from polybot.shared_state.constants import (
     DEFAULT_REGIME,
     DEFAULT_SIGNAL_TYPE,
-    PREFILTER_HISTORY_MAXLEN,
 )
 from polybot.shared_state.entry_context import EntryContext
-from polybot.shared_state.prefilter_snapshot import PreFilterSnapshot
 from polybot.shared_state.stop_loss_record import StopLossRecord
 
 
@@ -40,10 +37,9 @@ class SharedState:
         self.current_market: CandleMarket | None = None
         self.candle_open_btc: float | None = None
 
-        # -- Pre-filter history (~5 min at 1/s) --
-        self.prefilter_history: deque[PreFilterSnapshot] = deque(
-            maxlen=PREFILTER_HISTORY_MAXLEN,
-        )
+        # -- Per-tick spread tracking (for microstructure computation at rotation) --
+        self.tick_spreads_up: list[float] = []
+        self.tick_spreads_down: list[float] = []
 
         # -- AI trigger coordination --
         self.ai_trigger_reason: str = ""

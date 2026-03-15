@@ -6,8 +6,6 @@ for injection into the indicators text shown to the AI.
 
 from __future__ import annotations
 
-from polybot.tasks.prompt_context import VelocityConflict
-
 
 def append_section(base: str, section: str | None) -> str:
     """Append a context *section* to *base*, separated by blank line."""
@@ -64,65 +62,6 @@ def build_counter_trend_advisory(trend_value: float) -> str | None:
         f"{weak_side} trades are counter-trend — position size auto-reduced by {reduce_pct}.\n"
         "This is a SIZING adjustment only. The 5-min candle signal (BTC move) is the primary driver. "
         "If BTC has moved strongly, trade it — the sizing guard handles the trend risk."
-    )
-
-
-def build_velocity_conflict_warning(conflict: VelocityConflict) -> str | None:
-    """Return a velocity-magnitude conflict warning if severity >= 0.3, else None."""
-    if conflict.severity < 0.3:
-        return None
-
-    if conflict.severity >= 0.7:
-        return (
-            "## VELOCITY-MAGNITUDE CONFLICT WARNING\n"
-            f"BTC magnitude says {conflict.magnitude_direction} (${conflict.btc_move:+,.0f}) "
-            f"but velocity is ${conflict.velocity_rate:+.1f}/s ({conflict.velocity_direction}).\n"
-            f"Drawback: {conflict.drawback_pct:.0%} of peak recovered | "
-            f"Severity: {conflict.severity:.0%} | {conflict.time_remaining:.0f}s left\n"
-            "Magnitude signal is weakened. Position size will be auto-reduced to 50%. "
-            "Still trade if the setup is otherwise strong."
-        )
-
-    return (
-        "## Velocity-Magnitude Conflict\n"
-        f"BTC magnitude says {conflict.magnitude_direction} (${conflict.btc_move:+,.0f}) "
-        f"but velocity is ${conflict.velocity_rate:+.1f}/s ({conflict.velocity_direction}).\n"
-        f"Drawback: {conflict.drawback_pct:.0%} of peak | "
-        f"Severity: {conflict.severity:.0%} | {conflict.time_remaining:.0f}s left\n"
-        "Position size will be auto-reduced to 75%. Trade if edge is clear."
-    )
-
-
-def build_reversal_regime_warning(
-    score: float,
-    label: str,
-    microstructure_history: list | None = None,
-) -> str | None:
-    """Return a reversal regime warning if score >= 0.3, else None."""
-    if score < 0.3:
-        return None
-
-    # Compute stats for the warning text
-    stats = ""
-    if microstructure_history and len(microstructure_history) >= 1:
-        avg_cross = sum(h.zero_crossings for h in microstructure_history) / len(microstructure_history)
-        avg_int = sum(h.reversal_intensity for h in microstructure_history) / len(microstructure_history)
-        stats = (
-            f"Avg crossings/candle: {avg_cross:.1f} | Avg reversal intensity: {avg_int:.2f} | Regime score: {score:.2f}"
-        )
-
-    if label == "HIGH_REVERSAL":
-        return (
-            "## REVERSAL REGIME WARNING\n"
-            "Recent candles whipsawed. Position size will be auto-reduced to 50%. "
-            "Still trade if BTC move is strong (>$30) — the move is real, just use smaller size.\n"
-            + (stats or f"Regime score: {score:.2f}")
-        )
-
-    return (
-        "## Reversal Regime Advisory\n"
-        "Recent candles show reversal patterns. Position size will be auto-reduced to 75%. "
-        "Trade normally — sizing handles the risk.\n" + (stats or f"Regime score: {score:.2f}")
     )
 
 

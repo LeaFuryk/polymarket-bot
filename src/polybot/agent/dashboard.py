@@ -10,7 +10,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from polybot.ml_scorer.constants import MIN_TRAINING_SAMPLES
-from polybot.tasks.prompt_context import compute_reversal_regime
 
 if TYPE_CHECKING:
     from polybot.agent.context import AgentContext
@@ -338,7 +337,7 @@ def assemble_dashboard_data(
             "total_missed": round(ctx.exit_tracker._total_missed, 4),
         },
         "monitor": {
-            "prefilter_snapshots": len(ctx.shared.prefilter_history),
+            "btc_price_ticks": len(ctx.shared.latest_snapshot.btc_price_history) if ctx.shared.latest_snapshot else 0,
             "ai_cooldown_remaining": max(
                 0, ctx.config.monitor.ai_cooldown_seconds - (time.time() - ctx.shared.ai_last_call_time)
             ),
@@ -412,18 +411,19 @@ def assemble_dashboard_data(
         "candle_snapshots": candle_snapshots,
     }
 
-    # Reversal regime (computed from microstructure history)
-    regime = compute_reversal_regime(ctx.shared.microstructure_history)
-    if regime is not None:
-        score, label = regime
-        intensities = [h.reversal_intensity for h in ctx.shared.microstructure_history]
-        crossings = [h.zero_crossings for h in ctx.shared.microstructure_history]
-        data["reversal_regime"] = {
-            "score": round(score, 3),
-            "label": label,
-            "avg_crossings": round(sum(crossings) / len(crossings), 2),
-            "avg_intensity": round(sum(intensities) / len(intensities), 3),
-        }
+    # Reversal regime (read from pre-computed indicator results)
+    _ind = ctx.shared.latest_indicator_results
+    if _ind is not None:
+        _regime = _ind.get("Reversal Regime")
+        if _regime is not None:
+            intensities = [h.reversal_intensity for h in ctx.shared.microstructure_history]
+            crossings = [h.zero_crossings for h in ctx.shared.microstructure_history]
+            data["reversal_regime"] = {
+                "score": round(_regime.value, 3),
+                "label": _regime.label.split("(")[0].strip(),
+                "avg_crossings": round(sum(crossings) / len(crossings), 2) if crossings else 0,
+                "avg_intensity": round(sum(intensities) / len(intensities), 3) if intensities else 0,
+            }
 
     # Explicit trading mode (paper / live / dry_run)
     if ctx.config.trading.mode == "live" and ctx.config.trading.dry_run:
