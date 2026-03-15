@@ -102,9 +102,6 @@ class MarketMonitor:
         # Evaluate AI trigger (always updates dashboard; only fires AI if all gates pass)
         self._evaluate_trigger(snapshot, pf_snapshot, pf_result, time_remaining)
 
-        # Broadcast fresh data to WS clients
-        await self._broadcast_updates()
-
     async def _ensure_market(self) -> bool:
         """Discovery/rotation guard. Returns True if ready to monitor."""
         market = self._shared.current_market
@@ -133,6 +130,7 @@ class MarketMonitor:
 
         self._shared.latest_snapshot = snapshot
         self._shared.snapshot_timestamp = time.time()
+        self._broadcast_snapshot()
         return snapshot
 
     def _compute_indicators(self, snapshot, time_remaining: float) -> IndicatorResults | None:
@@ -345,15 +343,18 @@ class MarketMonitor:
                     elapsed,
                 )
 
-    async def _broadcast_updates(self) -> None:
-        """Push lightweight market + status updates to WS clients."""
-        if self._ctx is None:
-            return
+    def _broadcast_snapshot(self) -> None:
+        """Fire-and-forget broadcast of fresh market data to WS clients."""
         bc = self._ctx.broadcaster
-        if bc.has_clients:
-            builder = DashboardMessageBuilder()
+        if not bc.has_clients:
+            return
+        builder = DashboardMessageBuilder()
+
+        async def _send() -> None:
             await bc.broadcast(builder.build_market_update(self._ctx))
             await bc.broadcast(builder.build_status_update(self._ctx, ws_client_count=bc.client_count))
+
+        asyncio.create_task(_send())
 
     def _queue_snapshot(
         self,
