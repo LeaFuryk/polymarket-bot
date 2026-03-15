@@ -82,7 +82,7 @@ class MarketMonitor:
             self._rotation.record_discovery_failure()
             return
 
-        await self._rotation.handle_fetched_market(self._market_data.fetched_market)
+        await self._rotation.handle_fetched_market()
 
         self._shared.latest_snapshot = snapshot
         self._shared.snapshot_timestamp = time.time()
