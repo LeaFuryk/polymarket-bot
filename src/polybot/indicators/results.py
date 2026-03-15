@@ -15,15 +15,6 @@ class IndicatorResults:
 
     results: list[IndicatorResult] = field(default_factory=list)
 
-    # Derived fields populated from specific indicators / snapshot data
-    rr_up: float = 0.0
-    rr_down: float = 0.0
-    btc_move_from_open: float = 0.0
-    consecutive_streak: int = 0
-    streak_direction: str = ""
-    btc_range_30m: float = 0.0
-    best_entry_price: float = 1.0
-
     def get(self, name: str) -> IndicatorResult | None:
         """Look up a result by display name."""
         for r in self.results:
