@@ -95,11 +95,10 @@ class RotationManager:
         if ctx.current_market is None or new_market.condition_id != ctx.current_market.condition_id:
             ctx.current_market = new_market
             ctx.market_data.set_market(new_market)
-
-            # Update shared state
+            ctx.config.market.condition_id = new_market.condition_id
+            ctx.config.market.token_id = new_market.up_token_id
             ctx.shared.current_market = new_market
 
-            # Set token IDs on live engine for CLOB orders
             if ctx.live_engine:
                 ctx.live_engine.set_current_token_ids(
                     new_market.up_token_id,
@@ -219,6 +218,8 @@ class RotationManager:
         ctx = self._ctx
         ctx.current_market = new_market
         ctx.market_data.set_market(new_market)
+        ctx.config.market.condition_id = new_market.condition_id
+        ctx.config.market.token_id = new_market.up_token_id
         ctx.shared.current_market = new_market
 
         if ctx.live_engine:
@@ -227,7 +228,13 @@ class RotationManager:
                 new_market.down_token_id,
             )
 
-        self._log.info("Active market: %s (ends in %.0fs)", new_market.title, new_market.time_remaining())
+        self._log.info(
+            "Active market: %s (up=%s, down=%s, ends in %.0fs)",
+            new_market.slug,
+            new_market.up_token_id[:8],
+            new_market.down_token_id[:8],
+            new_market.time_remaining(),
+        )
 
         btc_snapshot = await ctx.market_data.btc_feed.get_price()
         if btc_snapshot:

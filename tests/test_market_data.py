@@ -591,32 +591,22 @@ class TestProviderParallelFetch:
         assert provider.fetched_market is market
 
     @patch("polybot.market_data.client.ClobClient")
-    def test_set_market_delegates(self, mock_clob):
+    def test_set_market_syncs_repo_and_clears_history(self, mock_clob):
         from polybot.market_data.provider import MarketDataProvider
 
         config = MagicMock()
         config.monitor.btc_price_cache_ttl = 30
         provider = MarketDataProvider(config)
+
+        # Seed some price history
+        provider._price_history.append(0.50)
+        assert len(provider._price_history) == 1
 
         market = _make_candle_market()
         provider.set_market(market)
 
         assert provider._polymarket.market is market
-        assert config.market.condition_id == market.condition_id
-
-    @patch("polybot.market_data.client.ClobClient")
-    def test_update_from_ws_delegates(self, mock_clob):
-        from polybot.market_data.provider import MarketDataProvider
-
-        config = MagicMock()
-        config.monitor.btc_price_cache_ttl = 30
-        provider = MarketDataProvider(config)
-
-        ob = _make_orderbook(0.55, 0.60)
-        provider.update_from_ws(orderbook=ob, last_price=0.57)
-
-        assert provider._polymarket._ws_orderbook is ob
-        assert provider._polymarket._ws_last_price == 0.57
+        assert len(provider._price_history) == 0
 
 
 # ── Model data objects ────────────────────────────────────────────────

@@ -59,28 +59,10 @@ class MarketDataProvider:
     def rest_client(self) -> PolymarketRestClient:
         return self._polymarket.rest_client
 
-    # --- Delegations ---
-
     def set_market(self, candle: CandleMarket) -> None:
-        """Update internal market and config for a new candle market."""
+        """Sync provider state for a new candle market."""
         self._polymarket.set_market(candle)
-        self._config.market.condition_id = candle.condition_id
-        self._config.market.token_id = candle.up_token_id
         self._price_history.clear()
-        self._log.info(
-            "Market set: %s (up=%s, down=%s)",
-            candle.slug,
-            candle.up_token_id[:8],
-            candle.down_token_id[:8],
-        )
-
-    def update_from_ws(
-        self,
-        orderbook=None,
-        last_price: float | None = None,
-    ) -> None:
-        """Called by WebSocket handler to push real-time updates."""
-        self._polymarket.update_from_ws(orderbook=orderbook, last_price=last_price)
 
     async def close(self) -> None:
         await self._btc_repo.close()
