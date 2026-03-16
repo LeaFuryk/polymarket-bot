@@ -51,38 +51,20 @@ def sync_from_ai_decision(ctx: AgentContext, ai_decision: AIDecision) -> None:
         ctx.shared.regime = ctx.adaptive_entry.regime
 
 
-def compute_market_trend(btc_candles: list | None = None) -> dict:
-    """Compute market trend data for dashboard. Returns empty dict if not enough data."""
-    if not btc_candles or len(btc_candles) < 50:
+def _read_market_trend(ctx: AgentContext) -> dict:
+    """Read pre-computed market trend from indicator results."""
+    ind = ctx.shared.latest_indicator_results
+    if ind is None:
         return {}
-    from polybot.indicators import _ema
-
-    closes = [c.close for c in btc_candles]
-    ema20 = _ema(closes, 20)
-    ema50 = _ema(closes, 50)
-    price = closes[-1]
-
-    ema_sig = max(-1, min(1, (ema20 - ema50) / 100))
-    price_sig = max(-1, min(1, (price - ema50) / 150))
-    last12 = btc_candles[-12:]
-    up_r = sum(1 for c in last12 if c.direction == "up") / len(last12)
-    candle_sig = (up_r - 0.5) * 2
-    score = max(-1, min(1, 0.4 * ema_sig + 0.35 * price_sig + 0.25 * candle_sig))
-
-    if score >= 0.5:
-        label = "STRONG BULL"
-    elif score >= 0.2:
-        label = "BULL"
-    elif score > -0.2:
-        label = "NEUTRAL"
-    elif score > -0.5:
-        label = "BEAR"
-    else:
-        label = "STRONG BEAR"
-
+    result = ind.get(Indicator.MARKET_TREND)
+    if result is None:
+        return {}
+    # label format: "+0.32 (BULLISH) | EMA20=$... EMA50=$..."
+    label_parts = result.label.split("|")[0].strip()
+    trend_label = label_parts.split("(")[-1].rstrip(")").strip() if "(" in label_parts else ""
     return {
-        "market_trend": round(score, 3),
-        "market_trend_label": label,
+        "market_trend": round(result.value, 3),
+        "market_trend_label": trend_label,
     }
 
 
@@ -356,7 +338,7 @@ def assemble_dashboard_data(
             "has_enough_history": ctx.adaptive_entry.has_enough_history,
             "window_size": ctx.adaptive_entry.window_size,
             "history_count": ctx.adaptive_entry.history_count,
-            **compute_market_trend(btc_candles),
+            **_read_market_trend(ctx),
             **ctx.adaptive_entry.fakeout_stats,
         },
         "ensemble": {

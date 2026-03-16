@@ -58,6 +58,12 @@ class IndicatorsProcessor:
 
         results = IndicatorResults()
 
+        # Convert sequences to tuples once, not per-indicator
+        _btc_candles = tuple(btc_candles) if btc_candles else ()
+        _micro_history = tuple(microstructure_history) if microstructure_history else ()
+        _sess_trades = tuple(session_trades) if session_trades else ()
+        _sess_resolutions = tuple(session_resolutions) if session_resolutions else ()
+
         for indicator in self._indicators:
             params = params_map.get(indicator.name, {})
             ctx = IndicatorContext(
@@ -68,10 +74,10 @@ class IndicatorsProcessor:
                 has_open_position=has_open_position,
                 time_remaining=time_remaining,
                 position_side=position_side,
-                btc_candles=tuple(btc_candles) if btc_candles else (),
-                microstructure_history=tuple(microstructure_history) if microstructure_history else (),
-                session_trades=tuple(session_trades) if session_trades else (),
-                session_resolutions=tuple(session_resolutions) if session_resolutions else (),
+                btc_candles=_btc_candles,
+                microstructure_history=_micro_history,
+                session_trades=_sess_trades,
+                session_resolutions=_sess_resolutions,
             )
             try:
                 result = indicator.compute(ctx)

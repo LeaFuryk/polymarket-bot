@@ -14,13 +14,16 @@ class IndicatorResults:
     """Container for all computed indicators from a single tick."""
 
     results: list[IndicatorResult] = field(default_factory=list)
+    _index: dict[str, IndicatorResult] = field(default_factory=dict, repr=False)
+
+    def _ensure_index(self) -> dict[str, IndicatorResult]:
+        if not self._index and self.results:
+            self._index = {r.name: r for r in self.results}
+        return self._index
 
     def get(self, name: str) -> IndicatorResult | None:
         """Look up a result by name (accepts str or Indicator enum)."""
-        for r in self.results:
-            if r.name == name:
-                return r
-        return None
+        return self._ensure_index().get(name)
 
     def get_value(self, name: str, default: float = 0.0) -> float:
         """Get the numeric value of a named result."""

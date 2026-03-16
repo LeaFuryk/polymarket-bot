@@ -224,8 +224,11 @@ class MarketMonitor:
         cooldown_remaining: float = 0.0,
         ai_triggered: bool = False,
         gate_status: str = "",
+        now: float = 0.0,
     ) -> None:
         """Write monitor_status dict to shared state for the dashboard."""
+        if now == 0.0:
+            now = time.time()
         up_ob = snapshot.orderbook
         down_ob = snapshot.down_orderbook
         up_ask = up_ob.best_ask or 1.0
@@ -259,7 +262,7 @@ class MarketMonitor:
 
         btc_price = snapshot.btc_price.price_usd if snapshot.btc_price else 0.0
         self._shared.monitor_status = {
-            "timestamp": time.time(),
+            "timestamp": now,
             "time_remaining": snapshot.time_remaining,
             "btc_price": btc_price,
             "btc_move": btc_move,
@@ -320,6 +323,7 @@ class MarketMonitor:
             cooldown_remaining=cooldown_remaining,
             ai_triggered=should_trigger,
             gate_status=gate_status,
+            now=now,
         )
 
         if not should_trigger:

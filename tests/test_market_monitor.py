@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from polybot.indicators.core import IndicatorResult
+from polybot.indicators.core import Indicator, IndicatorResult
 from polybot.indicators.helpers import compute_rr
 from polybot.indicators.results import IndicatorResults
 from polybot.models.core import (
@@ -58,18 +58,18 @@ def _make_indicators(snapshot, candle_open_btc=65000.0):
     return IndicatorResults(
         results=[
             IndicatorResult(
-                name="Risk/Reward",
+                name=Indicator.RISK_REWARD,
                 value=best_rr,
                 label=f"UP={rr_up:.2f}x DOWN={rr_down:.2f}x",
                 extras={"rr_up": rr_up, "rr_down": rr_down, "best_side": best_side},
             ),
             IndicatorResult(
-                name="BTC Move From Open",
+                name=Indicator.BTC_MOVE_FROM_OPEN,
                 value=btc_move,
                 label=f"${btc_move:+,.0f}",
             ),
             IndicatorResult(
-                name="Best Entry",
+                name=Indicator.BEST_ENTRY,
                 value=min(up_ask, down_ask),
                 label=f"${min(up_ask, down_ask):.3f}",
             ),
