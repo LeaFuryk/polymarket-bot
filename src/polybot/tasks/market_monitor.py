@@ -201,20 +201,10 @@ class MarketMonitor:
             min_ask = 1.0
 
         if self._adaptive_enabled and self._adaptive_entry is not None:
-            passed = self._adaptive_entry.should_trigger(
+            return self._adaptive_entry.should_trigger(
                 abs_btc_move=abs(btc_move),
                 min_ask=min_ask,
             )
-            if passed:
-                return True, ""
-            btc_thresh = self._adaptive_entry.btc_threshold
-            max_entry = self._adaptive_entry.max_entry_price
-            parts = []
-            if abs(btc_move) < btc_thresh:
-                parts.append(f"BTC move ${abs(btc_move):.0f} < ${btc_thresh:.0f} threshold")
-            if min_ask > max_entry:
-                parts.append(f"min ask ${min_ask:.2f} > ${max_entry:.2f} max entry")
-            return False, "; ".join(parts) if parts else "adaptive gate blocked"
 
         # Fallback: static R/R threshold
         if best_rr >= self._rr_threshold:
