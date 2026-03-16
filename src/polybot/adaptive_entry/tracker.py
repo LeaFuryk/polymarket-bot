@@ -66,9 +66,22 @@ class AdaptiveEntryTracker:
     # Public API
     # ------------------------------------------------------------------
 
-    def should_trigger(self, abs_btc_move: float, min_ask: float) -> bool:
-        """Check if conditions meet adaptive thresholds for triggering AI."""
-        return abs_btc_move >= self.btc_threshold and min_ask <= self.max_entry_price
+    def should_trigger(self, abs_btc_move: float, min_ask: float) -> tuple[bool, str]:
+        """Check if conditions meet adaptive thresholds for triggering AI.
+
+        Returns (passed, reason) — reason is empty on pass, describes
+        which threshold(s) failed otherwise.
+        """
+        btc_ok = abs_btc_move >= self.btc_threshold
+        ask_ok = min_ask <= self.max_entry_price
+        if btc_ok and ask_ok:
+            return True, ""
+        parts = []
+        if not btc_ok:
+            parts.append(f"BTC move ${abs_btc_move:.0f} < ${self.btc_threshold:.0f} threshold")
+        if not ask_ok:
+            parts.append(f"min ask ${min_ask:.2f} > ${self.max_entry_price:.2f} max entry")
+        return False, "; ".join(parts)
 
     def record_outcome(
         self,

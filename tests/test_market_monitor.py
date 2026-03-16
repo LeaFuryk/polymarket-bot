@@ -232,7 +232,7 @@ class TestAdaptiveEntry:
         monitor, ctx, _ = _make_monitor()
         monitor._adaptive_enabled = True
         adaptive = MagicMock()
-        adaptive.should_trigger.return_value = True
+        adaptive.should_trigger.return_value = (True, "")
         monitor._adaptive_entry = adaptive
         snapshot = _make_snapshot(up_ask=0.30, down_ask=0.40)
         indicators = _make_indicators(snapshot)
@@ -244,15 +244,13 @@ class TestAdaptiveEntry:
         monitor, ctx, _ = _make_monitor()
         monitor._adaptive_enabled = True
         adaptive = MagicMock()
-        adaptive.should_trigger.return_value = False
-        adaptive.btc_threshold = 500.0
-        adaptive.max_entry_price = 0.20
+        adaptive.should_trigger.return_value = (False, "BTC move $0 < $500 threshold")
         monitor._adaptive_entry = adaptive
         snapshot = _make_snapshot(up_ask=0.30, down_ask=0.40)
         indicators = _make_indicators(snapshot)
         passed, reason = monitor._run_adaptive_entry(indicators)
         assert passed is False
-        assert "BTC move" in reason or "min ask" in reason
+        assert "BTC move" in reason
 
 
 class TestEvaluateTrigger:

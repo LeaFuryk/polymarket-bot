@@ -434,9 +434,17 @@ class TestAdaptiveEntryTracker:
         assert tracker.window_size == 5
 
     def test_should_trigger(self, tracker: AdaptiveEntryTracker):
-        assert tracker.should_trigger(abs_btc_move=35.0, min_ask=0.55) is True
-        assert tracker.should_trigger(abs_btc_move=20.0, min_ask=0.55) is False
-        assert tracker.should_trigger(abs_btc_move=35.0, min_ask=0.70) is False
+        passed, reason = tracker.should_trigger(abs_btc_move=35.0, min_ask=0.55)
+        assert passed is True
+        assert reason == ""
+
+        passed, reason = tracker.should_trigger(abs_btc_move=20.0, min_ask=0.55)
+        assert passed is False
+        assert "BTC move" in reason
+
+        passed, reason = tracker.should_trigger(abs_btc_move=35.0, min_ask=0.70)
+        assert passed is False
+        assert "min ask" in reason
 
     def test_record_outcome(self, tracker: AdaptiveEntryTracker):
         btc_moves = [i * 10.0 for i in range(5)]
