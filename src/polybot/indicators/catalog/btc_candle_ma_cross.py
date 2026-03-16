@@ -13,7 +13,7 @@ class BtcCandleMaCrossIndicator:
     display_name = "BTC Candle MA Cross"
 
     def compute(self, ctx: IndicatorContext) -> IndicatorResult | None:
-        candles = ctx.snapshot.btc_candles
+        candles = ctx.btc_candles
         if len(candles) < 12:
             return None
         closes = [c.close for c in candles]

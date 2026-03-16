@@ -50,20 +50,20 @@ def sync_from_ai_decision(ctx: AgentContext, ai_decision: AIDecision) -> None:
         ctx.shared.regime = ctx.adaptive_entry.regime
 
 
-def compute_market_trend(snapshot) -> dict:
+def compute_market_trend(btc_candles: list | None = None) -> dict:
     """Compute market trend data for dashboard. Returns empty dict if not enough data."""
-    if snapshot is None or len(snapshot.btc_candles) < 50:
+    if not btc_candles or len(btc_candles) < 50:
         return {}
     from polybot.indicators import _ema
 
-    closes = [c.close for c in snapshot.btc_candles]
+    closes = [c.close for c in btc_candles]
     ema20 = _ema(closes, 20)
     ema50 = _ema(closes, 50)
     price = closes[-1]
 
     ema_sig = max(-1, min(1, (ema20 - ema50) / 100))
     price_sig = max(-1, min(1, (price - ema50) / 150))
-    last12 = snapshot.btc_candles[-12:]
+    last12 = btc_candles[-12:]
     up_r = sum(1 for c in last12 if c.direction == "up") / len(last12)
     candle_sig = (up_r - 0.5) * 2
     score = max(-1, min(1, 0.4 * ema_sig + 0.35 * price_sig + 0.25 * candle_sig))
@@ -114,18 +114,19 @@ def assemble_dashboard_data(
         }
 
     # BTC info
+    btc_candles = ctx.market_data.btc_feed.candles
     btc_info = {}
     if snapshot and snapshot.btc_price:
         btc_info = {
             "price_usd": snapshot.btc_price.price_usd,
             "change_24h_pct": snapshot.btc_price.change_24h_pct,
-            "last_candle_direction": (snapshot.btc_candles[-1].direction if snapshot.btc_candles else "unknown"),
+            "last_candle_direction": (btc_candles[-1].direction if btc_candles else "unknown"),
             "chainlink_price": snapshot.btc_price.chainlink_price,
             "price_divergence": snapshot.btc_price.price_divergence,
             "price_source": snapshot.btc_price.price_source,
             "candle_sources": {
-                "binance": sum(1 for c in snapshot.btc_candles if c.source == "binance"),
-                "total": len(snapshot.btc_candles),
+                "binance": sum(1 for c in btc_candles if c.source == "binance"),
+                "total": len(btc_candles),
             },
         }
 
@@ -354,7 +355,7 @@ def assemble_dashboard_data(
             "has_enough_history": ctx.adaptive_entry.has_enough_history,
             "window_size": ctx.adaptive_entry.window_size,
             "history_count": ctx.adaptive_entry.history_count,
-            **compute_market_trend(snapshot),
+            **compute_market_trend(btc_candles),
             **ctx.adaptive_entry.fakeout_stats,
         },
         "ensemble": {

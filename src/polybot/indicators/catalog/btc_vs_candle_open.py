@@ -19,8 +19,8 @@ class BtcVsCandleOpenIndicator:
             candle_open = ctx.session.candle_open_btc
         elif ctx.candle_open_btc is not None:
             candle_open = ctx.candle_open_btc
-        elif ctx.snapshot.btc_candles:
-            candle_open = ctx.snapshot.btc_candles[-1].close
+        elif ctx.btc_candles:
+            candle_open = ctx.btc_candles[-1].close
 
         if candle_open is None:
             return None

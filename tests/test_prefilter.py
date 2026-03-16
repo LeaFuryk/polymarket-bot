@@ -64,13 +64,11 @@ def _snapshot(
     down_ask: float = 0.50,
     up_depth: float = 100.0,
     down_depth: float = 100.0,
-    candles: list[BtcCandle] | None = None,
 ) -> MarketSnapshot:
     return MarketSnapshot(
         condition_id="test",
         orderbook=_book(up_bid, up_ask, up_depth),
         down_orderbook=_book(down_bid, down_ask, down_depth),
-        btc_candles=candles or [],
     )
 
 
@@ -140,8 +138,7 @@ class TestComputeBtcRange:
 
 class TestComputeBestEntry:
     def test_both_asks_present(self):
-        snap = _snapshot(up_ask=0.30, down_ask=0.25)
-        assert compute_best_entry(snap) == pytest.approx(0.25)
+        assert compute_best_entry(_snapshot(up_ask=0.30, down_ask=0.25)) == pytest.approx(0.25)
 
     def test_only_up_ask(self):
         snap = MarketSnapshot(
@@ -276,9 +273,9 @@ class TestPreFilter:
     def test_all_pass(self):
         pf = PreFilter(logger=logging.getLogger("test"))
         candles = [_candle("up") for _ in range(4)]
-        snap = _snapshot(up_ask=0.20, down_ask=0.22, candles=candles)
+        snap = _snapshot(up_ask=0.20, down_ask=0.22)
         snap.time_remaining = 120.0
-        result = pf.check(snap)
+        result = pf.check(snap, btc_candles=candles)
         assert result.should_skip is False
         assert result.consecutive_streak == 4
         assert result.streak_direction == "up"
@@ -301,9 +298,10 @@ class TestPreFilter:
 
     def test_stats_tracking(self):
         pf = PreFilter(logger=logging.getLogger("test"))
-        snap1 = _snapshot(up_ask=0.20, down_ask=0.22, candles=[_candle("up")] * 3)
+        candles = [_candle("up")] * 3
+        snap1 = _snapshot(up_ask=0.20, down_ask=0.22)
         snap1.time_remaining = 120.0
-        pf.check(snap1)
+        pf.check(snap1, btc_candles=candles)
         snap2 = _snapshot()
         snap2.time_remaining = 10.0
         pf.check(snap2)
@@ -326,10 +324,10 @@ class TestPreFilter:
 
     def test_result_carries_signals(self):
         candles = [_candle("down", high=65200, low=65000)] * 3
-        snap = _snapshot(up_ask=0.25, down_ask=0.30, candles=candles)
+        snap = _snapshot(up_ask=0.25, down_ask=0.30)
         snap.time_remaining = 120.0
         pf = PreFilter(logger=logging.getLogger("test"))
-        result = pf.check(snap)
+        result = pf.check(snap, btc_candles=candles)
         assert result.consecutive_streak == 3
         assert result.streak_direction == "down"
         assert result.btc_range_30m == pytest.approx(200.0)

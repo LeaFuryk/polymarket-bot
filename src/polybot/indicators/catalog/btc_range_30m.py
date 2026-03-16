@@ -12,7 +12,7 @@ class BtcRange30mIndicator:
     display_name = "BTC Range 30m"
 
     def compute(self, ctx: IndicatorContext) -> IndicatorResult | None:
-        candles = ctx.snapshot.btc_candles
+        candles = ctx.btc_candles
         if len(candles) < 2:
             return None
         recent = candles[-BTC_RANGE_CANDLE_WINDOW:]

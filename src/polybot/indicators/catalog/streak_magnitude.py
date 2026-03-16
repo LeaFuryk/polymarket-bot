@@ -16,7 +16,7 @@ class StreakMagnitudeIndicator:
     display_name = "Streak Magnitude"
 
     def compute(self, ctx: IndicatorContext) -> IndicatorResult | None:
-        candles = ctx.snapshot.btc_candles
+        candles = ctx.btc_candles
         if len(candles) < 2:
             return None
         direction = candles[-1].direction

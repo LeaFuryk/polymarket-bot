@@ -171,9 +171,6 @@ class MarketSnapshot(BaseModel):
     # BTC price history for BTC-based indicators (momentum, volatility)
     btc_price_history: list[float] = Field(default_factory=list)
 
-    # BTC 5-min candle history for micro-trend analysis
-    btc_candles: list[BtcCandle] = Field(default_factory=list)
-
     # Dual-token fields for candle markets
     up_token_id: str = ""
     down_token_id: str = ""

@@ -18,7 +18,7 @@ class MarketTrendIndicator:
     display_name = "Market Trend"
 
     def compute(self, ctx: IndicatorContext) -> IndicatorResult | None:
-        candles = ctx.snapshot.btc_candles
+        candles = ctx.btc_candles
         if len(candles) < 50:
             return None
 

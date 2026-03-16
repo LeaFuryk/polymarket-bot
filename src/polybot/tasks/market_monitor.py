@@ -100,7 +100,7 @@ class MarketMonitor:
     def _run_prefilter(self, snapshot):
         """Run prefilter gate and broadcast result."""
         has_position = self._portfolio.has_open_position()
-        pf_result = self._prefilter.check(snapshot, has_position)
+        pf_result = self._prefilter.check(snapshot, has_position, btc_candles=self._market_data.btc_feed.candles)
         self._broadcast_prefilter(pf_result)
         return pf_result
 
@@ -131,6 +131,7 @@ class MarketMonitor:
                 has_open_position=has_position,
                 time_remaining=snapshot.time_remaining,
                 position_side=position_side,
+                btc_candles=self._market_data.btc_feed.candles,
                 microstructure_history=self._shared.microstructure_history,
                 session_trades=getattr(self._ctx, "session_trades", None),
                 session_resolutions=getattr(self._ctx, "session_resolutions", None),

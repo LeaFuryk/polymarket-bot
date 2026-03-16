@@ -156,7 +156,6 @@ class MarketDataProvider:
             btc_price=btc_data.price,
             price_history=list(self._price_history),
             btc_price_history=list(self._btc_price_history),
-            btc_candles=btc_data.candles,
         )
 
     def _broadcast_snapshot(self, snapshot: MarketSnapshot) -> None:

@@ -184,6 +184,7 @@ def format_feature_vector(
     ai_session_cost: float = 0.0,
     candle_open_btc: float | None = None,
     velocity_conflict: VelocityConflict | None = None,
+    btc_candles: list | None = None,
 ) -> str:
     """Format a FeatureVector into a clear prompt for Claude."""
     up_ob = fv.market.orderbook
@@ -265,7 +266,7 @@ def format_feature_vector(
         lines.append(" | ".join(btc_parts))
 
     # BTC 5-min candle history
-    candles = fv.market.btc_candles
+    candles = btc_candles or []
     if candles:
         lines.extend(["", "## BTC 5-Min Candle History"])
 
@@ -400,6 +401,7 @@ def format_screening_context(
     fv: FeatureVector,
     indicators_text: str = "",
     candle_open_btc: float | None = None,
+    btc_candles: list | None = None,
 ) -> str:
     """Format context for the Pass-1 screening model (Haiku).
 
@@ -445,7 +447,7 @@ def format_screening_context(
         lines.append("DOWN token: no data")
 
     # BTC candle history
-    candles = fv.market.btc_candles
+    candles = btc_candles or []
     if candles:
         last_6 = candles[-6:] if len(candles) >= 6 else candles
         up_count = sum(1 for c in last_6 if c.direction == "up")

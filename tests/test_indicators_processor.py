@@ -22,7 +22,7 @@ def _make_snapshot(**kwargs):
     snap = MagicMock()
     snap.price_history = kwargs.get("price_history", [])
     snap.btc_price_history = kwargs.get("btc_price_history", [])
-    snap.btc_candles = kwargs.get("btc_candles", [])
+    snap.btc_candles = kwargs.get("btc_candles", [])  # legacy attr, not used by indicators
     snap.btc_price = kwargs.get("btc_price")
     snap.orderbook = MagicMock()
     snap.orderbook.bid_depth = kwargs.get("bid_depth", 100.0)
@@ -134,15 +134,15 @@ class TestProcessorIndicatorValues:
     def test_consecutive_streak(self):
         processor = IndicatorsProcessor(all_indicators())
         snap = _make_snapshot()
-        snap.btc_candles = _make_candles(["up", "up", "up", "down", "down", "down", "down"])
-        results = processor.compute(snap)
+        candles = _make_candles(["up", "up", "up", "down", "down", "down", "down"])
+        results = processor.compute(snap, btc_candles=candles)
         assert results.get_value("Consecutive Streak") == pytest.approx(4.0)
 
     def test_btc_range_30m(self):
         processor = IndicatorsProcessor(all_indicators())
         snap = _make_snapshot()
-        snap.btc_candles = _make_candles(["up", "up", "up"], high=65200.0, low=65000.0)
-        results = processor.compute(snap)
+        candles = _make_candles(["up", "up", "up"], high=65200.0, low=65000.0)
+        results = processor.compute(snap, btc_candles=candles)
         assert results.get_value("BTC Range 30m") == pytest.approx(200.0)
 
     def test_best_entry(self):
