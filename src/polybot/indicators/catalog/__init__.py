@@ -86,7 +86,12 @@ _ALL_INDICATORS = [
 
 
 def _wrap(indicator):
-    """Create a backward-compatible wrapper for the legacy registry."""
+    """Create a backward-compatible wrapper for the legacy registry.
+
+    Note: btc_candles is read from the snap object if present (e.g. test
+    mocks) but will be empty for real MarketSnapshots since the field was
+    removed.  Candle-dependent indicators return None in this path.
+    """
 
     def fn(snap, params, session):
         btc_candles = tuple(getattr(snap, "btc_candles", ()) or ())

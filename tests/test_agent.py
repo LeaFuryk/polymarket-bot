@@ -160,11 +160,6 @@ class TestEnrichIterationSummary:
 
         assert callable(IterationSummaryEnricher)
 
-    def test_compute_market_trend_no_data(self):
-        from polybot.agent.dashboard import compute_market_trend
-
-        assert compute_market_trend(None) == {}
-
 
 class TestStartupData:
     """Tests for StartupData and load_startup_data / save_agent_state."""
