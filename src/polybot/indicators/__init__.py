@@ -49,6 +49,7 @@ from polybot.indicators.constants import (
 from polybot.indicators.core import (
     FeatureConfig,
     FeatureConfigEntry,
+    Indicator,
     IndicatorResult,
     SessionContext,
     _ema,
@@ -62,6 +63,7 @@ from polybot.indicators.results import IndicatorResults
 
 __all__ = [
     # Data types
+    "Indicator",
     "IndicatorResult",
     "SessionContext",
     "FeatureConfigEntry",

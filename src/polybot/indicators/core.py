@@ -11,6 +11,7 @@ import logging
 import statistics
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from enum import Enum
 from pathlib import Path
 from typing import Any
 
@@ -24,6 +25,53 @@ _default_logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 
+class Indicator(str, Enum):
+    """Canonical indicator identity — used as the key for result lookups."""
+
+    # Token indicators
+    MARKET_TREND = "Market Trend"
+    TOKEN_MOMENTUM = "Token Momentum"
+    TOKEN_VOLATILITY = "Token Volatility"
+    TOKEN_MA_CROSSOVER = "Token MA Crossover"
+    TOKEN_MEAN_REVERSION = "Token Mean Reversion"
+    # Orderbook indicators
+    ORDERBOOK_IMBALANCE = "Orderbook Imbalance"
+    SPREAD_LEVEL = "Spread Level"
+    DOWN_BOOK_IMBALANCE = "Down Book Imbalance"
+    CROSS_BOOK_FLOW = "Cross-Book Flow"
+    BEST_ENTRY_ANALYSIS = "Best Entry Analysis"
+    TOKEN_PRICE_DIVERGENCE = "Token Price Divergence"
+    # BTC indicators
+    BTC_MOMENTUM = "BTC Momentum"
+    BTC_VOLATILITY = "BTC Volatility"
+    BTC_CANDLE_MOMENTUM = "BTC Candle Momentum"
+    BTC_CANDLE_MA_CROSS = "BTC Candle MA Cross"
+    # Session indicators
+    SESSION_STREAK = "Session Streak"
+    CONFIDENCE_CALIBRATION = "Confidence Calibration"
+    # Streak indicators
+    CONSECUTIVE_STREAK = "Consecutive Streak"
+    STREAK_MAGNITUDE = "Streak Magnitude"
+    # Other indicators
+    BTC_VS_CANDLE_OPEN = "BTC vs Candle Open"
+    VOLATILITY_30M = "30min Volatility"
+    CHAINLINK_DIVERGENCE = "Chainlink Divergence"
+    FLAT_MARKET_EDGE = "Flat Market Edge"
+    VOLUME_TREND = "Volume Trend"
+    # Consolidated indicators
+    RISK_REWARD = "Risk/Reward"
+    BTC_MOVE_FROM_OPEN = "BTC Move From Open"
+    BTC_RANGE_30M = "BTC Range 30m"
+    BEST_ENTRY = "Best Entry"
+    # Prompt-context indicators
+    BTC_VELOCITY_CONFLICT = "BTC Velocity Conflict"
+    BTC_TRAJECTORY = "BTC Trajectory"
+    BTC_RETRACEMENT = "BTC Retracement"
+    REVERSAL_REGIME = "Reversal Regime"
+    ENTRY_TIMING = "Entry Timing"
+    MICROSTRUCTURE = "Cross-Candle Microstructure"
+
+
 @dataclass
 class IndicatorResult:
     """Single indicator output — one line of text for the prompt."""
@@ -31,6 +79,7 @@ class IndicatorResult:
     name: str
     value: float
     label: str  # human-readable summary, e.g. "+0.0032 (bullish)"
+    extras: dict[str, float | str] = field(default_factory=dict)
 
 
 @dataclass

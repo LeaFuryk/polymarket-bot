@@ -16,7 +16,7 @@ class IndicatorResults:
     results: list[IndicatorResult] = field(default_factory=list)
 
     def get(self, name: str) -> IndicatorResult | None:
-        """Look up a result by display name."""
+        """Look up a result by name (accepts str or Indicator enum)."""
         for r in self.results:
             if r.name == name:
                 return r
@@ -26,6 +26,13 @@ class IndicatorResults:
         """Get the numeric value of a named result."""
         r = self.get(name)
         return r.value if r is not None else default
+
+    def get_extra(self, name: str, key: str, default: float | str = 0.0) -> float | str:
+        """Get an extras value from a named result."""
+        r = self.get(name)
+        if r is not None:
+            return r.extras.get(key, default)
+        return default
 
     def to_dict(self) -> dict[str, dict[str, object]]:
         """Serialize all results to a flat dict keyed by name."""
