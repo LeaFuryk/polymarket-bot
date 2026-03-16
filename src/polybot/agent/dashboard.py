@@ -9,6 +9,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from polybot.indicators import Indicator
 from polybot.ml_scorer.constants import MIN_TRAINING_SAMPLES
 
 if TYPE_CHECKING:
@@ -415,7 +416,7 @@ def assemble_dashboard_data(
     # Reversal regime (read from pre-computed indicator results)
     _ind = ctx.shared.latest_indicator_results
     if _ind is not None:
-        _regime = _ind.get("Reversal Regime")
+        _regime = _ind.get(Indicator.REVERSAL_REGIME)
         if _regime is not None:
             intensities = [h.reversal_intensity for h in ctx.shared.microstructure_history]
             crossings = [h.zero_crossings for h in ctx.shared.microstructure_history]

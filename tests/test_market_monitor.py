@@ -9,6 +9,9 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from polybot.indicators.core import IndicatorResult
+from polybot.indicators.helpers import compute_rr
+from polybot.indicators.results import IndicatorResults
 from polybot.models.core import (
     BtcPrice,
     MarketSnapshot,
@@ -35,6 +38,42 @@ def _make_snapshot(up_bid=0.48, up_ask=0.52, down_bid=0.46, down_ask=0.50, btc_p
         orderbook=_make_orderbook(up_bid, up_ask),
         down_orderbook=_make_orderbook(down_bid, down_ask),
         btc_price=BtcPrice(price_usd=btc_price),
+    )
+
+
+def _make_indicators(snapshot, candle_open_btc=65000.0):
+    """Build IndicatorResults matching what the real processor would produce."""
+    up_ask = snapshot.orderbook.best_ask or 1.0
+    down_ask = snapshot.down_orderbook.best_ask or 1.0
+    rr_up = compute_rr(up_ask)
+    rr_down = compute_rr(down_ask)
+    best_rr = max(rr_up, rr_down)
+    best_side = "up" if rr_up >= rr_down else "down"
+
+    btc_move = 0.0
+    btc_price = snapshot.btc_price.price_usd if snapshot.btc_price else 0.0
+    if candle_open_btc is not None and btc_price > 0:
+        btc_move = btc_price - candle_open_btc
+
+    return IndicatorResults(
+        results=[
+            IndicatorResult(
+                name="Risk/Reward",
+                value=best_rr,
+                label=f"UP={rr_up:.2f}x DOWN={rr_down:.2f}x",
+                extras={"rr_up": rr_up, "rr_down": rr_down, "best_side": best_side},
+            ),
+            IndicatorResult(
+                name="BTC Move From Open",
+                value=btc_move,
+                label=f"${btc_move:+,.0f}",
+            ),
+            IndicatorResult(
+                name="Best Entry",
+                value=min(up_ask, down_ask),
+                label=f"${min(up_ask, down_ask):.3f}",
+            ),
+        ]
     )
 
 
@@ -120,6 +159,11 @@ def _make_monitor():
 
 
 class TestPersistSnapshots:
+    def _persist(self, monitor, snapshot, pf_result):
+        """Call _persist_snapshots with indicator results."""
+        indicators = _make_indicators(snapshot)
+        monitor._persist_snapshots(snapshot, pf_result, indicators)
+
     def test_queues_datastore_when_candle_id_set(self):
         monitor, ctx, _ = _make_monitor()
         datastore = MagicMock()
@@ -127,9 +171,7 @@ class TestPersistSnapshots:
         monitor._datastore = datastore
         monitor._feature_config = None
 
-        snapshot = _make_snapshot()
-        pf_result = _make_prefilter_result()
-        monitor._persist_snapshots(snapshot, pf_result)
+        self._persist(monitor, _make_snapshot(), _make_prefilter_result())
         datastore.queue_snapshot.assert_called_once()
 
     def test_skips_datastore_when_no_candle_id(self):
@@ -138,35 +180,27 @@ class TestPersistSnapshots:
         datastore.current_candle_id = None
         monitor._datastore = datastore
 
-        snapshot = _make_snapshot()
-        pf_result = _make_prefilter_result()
-        monitor._persist_snapshots(snapshot, pf_result)
+        self._persist(monitor, _make_snapshot(), _make_prefilter_result())
         datastore.queue_snapshot.assert_not_called()
 
     def test_skips_datastore_when_none(self):
         monitor, ctx, _ = _make_monitor()
         monitor._datastore = None
 
-        snapshot = _make_snapshot()
-        pf_result = _make_prefilter_result()
-        monitor._persist_snapshots(snapshot, pf_result)
+        self._persist(monitor, _make_snapshot(), _make_prefilter_result())
 
     def test_queues_market_history_when_candle_id_set(self):
         monitor, ctx, _ = _make_monitor()
         ctx.market_history.current_candle_id = 7
 
-        snapshot = _make_snapshot()
-        pf_result = _make_prefilter_result()
-        monitor._persist_snapshots(snapshot, pf_result)
+        self._persist(monitor, _make_snapshot(), _make_prefilter_result())
         ctx.market_history.queue_snapshot.assert_called_once()
 
     def test_skips_market_history_when_no_candle_id(self):
         monitor, ctx, _ = _make_monitor()
         ctx.market_history.current_candle_id = None
 
-        snapshot = _make_snapshot()
-        pf_result = _make_prefilter_result()
-        monitor._persist_snapshots(snapshot, pf_result)
+        self._persist(monitor, _make_snapshot(), _make_prefilter_result())
         ctx.market_history.queue_snapshot.assert_not_called()
 
 
@@ -175,21 +209,62 @@ class TestPersistSnapshots:
 # ---------------------------------------------------------------------------
 
 
+class TestAdaptiveEntry:
+    def test_static_rr_passes(self):
+        monitor, ctx, _ = _make_monitor()
+        monitor._rr_threshold = 0.5
+        snapshot = _make_snapshot(up_ask=0.30, down_ask=0.40)
+        indicators = _make_indicators(snapshot)
+        passed, reason = monitor._run_adaptive_entry(indicators)
+        assert passed is True
+        assert reason == ""
+
+    def test_static_rr_blocks(self):
+        monitor, ctx, _ = _make_monitor()
+        monitor._rr_threshold = 5.0
+        snapshot = _make_snapshot(up_ask=0.90, down_ask=0.90)
+        indicators = _make_indicators(snapshot)
+        passed, reason = monitor._run_adaptive_entry(indicators)
+        assert passed is False
+        assert "R/R" in reason
+
+    def test_adaptive_mode_passes(self):
+        monitor, ctx, _ = _make_monitor()
+        monitor._adaptive_enabled = True
+        adaptive = MagicMock()
+        adaptive.should_trigger.return_value = True
+        monitor._adaptive_entry = adaptive
+        snapshot = _make_snapshot(up_ask=0.30, down_ask=0.40)
+        indicators = _make_indicators(snapshot)
+        passed, _ = monitor._run_adaptive_entry(indicators)
+        assert passed is True
+        adaptive.should_trigger.assert_called_once()
+
+    def test_adaptive_mode_blocks(self):
+        monitor, ctx, _ = _make_monitor()
+        monitor._adaptive_enabled = True
+        adaptive = MagicMock()
+        adaptive.should_trigger.return_value = False
+        adaptive.btc_threshold = 500.0
+        adaptive.max_entry_price = 0.20
+        monitor._adaptive_entry = adaptive
+        snapshot = _make_snapshot(up_ask=0.30, down_ask=0.40)
+        indicators = _make_indicators(snapshot)
+        passed, reason = monitor._run_adaptive_entry(indicators)
+        assert passed is False
+        assert "BTC move" in reason or "min ask" in reason
+
+
 class TestEvaluateTrigger:
     def _run_trigger(self, monitor, ctx, pf_result=None, snapshot=None):
         if snapshot is None:
             snapshot = _make_snapshot(up_ask=0.30, down_ask=0.40)
         if pf_result is None:
             pf_result = _make_prefilter_result()
-        monitor._evaluate_trigger(snapshot, pf_result)
-
-    def test_prefilter_fail_no_trigger(self):
-        monitor, ctx, ai = _make_monitor()
-        ctx.shared.ai_last_call_time = 0.0
-        pf_result = _make_prefilter_result(should_skip=True, reason="spread too wide")
-        self._run_trigger(monitor, ctx, pf_result=pf_result)
-        ai.evaluate_entry.assert_not_called()
-        assert "PREFILTER" in ctx.shared.monitor_status["gate_status"]
+        indicators = _make_indicators(snapshot, candle_open_btc=ctx.shared.candle_open_btc)
+        has_position = ctx.portfolio.has_open_position()
+        ae_passed, ae_reason = monitor._run_adaptive_entry(indicators)
+        monitor._evaluate_trigger(snapshot, pf_result, indicators, has_position, ae_passed, ae_reason)
 
     def test_rr_below_threshold_no_trigger(self):
         monitor, ctx, ai = _make_monitor()
@@ -237,42 +312,6 @@ class TestEvaluateTrigger:
         assert ctx.shared.monitor_status["ai_triggered"] is True
 
     @pytest.mark.asyncio
-    async def test_adaptive_mode_triggers(self):
-        monitor, ctx, ai = _make_monitor()
-        ctx.shared.ai_last_call_time = 0.0
-        ai.busy = False
-        monitor._adaptive_enabled = True
-        monitor._cooldown = 0.0
-        adaptive = MagicMock()
-        adaptive.should_trigger.return_value = True
-        adaptive.btc_threshold = 50.0
-        adaptive.max_entry_price = 0.60
-        monitor._adaptive_entry = adaptive
-        snapshot = _make_snapshot(up_ask=0.30, down_ask=0.40)
-        pf_result = _make_prefilter_result(should_skip=False)
-        self._run_trigger(monitor, ctx, pf_result=pf_result, snapshot=snapshot)
-        await asyncio.sleep(0)
-        adaptive.should_trigger.assert_called_once()
-        ai.evaluate_entry.assert_called_once()
-
-    def test_adaptive_mode_blocks(self):
-        monitor, ctx, ai = _make_monitor()
-        ctx.shared.ai_last_call_time = 0.0
-        ai.busy = False
-        monitor._adaptive_enabled = True
-        monitor._cooldown = 0.0
-        adaptive = MagicMock()
-        adaptive.should_trigger.return_value = False
-        adaptive.btc_threshold = 500.0
-        adaptive.max_entry_price = 0.20
-        monitor._adaptive_entry = adaptive
-        snapshot = _make_snapshot(up_ask=0.30, down_ask=0.40)
-        pf_result = _make_prefilter_result(should_skip=False)
-        self._run_trigger(monitor, ctx, pf_result=pf_result, snapshot=snapshot)
-        ai.evaluate_entry.assert_not_called()
-        assert "ADAPTIVE" in ctx.shared.monitor_status["gate_status"]
-
-    @pytest.mark.asyncio
     async def test_best_side_down_when_down_rr_higher(self):
         monitor, ctx, _ = _make_monitor()
         ctx.shared.ai_last_call_time = 0.0
@@ -313,6 +352,24 @@ class TestTickIntegration:
         assert ctx.shared.snapshot_timestamp > 0
 
     @pytest.mark.asyncio
+    async def test_tick_prefilter_skip_still_persists(self):
+        monitor, ctx, ai = _make_monitor()
+        snapshot = _make_snapshot(up_ask=0.30, down_ask=0.40)
+        ctx.market_data.get_snapshot.return_value = snapshot
+        ctx.prefilter.check.return_value = _make_prefilter_result(should_skip=True, reason="spread")
+
+        # Enable datastore so we can verify persist was called
+        datastore = MagicMock()
+        datastore.current_candle_id = 1
+        monitor._datastore = datastore
+
+        await monitor._tick()
+
+        ai.evaluate_entry.assert_not_called()
+        datastore.queue_snapshot.assert_called_once()
+        assert "PREFILTER" in ctx.shared.monitor_status["gate_status"]
+
+    @pytest.mark.asyncio
     async def test_tick_full_pipeline_triggers_ai(self):
         monitor, ctx, ai = _make_monitor()
         ctx.shared.ai_last_call_time = 0.0
@@ -320,6 +377,12 @@ class TestTickIntegration:
 
         snapshot = _make_snapshot(up_ask=0.30, down_ask=0.40, btc_price=65100.0)
         ctx.market_data.get_snapshot.return_value = snapshot
+
+        # Provide a processor that returns real indicators
+        indicators = _make_indicators(snapshot, candle_open_btc=65000.0)
+        processor = MagicMock()
+        processor.compute.return_value = indicators
+        monitor._processor = processor
 
         ctx.prefilter.check.return_value = _make_prefilter_result(should_skip=False)
         monitor._rr_threshold = 0.1

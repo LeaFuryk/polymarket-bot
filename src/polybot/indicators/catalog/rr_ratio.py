@@ -26,4 +26,5 @@ class RiskRewardIndicator:
             name="Risk/Reward",
             value=best_rr,
             label=f"UP={rr_up:.2f}x DOWN={rr_down:.2f}x (best: {best_side})",
+            extras={"rr_up": rr_up, "rr_down": rr_down, "best_side": best_side.lower()},
         )

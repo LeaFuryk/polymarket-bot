@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING
 
 from polybot.dashboard import DashboardMessageBuilder
 from polybot.indicators import (
+    Indicator,
     SessionContext,
     compute_indicators,
     format_indicators,
@@ -334,7 +335,7 @@ class AIDecision:
                 retracement_ctx = ""
                 _ind_results = self._shared.latest_indicator_results
                 if _ind_results is not None:
-                    _ret = _ind_results.get("BTC Retracement")
+                    _ret = _ind_results.get(Indicator.BTC_RETRACEMENT)
                     if _ret is not None:
                         retracement_ctx = f"## Reversal Analysis\n- {_ret.label}"
 
@@ -630,8 +631,8 @@ class AIDecision:
         reversal_score = 0.0
         zero_crossings_avg = 0.0
         if _ind_results is not None:
-            velocity_conflict_severity = _ind_results.get_value("btc_velocity_conflict", 0.0)
-            reversal_score = _ind_results.get_value("reversal_regime", 0.0)
+            velocity_conflict_severity = _ind_results.get_value(Indicator.BTC_VELOCITY_CONFLICT, 0.0)
+            reversal_score = _ind_results.get_value(Indicator.REVERSAL_REGIME, 0.0)
         if self._shared.microstructure_history:
             zero_crossings_avg = sum(h.zero_crossings for h in self._shared.microstructure_history) / len(
                 self._shared.microstructure_history
