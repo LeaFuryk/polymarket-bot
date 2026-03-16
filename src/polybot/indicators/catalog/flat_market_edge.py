@@ -12,7 +12,7 @@ class FlatMarketEdgeIndicator:
     display_name = "Flat Market Edge"
 
     def compute(self, ctx: IndicatorContext) -> IndicatorResult | None:
-        candles = ctx.snapshot.btc_candles
+        candles = ctx.btc_candles
         if len(candles) < 3:
             return None
 

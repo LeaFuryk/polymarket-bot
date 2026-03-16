@@ -104,12 +104,13 @@ class PreFilter:
         self,
         snapshot: MarketSnapshot,
         has_open_position: bool = False,
+        btc_candles: list | None = None,
     ) -> PreFilterResult:
         """Run all pre-filter checks. Returns result with should_skip flag."""
         self.total_checks += 1
 
         # Compute shared signals once
-        candles = snapshot.btc_candles
+        candles = btc_candles or []
         streak, streak_dir = compute_streak(candles)
         btc_range = compute_btc_range_30m(candles)
         best_entry = compute_best_entry(snapshot)

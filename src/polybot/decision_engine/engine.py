@@ -52,6 +52,7 @@ class DecisionEngine:
         ai_session_cost: float = 0.0,
         candle_open_btc: float | None = None,
         velocity_conflict: VelocityConflict | None = None,
+        btc_candles: list | None = None,
     ) -> tuple[TradingDecision, float, float]:
         """Get a trading decision from Claude.
 
@@ -66,6 +67,7 @@ class DecisionEngine:
             ai_session_cost=ai_session_cost,
             candle_open_btc=candle_open_btc,
             velocity_conflict=velocity_conflict,
+            btc_candles=btc_candles,
         )
         start = time.monotonic()
 
@@ -132,13 +134,16 @@ class DecisionEngine:
         features: FeatureVector,
         indicators_text: str = "",
         candle_open_btc: float | None = None,
+        btc_candles: list | None = None,
     ) -> tuple[bool, str, float]:
         """Pass-1 screen: quick check via Haiku if there's a trade setup.
 
         Returns:
             Tuple of (should_trade, reason, api_cost_usd)
         """
-        prompt = format_screening_context(features, indicators_text, candle_open_btc=candle_open_btc)
+        prompt = format_screening_context(
+            features, indicators_text, candle_open_btc=candle_open_btc, btc_candles=btc_candles
+        )
         start = time.monotonic()
 
         try:

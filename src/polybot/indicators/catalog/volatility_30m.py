@@ -14,7 +14,7 @@ class Volatility30mIndicator:
     display_name = "30min Volatility"
 
     def compute(self, ctx: IndicatorContext) -> IndicatorResult | None:
-        candles = ctx.snapshot.btc_candles
+        candles = ctx.btc_candles
         if len(candles) < 6:
             return None
         recent = candles[-6:]

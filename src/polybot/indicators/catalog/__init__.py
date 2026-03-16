@@ -89,7 +89,8 @@ def _wrap(indicator):
     """Create a backward-compatible wrapper for the legacy registry."""
 
     def fn(snap, params, session):
-        ctx = IndicatorContext(snapshot=snap, params=params, session=session)
+        btc_candles = tuple(getattr(snap, "btc_candles", ()) or ())
+        ctx = IndicatorContext(snapshot=snap, params=params, session=session, btc_candles=btc_candles)
         return indicator.compute(ctx)
 
     return fn

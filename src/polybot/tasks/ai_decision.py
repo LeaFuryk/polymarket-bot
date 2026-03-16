@@ -646,7 +646,7 @@ class AIDecision:
         # ML prediction
         btc_price_val = snapshot.btc_price.price_usd if snapshot.btc_price else None
         ml_features = self._ml_scorer.extract_features(
-            candles=snapshot.btc_candles,
+            candles=self._ctx.market_data.btc_feed.candles,
             btc_price=btc_price_val,
             candle_open=candle_open_btc,
             up_mid=up_mid,
@@ -705,10 +705,12 @@ class AIDecision:
         # Two-pass screening (entry only, not exits)
         has_position = self._portfolio.has_open_position()
         if self._config.ai.two_pass_enabled and not has_position and not extra_context:
+            btc_candles = self._ctx.market_data.btc_feed.candles
             should_trade, screen_reason, screen_cost = await self._engine.screen(
                 features,
                 indicators_text=indicators_text,
                 candle_open_btc=candle_open_btc,
+                btc_candles=btc_candles,
             )
             self._portfolio.cash -= screen_cost
             self._total_api_cost += screen_cost
@@ -727,6 +729,7 @@ class AIDecision:
                     features,
                     indicators_text,
                     candle_open_btc=candle_open_btc,
+                    btc_candles=btc_candles,
                 )
                 screen_decision = TradingDecision(
                     action=Action.HOLD,
@@ -753,6 +756,7 @@ class AIDecision:
             indicators_text += f"\n\n## Pre-Screening Note (fast model)\n{screen_reason}"
 
         # Full AI decision
+        btc_candles = self._ctx.market_data.btc_feed.candles
         decision, latency_ms, api_cost = await self._engine.decide(
             features,
             feedback_context=feedback_context,
@@ -761,6 +765,7 @@ class AIDecision:
             ai_session_cost=self._total_api_cost,
             candle_open_btc=candle_open_btc,
             velocity_conflict=None,
+            btc_candles=btc_candles,
         )
 
         self._portfolio.cash -= api_cost

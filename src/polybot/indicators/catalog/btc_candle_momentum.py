@@ -13,7 +13,7 @@ class BtcCandleMomentumIndicator:
 
     def compute(self, ctx: IndicatorContext) -> IndicatorResult | None:
         window = ctx.params.get("window", 6)
-        candles = ctx.snapshot.btc_candles
+        candles = ctx.btc_candles
         if len(candles) < window:
             return None
         recent = candles[-window:]
