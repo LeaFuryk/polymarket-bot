@@ -18,6 +18,7 @@ dependencies = [
     "pandas>=2.2.0",
     "aiosqlite>=0.20.0",
     "python-dotenv>=1.0.0",
+    "eth-abi>=5.0.0",
 ]
 
 [project.optional-dependencies]
@@ -47,12 +48,12 @@ polybot-server = "polybot.server.run:main"
 polybot-check = "polybot.scripts.check:main"
 
 [tool.setuptools.packages.find]
-where = ["src"]
+where = ["."]
 
 [tool.ruff]
 target-version = "py311"
 line-length = 120
-src = ["src", "tests"]
+src = ["polybot", "tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
