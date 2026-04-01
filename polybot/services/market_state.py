@@ -8,13 +8,22 @@ import time
 
 from polybot.domain.models import (
     BetState,
+    BtcTick,
     CurrentCandleData,
+    Market,
+    MarketSnapshot,
     Microstructure,
     PromptState,
     Technicals,
 )
 from polybot.ports.market_feed import MarketFeed
 from polybot.services.candle_aggregator import CandleAggregator
+from polybot.services.technicals import (
+    atr_normalized,
+    bollinger_pct_b,
+    macd_histogram,
+    rsi,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -38,10 +47,7 @@ class MarketStateService:
         self._series_slug = series_slug
 
     async def get_state(self) -> PromptState | None:
-        """Build the full market state snapshot.
-
-        Returns None if essential data (tick or market) is unavailable.
-        """
+        """Build the full market state snapshot."""
         tick = self._aggregator.latest_tick
         if tick is None:
             logger.warning("No Chainlink tick available yet")
@@ -54,33 +60,33 @@ class MarketStateService:
 
         snapshot = await self._market_feed.get_snapshot(market)
 
-        # -- Candles -----------------------------------------------------------
-        candles = self._aggregator.candle_data()
-        partial = self._aggregator.partial
+        return PromptState(
+            candles=self._aggregator.candle_data(),
+            current_candle=self._build_current_candle(tick, market),
+            technicals=self._build_technicals(),
+            microstructure=self._build_microstructure(tick, snapshot),
+            bet_state=self._build_bet_state(market),
+        )
 
-        # -- Current candle ----------------------------------------------------
+    # -- Private builders --------------------------------------------------
+
+    def _build_current_candle(self, tick: BtcTick, market: Market) -> CurrentCandleData:
         now = time.time()
         candle_start = now - (now % CANDLE_INTERVAL)
         elapsed = now - candle_start
         elapsed_pct = elapsed / CANDLE_INTERVAL
-        time_remaining = market.time_remaining
-        heartbeat_age = now - tick.timestamp
 
-        # Partial candle OHLC
+        partial = self._aggregator.partial
         candle_open = partial.open if partial else None
         high_so_far = partial.high if partial else None
         low_so_far = partial.low if partial else None
 
-        # partial_ret = ln(last_price / open)
         partial_ret = None
         if candle_open is not None and candle_open > 0:
             partial_ret = math.log(tick.price / candle_open)
 
-        # volume_so_far from partial (Binance volume not available mid-candle,
-        # so we use 0.0 — will be refined when we add real-time volume tracking)
+        # Volume tracking not yet wired for mid-candle
         volume_so_far = 0.0
-
-        # volume_pace = volume_so_far / (elapsed_pct × avg_volume)
         volume_pace = None
         closed = self._aggregator.closed_candles()
         if closed and elapsed_pct > 0:
@@ -89,7 +95,7 @@ class MarketStateService:
             if expected > 0:
                 volume_pace = volume_so_far / expected
 
-        current_candle = CurrentCandleData(
+        return CurrentCandleData(
             open=candle_open,
             high_so_far=high_so_far,
             low_so_far=low_so_far,
@@ -99,16 +105,25 @@ class MarketStateService:
             volume_pace=volume_pace,
             elapsed_sec=elapsed,
             elapsed_pct=elapsed_pct,
-            time_remaining_sec=time_remaining,
-            chainlink_heartbeat_age_sec=heartbeat_age,
+            time_remaining_sec=market.time_remaining,
+            chainlink_heartbeat_age_sec=now - tick.timestamp,
         )
 
-        # -- Microstructure ----------------------------------------------------
+    def _build_technicals(self) -> Technicals:
+        candles = self._aggregator.closed_candles()
+        closes = [c.close for c in candles]
+        return Technicals(
+            rsi14=rsi(closes),
+            macd_hist=macd_histogram(closes),
+            bb_pct_b=bollinger_pct_b(closes),
+            atr14_norm=atr_normalized(candles),
+        )
+
+    def _build_microstructure(self, tick: BtcTick, snapshot: MarketSnapshot) -> Microstructure:
         mid = tick.price
         spread_bps = (tick.ask - tick.bid) / mid * 10_000 if mid > 0 else 0.0
-
         up_book = snapshot.up_book
-        microstructure = Microstructure(
+        return Microstructure(
             spread_bps=spread_bps,
             ob_imbalance=up_book.imbalance,
             polymarket_yes_price=up_book.midpoint,
@@ -116,26 +131,10 @@ class MarketStateService:
             polymarket_vol_delta=None,
         )
 
-        # -- Technicals (not yet implemented) ----------------------------------
-        technicals = Technicals(
-            rsi14=None,
-            macd_hist=None,
-            bb_pct_b=None,
-            atr14_norm=None,
-        )
-
-        # -- Bet state (not yet implemented) -----------------------------------
-        bet_state = BetState(
+    def _build_bet_state(self, market: Market) -> BetState:
+        return BetState(
             bet_open_price=None,
             unrealised_ret=None,
             hold_count=0,
-            time_remaining_sec=time_remaining,
-        )
-
-        return PromptState(
-            candles=candles,
-            current_candle=current_candle,
-            technicals=technicals,
-            microstructure=microstructure,
-            bet_state=bet_state,
+            time_remaining_sec=market.time_remaining,
         )
