@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import time
 from dataclasses import dataclass
 
@@ -114,3 +115,73 @@ class MarketSnapshot:
     up_book: OrderBook
     down_book: OrderBook
     last_trade_price: float | None
+
+
+# ---------------------------------------------------------------------------
+# Prompt state (1:1 with fine-tune model input schema)
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class CandleData:
+    t: int  # relative index (-19 to -1)
+    open: float
+    high: float
+    low: float
+    close: float
+    volume: float
+    log_ret: float | None
+    vol_pace: float | None
+
+
+@dataclass(frozen=True)
+class CurrentCandleData:
+    open: float | None
+    high_so_far: float | None
+    low_so_far: float | None
+    last_price: float | None
+    partial_ret: float | None
+    volume_so_far: float
+    volume_pace: float | None
+    elapsed_sec: float
+    elapsed_pct: float
+    time_remaining_sec: float
+    chainlink_heartbeat_age_sec: float
+
+
+@dataclass(frozen=True)
+class Technicals:
+    rsi14: float | None
+    macd_hist: float | None
+    bb_pct_b: float | None
+    atr14_norm: float | None
+
+
+@dataclass(frozen=True)
+class Microstructure:
+    spread_bps: float
+    ob_imbalance: float
+    polymarket_yes_price: float | None
+    polymarket_yes_delta: float | None
+    polymarket_vol_delta: float | None
+
+
+@dataclass(frozen=True)
+class BetState:
+    bet_open_price: float | None
+    unrealised_ret: float | None
+    hold_count: int
+    time_remaining_sec: float
+
+
+@dataclass(frozen=True)
+class PromptState:
+    candles: tuple[CandleData, ...]
+    current_candle: CurrentCandleData
+    technicals: Technicals
+    microstructure: Microstructure
+    bet_state: BetState
+
+    def to_dict(self) -> dict:
+        """Serialize to the exact JSON structure the model expects."""
+        return dataclasses.asdict(self)
