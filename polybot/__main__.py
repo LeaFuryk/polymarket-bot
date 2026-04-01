@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 from polybot.adapters.binance_volume import BinanceVolumeAdapter
 from polybot.adapters.chainlink_streams import ChainlinkStreamsAdapter
 from polybot.adapters.polymarket import PolymarketAdapter
+from polybot.services.candle_aggregator import CandleAggregator
 from polybot.services.market_state import MarketStateService
 
 logging.basicConfig(level=logging.WARNING, format="%(asctime)s %(name)s %(levelname)s %(message)s")
@@ -25,12 +26,13 @@ async def main() -> None:
     volume_feed = BinanceVolumeAdapter()
     market_feed = PolymarketAdapter()
 
-    service = MarketStateService(price_stream, volume_feed, market_feed)
+    aggregator = CandleAggregator(price_stream, volume_feed)
+    service = MarketStateService(aggregator, market_feed)
 
     await price_stream.connect()
-    asyncio.create_task(service.consume_ticks())
+    asyncio.create_task(aggregator.run())
 
-    # Wait briefly for first tick
+    # Wait for first tick
     await asyncio.sleep(2)
 
     while True:

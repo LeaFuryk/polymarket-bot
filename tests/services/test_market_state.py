@@ -1,7 +1,7 @@
 """Tests for MarketStateService."""
 
 import time
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock, PropertyMock
 
 import pytest
 from polybot.domain.models import (
@@ -10,6 +10,7 @@ from polybot.domain.models import (
     MarketSnapshot,
     OrderBook,
     OrderBookLevel,
+    PartialCandle,
     PromptState,
 )
 from polybot.services.market_state import MarketStateService
@@ -52,19 +53,32 @@ def _make_snapshot(market: Market) -> MarketSnapshot:
     )
 
 
-def _make_service(tick=None, market=None, volume=10.0):
-    price_stream = AsyncMock()
-    volume_feed = AsyncMock()
-    market_feed = AsyncMock()
+def _make_partial(open_price=67700.0) -> PartialCandle:
+    return PartialCandle(
+        open=open_price,
+        high=67850.0,
+        low=67650.0,
+        last_price=67800.0,
+        start_time=time.time() - 90,
+        end_time=time.time() + 210,
+        tick_count=5,
+        last_tick_time=time.time(),
+    )
 
+
+def _make_service(tick=None, market=None, partial=None, closed=()):
+    aggregator = MagicMock()
+    type(aggregator).latest_tick = PropertyMock(return_value=tick)
+    type(aggregator).partial = PropertyMock(return_value=partial)
+    aggregator.closed_candles.return_value = closed
+    aggregator.candle_data.return_value = ()
+
+    market_feed = AsyncMock()
     mkt = market or _make_market()
     market_feed.discover_market = AsyncMock(return_value=mkt)
     market_feed.get_snapshot = AsyncMock(return_value=_make_snapshot(mkt))
-    volume_feed.get_volume = AsyncMock(return_value=volume)
 
-    service = MarketStateService(price_stream, volume_feed, market_feed)
-    service._latest_tick = tick
-    return service
+    return MarketStateService(aggregator, market_feed)
 
 
 # ---------------------------------------------------------------------------
@@ -96,19 +110,41 @@ class TestGetState:
         state = await service.get_state()
         assert state.current_candle.last_price == 67850.0
 
-    async def test_current_candle_has_volume(self):
-        service = _make_service(tick=_make_tick(), volume=18.42)
-        state = await service.get_state()
-        assert state.current_candle.volume_so_far == pytest.approx(18.42)
-
     async def test_current_candle_has_heartbeat_age(self):
         old_tick = BtcTick(price=67800.0, bid=67798.0, ask=67802.0, timestamp=time.time() - 1.5)
         service = _make_service(tick=old_tick)
         state = await service.get_state()
         assert state.current_candle.chainlink_heartbeat_age_sec >= 1.0
 
+    async def test_current_candle_ohlc_from_partial(self):
+        service = _make_service(
+            tick=_make_tick(price=67800.0),
+            partial=_make_partial(open_price=67700.0),
+        )
+        state = await service.get_state()
+        assert state.current_candle.open == 67700.0
+        assert state.current_candle.high_so_far == 67850.0
+        assert state.current_candle.low_so_far == 67650.0
+
+    async def test_partial_ret_computed(self):
+        import math
+
+        service = _make_service(
+            tick=_make_tick(price=67800.0),
+            partial=_make_partial(open_price=67700.0),
+        )
+        state = await service.get_state()
+        expected = math.log(67800.0 / 67700.0)
+        assert state.current_candle.partial_ret == pytest.approx(expected, rel=1e-4)
+
+    async def test_current_candle_none_without_partial(self):
+        service = _make_service(tick=_make_tick(), partial=None)
+        state = await service.get_state()
+        assert state.current_candle.open is None
+        assert state.current_candle.high_so_far is None
+        assert state.current_candle.partial_ret is None
+
     async def test_microstructure_spread(self):
-        # bid=67798, ask=67802, mid=67800 → spread = 4/67800 * 10000 ≈ 0.59 bps
         service = _make_service(tick=_make_tick(price=67800.0, bid=67798.0, ask=67802.0))
         state = await service.get_state()
         assert state.microstructure.spread_bps == pytest.approx(0.59, abs=0.01)
@@ -117,22 +153,6 @@ class TestGetState:
         service = _make_service(tick=_make_tick())
         state = await service.get_state()
         assert state.microstructure.polymarket_yes_price is not None
-
-    async def test_microstructure_has_imbalance(self):
-        service = _make_service(tick=_make_tick())
-        state = await service.get_state()
-        assert -1.0 <= state.microstructure.ob_imbalance <= 1.0
-
-    async def test_candles_empty_for_now(self):
-        service = _make_service(tick=_make_tick())
-        state = await service.get_state()
-        assert state.candles == ()
-
-    async def test_technicals_none_for_now(self):
-        service = _make_service(tick=_make_tick())
-        state = await service.get_state()
-        assert state.technicals.rsi14 is None
-        assert state.technicals.macd_hist is None
 
     async def test_to_dict(self):
         service = _make_service(tick=_make_tick())

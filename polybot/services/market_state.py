@@ -2,21 +2,19 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
+import math
 import time
 
 from polybot.domain.models import (
     BetState,
-    BtcTick,
     CurrentCandleData,
     Microstructure,
     PromptState,
     Technicals,
 )
 from polybot.ports.market_feed import MarketFeed
-from polybot.ports.price_stream import PriceStream
-from polybot.ports.volume_feed import VolumeFeed
+from polybot.services.candle_aggregator import CandleAggregator
 
 logger = logging.getLogger(__name__)
 
@@ -24,35 +22,27 @@ CANDLE_INTERVAL = 300  # 5 minutes
 
 
 class MarketStateService:
-    """Orchestrates all adapters and returns a PromptState snapshot.
+    """Orchestrates CandleAggregator + MarketFeed into a PromptState snapshot.
 
-    Depends only on ports (PriceStream, VolumeFeed, MarketFeed).
+    Depends on CandleAggregator (owns ticks + candles) and MarketFeed (Polymarket).
     """
 
     def __init__(
         self,
-        price_stream: PriceStream,
-        volume_feed: VolumeFeed,
+        candle_aggregator: CandleAggregator,
         market_feed: MarketFeed,
         series_slug: str = "btc-updown-5m",
     ) -> None:
-        self._price_stream = price_stream
-        self._volume_feed = volume_feed
+        self._aggregator = candle_aggregator
         self._market_feed = market_feed
         self._series_slug = series_slug
-        self._latest_tick: BtcTick | None = None
-
-    async def consume_ticks(self) -> None:
-        """Background task: consume Chainlink ticks into internal buffer."""
-        async for tick in self._price_stream.ticks():
-            self._latest_tick = tick
 
     async def get_state(self) -> PromptState | None:
         """Build the full market state snapshot.
 
         Returns None if essential data (tick or market) is unavailable.
         """
-        tick = self._latest_tick
+        tick = self._aggregator.latest_tick
         if tick is None:
             logger.warning("No Chainlink tick available yet")
             return None
@@ -62,37 +52,58 @@ class MarketStateService:
             logger.warning("No Polymarket market found")
             return None
 
-        # Fetch Polymarket snapshot + Binance volume in parallel
+        snapshot = await self._market_feed.get_snapshot(market)
+
+        # -- Candles -----------------------------------------------------------
+        candles = self._aggregator.candle_data()
+        partial = self._aggregator.partial
+
+        # -- Current candle ----------------------------------------------------
         now = time.time()
         candle_start = now - (now % CANDLE_INTERVAL)
-
-        snapshot, volume_so_far = await asyncio.gather(
-            self._market_feed.get_snapshot(market),
-            self._volume_feed.get_volume(candle_start, now),
-        )
-
-        # -- Build current candle ------------------------------------------
         elapsed = now - candle_start
+        elapsed_pct = elapsed / CANDLE_INTERVAL
         time_remaining = market.time_remaining
-        elapsed_pct = elapsed / CANDLE_INTERVAL if CANDLE_INTERVAL > 0 else 0.0
-
         heartbeat_age = now - tick.timestamp
 
+        # Partial candle OHLC
+        candle_open = partial.open if partial else None
+        high_so_far = partial.high if partial else None
+        low_so_far = partial.low if partial else None
+
+        # partial_ret = ln(last_price / open)
+        partial_ret = None
+        if candle_open is not None and candle_open > 0:
+            partial_ret = math.log(tick.price / candle_open)
+
+        # volume_so_far from partial (Binance volume not available mid-candle,
+        # so we use 0.0 — will be refined when we add real-time volume tracking)
+        volume_so_far = 0.0
+
+        # volume_pace = volume_so_far / (elapsed_pct × avg_volume)
+        volume_pace = None
+        closed = self._aggregator.closed_candles()
+        if closed and elapsed_pct > 0:
+            avg_vol = sum(c.volume for c in closed) / len(closed)
+            expected = elapsed_pct * avg_vol
+            if expected > 0:
+                volume_pace = volume_so_far / expected
+
         current_candle = CurrentCandleData(
-            open=None,
-            high_so_far=None,
-            low_so_far=None,
+            open=candle_open,
+            high_so_far=high_so_far,
+            low_so_far=low_so_far,
             last_price=tick.price,
-            partial_ret=None,
+            partial_ret=partial_ret,
             volume_so_far=volume_so_far,
-            volume_pace=None,
+            volume_pace=volume_pace,
             elapsed_sec=elapsed,
             elapsed_pct=elapsed_pct,
             time_remaining_sec=time_remaining,
             chainlink_heartbeat_age_sec=heartbeat_age,
         )
 
-        # -- Build microstructure ------------------------------------------
+        # -- Microstructure ----------------------------------------------------
         mid = tick.price
         spread_bps = (tick.ask - tick.bid) / mid * 10_000 if mid > 0 else 0.0
 
@@ -105,7 +116,7 @@ class MarketStateService:
             polymarket_vol_delta=None,
         )
 
-        # -- Technicals (not yet implemented) ------------------------------
+        # -- Technicals (not yet implemented) ----------------------------------
         technicals = Technicals(
             rsi14=None,
             macd_hist=None,
@@ -113,7 +124,7 @@ class MarketStateService:
             atr14_norm=None,
         )
 
-        # -- Bet state (not yet implemented) -------------------------------
+        # -- Bet state (not yet implemented) -----------------------------------
         bet_state = BetState(
             bet_open_price=None,
             unrealised_ret=None,
@@ -122,7 +133,7 @@ class MarketStateService:
         )
 
         return PromptState(
-            candles=(),
+            candles=candles,
             current_candle=current_candle,
             technicals=technicals,
             microstructure=microstructure,

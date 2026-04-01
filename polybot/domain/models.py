@@ -36,6 +36,48 @@ class BtcVolume:
 
 
 # ---------------------------------------------------------------------------
+# Candles
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class Candle:
+    """A closed 5-minute OHLCV candle."""
+
+    open: float
+    high: float
+    low: float
+    close: float
+    volume: float  # BTC volume from Binance
+    start_time: float
+    end_time: float
+
+
+@dataclass
+class PartialCandle:
+    """In-progress candle built from streaming ticks. Mutable."""
+
+    open: float
+    high: float
+    low: float
+    last_price: float
+    start_time: float
+    end_time: float  # expected close time
+    tick_count: int = 0
+    last_tick_time: float = 0.0
+
+    def update(self, tick: BtcTick) -> None:
+        """Incorporate a new tick."""
+        if tick.price > self.high:
+            self.high = tick.price
+        if tick.price < self.low:
+            self.low = tick.price
+        self.last_price = tick.price
+        self.last_tick_time = tick.timestamp
+        self.tick_count += 1
+
+
+# ---------------------------------------------------------------------------
 # Polymarket orderbook
 # ---------------------------------------------------------------------------
 
