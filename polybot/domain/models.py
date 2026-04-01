@@ -101,6 +101,7 @@ class Market:
     slug: str
     question: str
     end_time: float  # resolution timestamp (epoch seconds)
+    volume: float = 0.0  # cumulative market volume (USD)
 
     @property
     def time_remaining(self) -> float:

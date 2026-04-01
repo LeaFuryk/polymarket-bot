@@ -130,6 +130,8 @@ class PolymarketAdapter:
             end_date = mkt.get("endDate", event.get("endDate", ""))
             end_time = self._parse_end_time(end_date)
 
+            volume = float(mkt.get("volumeClob", mkt.get("volume", 0)))
+
             return Market(
                 condition_id=condition_id,
                 up_token_id=token_ids[0],
@@ -137,6 +139,7 @@ class PolymarketAdapter:
                 slug=slug,
                 question=event.get("title", ""),
                 end_time=end_time,
+                volume=volume,
             )
         except Exception:
             logger.exception("Failed to discover market for slug: %s", slug)

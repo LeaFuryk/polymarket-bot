@@ -43,6 +43,7 @@ async def print_volume_and_market(
                 f"  DOWN book: bid={down.best_bid}  ask={down.best_ask}  mid={down.midpoint}  depth={down.bid_depth:.0f}/{down.ask_depth:.0f}"
             )
             print(f"  last trade: {snapshot.last_trade_price}")
+            print(f"  volume:     ${market.volume:,.2f}")
             print(f"  imbalance:  {up.imbalance:.3f}")
         else:
             print("  No market found")
