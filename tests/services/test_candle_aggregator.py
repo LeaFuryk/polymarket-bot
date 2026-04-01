@@ -5,7 +5,7 @@ import time
 from unittest.mock import AsyncMock
 
 import pytest
-from polybot.domain.models import BtcTick, PartialCandle
+from polybot.domain.models import BtcTick, Candle, PartialCandle
 from polybot.services.candle_aggregator import CandleAggregator
 
 # ---------------------------------------------------------------------------
@@ -22,10 +22,11 @@ def _make_tick(price=67800.0, timestamp=None) -> BtcTick:
     )
 
 
-def _make_aggregator(interval=300, history_size=20) -> CandleAggregator:
+def _make_aggregator(interval=300, history_size=20, backfill_candles=None) -> CandleAggregator:
     price_stream = AsyncMock()
     volume_feed = AsyncMock()
     volume_feed.get_volume = AsyncMock(return_value=10.0)
+    volume_feed.get_candles = AsyncMock(return_value=backfill_candles or [])
     return CandleAggregator(price_stream, volume_feed, interval=interval, history_size=history_size)
 
 
@@ -161,6 +162,54 @@ class TestProcessTick:
             await agg._process_tick(_make_tick(price=100.0 + i, timestamp=i * 10.0))
 
         assert len(agg.closed_candles()) <= 3
+
+
+class TestBackfill:
+    def _make_backfill_candles(self, count: int) -> list[Candle]:
+        return [
+            Candle(
+                open=67800.0 + i * 10,
+                high=67850.0 + i * 10,
+                low=67750.0 + i * 10,
+                close=67820.0 + i * 10,
+                volume=15.0,
+                start_time=i * 300.0,
+                end_time=(i + 1) * 300.0,
+            )
+            for i in range(count)
+        ]
+
+    async def test_backfill_on_first_discard(self):
+        backfill = self._make_backfill_candles(21)  # 20 closed + 1 in-progress (excluded)
+        agg = _make_aggregator(interval=10, history_size=20, backfill_candles=backfill)
+
+        # Startup candle — triggers discard + backfill
+        await agg._process_tick(_make_tick(price=100.0, timestamp=5.0))
+        await agg._process_tick(_make_tick(price=110.0, timestamp=10.0))
+
+        # Should have 20 backfilled candles (last one excluded)
+        assert len(agg.closed_candles()) == 20
+
+    async def test_backfill_not_called_twice(self):
+        backfill = self._make_backfill_candles(5)
+        agg = _make_aggregator(interval=10, backfill_candles=backfill)
+
+        # First discard → backfill
+        await agg._process_tick(_make_tick(price=100.0, timestamp=5.0))
+        await agg._process_tick(_make_tick(price=110.0, timestamp=10.0))
+
+        # Second boundary → normal close, no second backfill
+        await agg._process_tick(_make_tick(price=120.0, timestamp=20.0))
+
+        assert agg._volume_feed.get_candles.await_count == 1
+
+    async def test_backfill_empty_is_safe(self):
+        agg = _make_aggregator(interval=10)  # default: get_candles returns []
+
+        await agg._process_tick(_make_tick(price=100.0, timestamp=5.0))
+        await agg._process_tick(_make_tick(price=110.0, timestamp=10.0))
+
+        assert len(agg.closed_candles()) == 0
 
 
 class TestCandleData:

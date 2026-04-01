@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
-from typing import Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
+
+if TYPE_CHECKING:
+    from polybot.domain.models import Candle
 
 
 @runtime_checkable
@@ -15,4 +18,8 @@ class VolumeFeed(Protocol):
 
     async def get_candle_volumes(self, count: int, interval_sec: int = 300) -> list[float]:
         """Get volume for the last N candle intervals."""
+        ...
+
+    async def get_candles(self, count: int, interval_sec: int = 300) -> list[Candle]:
+        """Get last N OHLCV candles for history backfill."""
         ...

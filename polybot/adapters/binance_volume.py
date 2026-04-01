@@ -1,10 +1,12 @@
-"""Adapter: Binance klines API for BTC volume."""
+"""Adapter: Binance klines API for BTC volume and OHLCV candles."""
 
 from __future__ import annotations
 
 import logging
 
 import httpx
+
+from polybot.domain.models import Candle
 
 logger = logging.getLogger(__name__)
 
@@ -72,6 +74,34 @@ class BinanceVolumeAdapter:
             return []
 
         return [float(k[5]) for k in klines]
+
+    async def get_candles(self, count: int, interval_sec: int = 300) -> list[Candle]:
+        """Get last N OHLCV candles as Candle objects."""
+        interval = _INTERVAL_MAP.get(interval_sec, "5m")
+
+        params = {
+            "symbol": self._symbol,
+            "interval": interval,
+            "limit": count,
+        }
+
+        klines = await self._fetch_klines(params)
+        if not klines:
+            return []
+
+        # Binance kline: [open_time, open, high, low, close, volume, close_time, ...]
+        return [
+            Candle(
+                open=float(k[1]),
+                high=float(k[2]),
+                low=float(k[3]),
+                close=float(k[4]),
+                volume=float(k[5]),
+                start_time=k[0] / 1000.0,
+                end_time=k[6] / 1000.0,
+            )
+            for k in klines
+        ]
 
     async def _fetch_klines(self, params: dict) -> list:
         """Call Binance klines endpoint."""

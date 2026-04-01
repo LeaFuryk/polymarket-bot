@@ -18,7 +18,7 @@ from polybot.ports.volume_feed import VolumeFeed
 logger = logging.getLogger(__name__)
 
 CANDLE_INTERVAL = 300  # 5 minutes
-HISTORY_SIZE = 20
+HISTORY_SIZE = 40  # needs 35+ for MACD, keep extra buffer
 
 
 class CandleAggregator:
@@ -63,9 +63,10 @@ class CandleAggregator:
                 if self._first_candle_complete:
                     await self._close_candle()
                 else:
-                    # First candle was incomplete (started mid-interval) — discard
-                    logger.info("Discarding incomplete startup candle")
+                    # First candle was incomplete (started mid-interval) — discard and backfill
+                    logger.info("Discarding incomplete startup candle, backfilling history")
                     self._first_candle_complete = True
+                    await self._backfill()
             self._partial = PartialCandle(
                 open=tick.price,
                 high=tick.price,
@@ -103,6 +104,17 @@ class CandleAggregator:
             candle.close,
             candle.volume,
         )
+
+    async def _backfill(self) -> None:
+        """Load historical candles from VolumeFeed to warm up indicators."""
+        try:
+            candles = await self._volume_feed.get_candles(self._history.maxlen, self._interval)
+            # Exclude the last kline — it's the current in-progress candle
+            for candle in candles[:-1]:
+                self._history.append(candle)
+            logger.info("Backfilled %d candles from volume feed", len(self._history))
+        except Exception:
+            logger.exception("Backfill failed")
 
     # -- Public read interface ---------------------------------------------
 
