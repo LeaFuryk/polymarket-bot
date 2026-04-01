@@ -10,10 +10,11 @@
 ## Skills
 - `notion-tasks` — Task management from Notion board. Always check Notion before starting work.
 - `tars` — All GitHub operations via tars-bot-01 GitHub App (push, PRs, comments, reviews)
-- `codex` — Code review gate. Run `/codex:rescue` after implementation to review changes.
+- `codex` — Code review gate. Run `/codex:rescue --model gpt-5.4` after implementation to review changes.
+- `superpowers` — Planning, TDD, systematic debugging, parallel agents, code review, git worktrees. Use `superpowers:writing-plans` before multi-step tasks, `superpowers:test-driven-development` before implementing features, `superpowers:verification-before-completion` before claiming work is done.
 
 ## Code Review
-- After writing or modifying code, run a Codex review (`/codex:rescue`) on changed files before marking work as complete
+- After writing or modifying code, run a Codex review (`/codex:rescue --model gpt-5.4`) on changed files before marking work as complete
 - Fix any issues found by the review before presenting results
 
 ## Conventions

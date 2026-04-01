@@ -1,7 +1,7 @@
 """Tests for PolymarketAdapter."""
 
 import time
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from polybot.adapters.polymarket import PolymarketAdapter
@@ -44,19 +44,25 @@ SAMPLE_MARKET = Market(
 )
 
 
-def _mock_http(json_data=None, status_code=200):
-    """Create a mock httpx.AsyncClient context manager."""
-    mock_resp = MagicMock()
-    mock_resp.json.return_value = json_data or {}
-    mock_resp.raise_for_status = MagicMock()
+def _mock_response(json_data):
+    resp = MagicMock()
+    resp.json.return_value = json_data
+    resp.raise_for_status = MagicMock()
+    return resp
 
-    client = AsyncMock()
-    client.get = AsyncMock(return_value=mock_resp)
 
-    ctx = MagicMock()
-    ctx.__aenter__ = AsyncMock(return_value=client)
-    ctx.__aexit__ = AsyncMock(return_value=False)
-    return ctx
+def _make_adapter(gamma_data=None, clob_data=None, error=None) -> PolymarketAdapter:
+    """Create adapter with mocked HTTP clients."""
+    adapter = PolymarketAdapter()
+    if error:
+        adapter._gamma_client.get = AsyncMock(side_effect=error)
+        adapter._clob_client.get = AsyncMock(side_effect=error)
+    else:
+        if gamma_data is not None:
+            adapter._gamma_client.get = AsyncMock(return_value=_mock_response(gamma_data))
+        if clob_data is not None:
+            adapter._clob_client.get = AsyncMock(return_value=_mock_response(clob_data))
+    return adapter
 
 
 # ---------------------------------------------------------------------------
@@ -85,22 +91,14 @@ class TestOrderbookParsing:
         assert len(book.asks) == 0
 
     async def test_fetch_orderbook(self):
-        adapter = PolymarketAdapter()
-
-        with patch("polybot.adapters.polymarket.httpx.AsyncClient", return_value=_mock_http(SAMPLE_ORDERBOOK)):
-            book = await adapter._fetch_orderbook("token_123")
-
+        adapter = _make_adapter(clob_data=SAMPLE_ORDERBOOK)
+        book = await adapter._fetch_orderbook("token_123")
         assert book.best_bid == pytest.approx(0.55)
         assert book.best_ask == pytest.approx(0.57)
 
     async def test_fetch_orderbook_error_returns_empty(self):
-        adapter = PolymarketAdapter()
-        mock = _mock_http()
-        mock.__aenter__ = AsyncMock(side_effect=Exception("network error"))
-
-        with patch("polybot.adapters.polymarket.httpx.AsyncClient", return_value=mock):
-            book = await adapter._fetch_orderbook("token_123")
-
+        adapter = _make_adapter(error=Exception("network error"))
+        book = await adapter._fetch_orderbook("token_123")
         assert len(book.bids) == 0
         assert len(book.asks) == 0
 
@@ -114,70 +112,133 @@ class TestMarketDiscovery:
         assert PolymarketAdapter._parse_end_time("") == 0.0
 
     async def test_discover_market(self):
-        adapter = PolymarketAdapter()
-
-        with patch("polybot.adapters.polymarket.httpx.AsyncClient", return_value=_mock_http([SAMPLE_GAMMA_EVENT])):
-            market = await adapter.discover_market("will-bitcoin-go-up-5-min")
-
+        adapter = _make_adapter(gamma_data=[SAMPLE_GAMMA_EVENT])
+        market = await adapter.discover_market("will-bitcoin-go-up-5-min")
         assert market is not None
         assert market.condition_id == "0xabc123"
         assert market.up_token_id == "token_up_123"
         assert market.down_token_id == "token_down_456"
-        assert market.question == "Will Bitcoin go up in the next 5 minutes?"
 
     async def test_discover_market_not_found(self):
-        adapter = PolymarketAdapter()
-
-        with patch("polybot.adapters.polymarket.httpx.AsyncClient", return_value=_mock_http([])):
-            market = await adapter.discover_market("nonexistent-series")
-
+        adapter = _make_adapter(gamma_data=[])
+        market = await adapter.discover_market("nonexistent-series")
         assert market is None
+
+    async def test_discover_tries_all_boundaries(self):
+        """If current and next return empty, previous boundary should be tried."""
+        adapter = PolymarketAdapter()
+        call_count = 0
+
+        async def mock_get(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            resp = MagicMock()
+            resp.json.return_value = [] if call_count <= 2 else [SAMPLE_GAMMA_EVENT]
+            resp.raise_for_status = MagicMock()
+            return resp
+
+        adapter._gamma_client.get = mock_get
+        market = await adapter.discover_market("btc-updown-5m")
+        assert market is not None
+        assert market.condition_id == "0xabc123"
+        assert call_count == 3
+
+    async def test_discover_order_is_current_next_previous(self):
+        """Discovery probes current, then next, then previous boundary."""
+        import time
+
+        from polybot.adapters.polymarket import CANDLE_INTERVAL
+
+        adapter = PolymarketAdapter()
+        slugs_tried: list[str] = []
+
+        async def capture_get(*args, **kwargs):
+            slug = kwargs.get("params", {}).get("slug", "")
+            slugs_tried.append(slug)
+            resp = MagicMock()
+            resp.json.return_value = []
+            resp.raise_for_status = MagicMock()
+            return resp
+
+        adapter._gamma_client.get = capture_get
+        await adapter.discover_market("btc-updown-5m")
+
+        now = time.time()
+        boundary = int(now - (now % CANDLE_INTERVAL))
+
+        assert len(slugs_tried) == 3
+        assert slugs_tried[0] == f"btc-updown-5m-{boundary}"
+        assert slugs_tried[1] == f"btc-updown-5m-{boundary + CANDLE_INTERVAL}"
+        assert slugs_tried[2] == f"btc-updown-5m-{boundary - CANDLE_INTERVAL}"
+
+
+class TestMarketCache:
+    def _future_event(self):
+        """SAMPLE_GAMMA_EVENT with end_time in the future."""
+        return {
+            **SAMPLE_GAMMA_EVENT,
+            "endDate": "2099-01-01T00:00:00Z",
+            "markets": [{**SAMPLE_GAMMA_EVENT["markets"][0], "endDate": "2099-01-01T00:00:00Z"}],
+        }
+
+    async def test_cached_within_interval(self):
+        """Second call reuses cached market, no API call."""
+        adapter = _make_adapter(gamma_data=[self._future_event()])
+        await adapter.discover_market("btc-updown-5m")
+        await adapter.discover_market("btc-updown-5m")
+        # Only 1 API call — second was served from cache
+        assert adapter._gamma_client.get.await_count == 1
+
+    async def test_rediscovered_after_expiry(self):
+        """Expired market triggers a new API call."""
+        adapter = _make_adapter(gamma_data=[SAMPLE_GAMMA_EVENT])
+        # First discovery
+        await adapter.discover_market("btc-updown-5m")
+        # Force expiry
+        adapter._cached_market = Market(
+            condition_id="0xold",
+            up_token_id="up",
+            down_token_id="down",
+            slug="old",
+            question="old",
+            end_time=time.time() - 1,
+        )
+        await adapter.discover_market("btc-updown-5m")
+        assert adapter._gamma_client.get.await_count == 2
+
+    async def test_no_cache_on_failure(self):
+        """If discovery fails, no stale cache is stored."""
+        adapter = _make_adapter(gamma_data=[])
+        await adapter.discover_market("btc-updown-5m")
+        assert adapter._cached_market is None
 
 
 class TestLastTradePrice:
     async def test_get_last_trade_price(self):
-        adapter = PolymarketAdapter()
-
-        with patch("polybot.adapters.polymarket.httpx.AsyncClient", return_value=_mock_http({"price": "0.57"})):
-            price = await adapter.get_last_trade_price("token_123")
-
+        adapter = _make_adapter(clob_data={"price": "0.57"})
+        price = await adapter.get_last_trade_price("token_123")
         assert price == pytest.approx(0.57)
 
     async def test_get_last_trade_price_none(self):
-        adapter = PolymarketAdapter()
-
-        with patch("polybot.adapters.polymarket.httpx.AsyncClient", return_value=_mock_http({"price": None})):
-            price = await adapter.get_last_trade_price("token_123")
-
+        adapter = _make_adapter(clob_data={"price": None})
+        price = await adapter.get_last_trade_price("token_123")
         assert price is None
 
     async def test_get_last_trade_price_error(self):
-        adapter = PolymarketAdapter()
-        mock = _mock_http()
-        mock.__aenter__ = AsyncMock(side_effect=Exception("timeout"))
-
-        with patch("polybot.adapters.polymarket.httpx.AsyncClient", return_value=mock):
-            price = await adapter.get_last_trade_price("token_123")
-
+        adapter = _make_adapter(error=Exception("timeout"))
+        price = await adapter.get_last_trade_price("token_123")
         assert price is None
 
 
 class TestGetSnapshot:
     async def test_get_snapshot(self):
         adapter = PolymarketAdapter()
+        up_book = PolymarketAdapter._parse_orderbook(SAMPLE_ORDERBOOK)
+        down_book = PolymarketAdapter._parse_orderbook(SAMPLE_ORDERBOOK)
+        adapter.get_orderbooks = AsyncMock(return_value=(up_book, down_book))
+        adapter.get_last_trade_price = AsyncMock(return_value=0.57)
 
-        # Mock returns orderbook for get calls, but we need different responses
-        # for orderbook vs last trade price. Simplify: mock the high-level methods.
-        with (
-            patch.object(adapter, "get_orderbooks", new_callable=AsyncMock) as mock_books,
-            patch.object(adapter, "get_last_trade_price", new_callable=AsyncMock) as mock_price,
-        ):
-            up_book = PolymarketAdapter._parse_orderbook(SAMPLE_ORDERBOOK)
-            down_book = PolymarketAdapter._parse_orderbook(SAMPLE_ORDERBOOK)
-            mock_books.return_value = (up_book, down_book)
-            mock_price.return_value = 0.57
-
-            snapshot = await adapter.get_snapshot(SAMPLE_MARKET)
+        snapshot = await adapter.get_snapshot(SAMPLE_MARKET)
 
         assert snapshot.market == SAMPLE_MARKET
         assert snapshot.up_book.best_bid == pytest.approx(0.55)

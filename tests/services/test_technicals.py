@@ -101,6 +101,11 @@ class TestRSI:
         result = rsi(closes)
         assert result == 0.0
 
+    def test_flat_series_returns_50(self):
+        closes = [100.0] * 20
+        result = rsi(closes)
+        assert result == 50.0
+
     def test_typical_range(self):
         result = rsi(CLOSES)
         # Trending up slightly, expect RSI > 50

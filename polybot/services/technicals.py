@@ -35,6 +35,8 @@ def rsi(closes: Sequence[float], period: int = 14) -> float | None:
         avg_gain = (avg_gain * (period - 1) + gains[i]) / period
         avg_loss = (avg_loss * (period - 1) + losses[i]) / period
 
+    if avg_gain == 0 and avg_loss == 0:
+        return 50.0  # indeterminate — no movement
     if avg_loss == 0:
         return 100.0
     rs = avg_gain / avg_loss
@@ -71,7 +73,7 @@ def bollinger_pct_b(closes: Sequence[float], period: int = 20, num_std: float = 
 
     window = closes[-period:]
     mid = statistics.mean(window)
-    std = statistics.stdev(window)
+    std = statistics.pstdev(window)
 
     if std == 0:
         return 0.5

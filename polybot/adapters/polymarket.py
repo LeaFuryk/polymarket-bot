@@ -6,12 +6,11 @@ import asyncio
 import json
 import logging
 import time
+from datetime import datetime
 
 import httpx
 
 from polybot.domain.models import Market, MarketSnapshot, OrderBook, OrderBookLevel
-
-logger = logging.getLogger(__name__)
 
 CLOB_HOST = "https://clob.polymarket.com"
 GAMMA_HOST = "https://gamma-api.polymarket.com"
@@ -27,29 +26,40 @@ class PolymarketAdapter:
 
     def __init__(
         self,
-        *,
         clob_host: str = CLOB_HOST,
         gamma_host: str = GAMMA_HOST,
+        logger: logging.Logger | None = None,
     ) -> None:
         self._clob_host = clob_host
         self._gamma_host = gamma_host
+        self._log = logger or logging.getLogger(__name__)
+        self._clob_client = httpx.AsyncClient(base_url=clob_host, timeout=10.0)
+        self._gamma_client = httpx.AsyncClient(base_url=gamma_host, timeout=10.0)
+        self._cached_market: Market | None = None
+
+    async def close(self) -> None:
+        """Close HTTP clients."""
+        await self._clob_client.aclose()
+        await self._gamma_client.aclose()
 
     # -- MarketFeed interface -----------------------------------------------
 
     async def discover_market(self, series_slug: str) -> Market | None:
-        """Find the current active candle market via Gamma API."""
+        """Find the current active candle market. Cached until expiry."""
+        if self._cached_market is not None and self._cached_market.end_time > time.time():
+            return self._cached_market
+
         now = time.time()
         boundary = int(now - (now % CANDLE_INTERVAL))
-        slug = f"{series_slug}-{boundary}"
 
-        market = await self._fetch_market_by_slug(slug)
-        if market is not None:
-            return market
-
-        # Fallback: try next boundary
-        next_boundary = boundary + CANDLE_INTERVAL
-        next_slug = f"{series_slug}-{next_boundary}"
-        return await self._fetch_market_by_slug(next_slug)
+        # Try current, then next (approaching boundary), then previous (API lag)
+        for offset in [0, CANDLE_INTERVAL, -CANDLE_INTERVAL]:
+            slug = f"{series_slug}-{boundary + offset}"
+            market = await self._fetch_market_by_slug(slug)
+            if market is not None:
+                self._cached_market = market
+                return market
+        return None
 
     async def get_orderbooks(self, market: Market) -> tuple[OrderBook, OrderBook]:
         """Fetch UP and DOWN orderbooks in parallel."""
@@ -62,18 +72,16 @@ class PolymarketAdapter:
     async def get_last_trade_price(self, token_id: str) -> float | None:
         """Fetch last trade price for a token."""
         try:
-            async with httpx.AsyncClient() as client:
-                resp = await client.get(
-                    f"{self._clob_host}/last-trade-price",
-                    params={"token_id": token_id},
-                    timeout=10.0,
-                )
-                resp.raise_for_status()
-                data = resp.json()
-                price = data.get("price")
-                return float(price) if price is not None else None
+            resp = await self._clob_client.get(
+                "/last-trade-price",
+                params={"token_id": token_id},
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            price = data.get("price")
+            return float(price) if price is not None else None
         except Exception:
-            logger.exception("Failed to fetch last trade price for %s", token_id)
+            self._log.exception("Failed to fetch last trade price for %s", token_id)
             return None
 
     async def get_snapshot(self, market: Market) -> MarketSnapshot:
@@ -94,17 +102,12 @@ class PolymarketAdapter:
     async def _fetch_market_by_slug(self, slug: str) -> Market | None:
         """Query Gamma API for a market by slug."""
         try:
-            async with httpx.AsyncClient() as client:
-                resp = await client.get(
-                    f"{self._gamma_host}/events",
-                    params={"slug": slug},
-                    timeout=10.0,
-                )
-                resp.raise_for_status()
-                events = resp.json()
+            resp = await self._gamma_client.get("/events", params={"slug": slug})
+            resp.raise_for_status()
+            events = resp.json()
 
             if not events:
-                logger.debug("No market found for slug: %s", slug)
+                self._log.debug("No market found for slug: %s", slug)
                 return None
 
             event = events[0]
@@ -115,7 +118,6 @@ class PolymarketAdapter:
             mkt = markets[0]
             condition_id = mkt.get("conditionId", "")
 
-            # Token IDs are JSON-encoded in clobTokenIds
             token_ids_raw = mkt.get("clobTokenIds", "[]")
             if isinstance(token_ids_raw, str):
                 token_ids = json.loads(token_ids_raw)
@@ -123,10 +125,9 @@ class PolymarketAdapter:
                 token_ids = token_ids_raw
 
             if len(token_ids) < 2:
-                logger.warning("Market %s has fewer than 2 token IDs", slug)
+                self._log.warning("Market %s has fewer than 2 token IDs", slug)
                 return None
 
-            # Parse end time
             end_date = mkt.get("endDate", event.get("endDate", ""))
             end_time = self._parse_end_time(end_date)
 
@@ -142,7 +143,7 @@ class PolymarketAdapter:
                 volume=volume,
             )
         except Exception:
-            logger.exception("Failed to discover market for slug: %s", slug)
+            self._log.exception("Failed to discover market for slug: %s", slug)
             return None
 
     @staticmethod
@@ -151,9 +152,6 @@ class PolymarketAdapter:
         if not end_date:
             return 0.0
         try:
-            from datetime import datetime
-
-            # Handle both "2024-01-01T00:00:00Z" and "2024-01-01T00:00:00.000Z"
             end_date = end_date.replace("Z", "+00:00")
             dt = datetime.fromisoformat(end_date)
             return dt.timestamp()
@@ -165,18 +163,12 @@ class PolymarketAdapter:
     async def _fetch_orderbook(self, token_id: str) -> OrderBook:
         """Fetch orderbook for a single token."""
         try:
-            async with httpx.AsyncClient() as client:
-                resp = await client.get(
-                    f"{self._clob_host}/book",
-                    params={"token_id": token_id},
-                    timeout=10.0,
-                )
-                resp.raise_for_status()
-                data = resp.json()
-
+            resp = await self._clob_client.get("/book", params={"token_id": token_id})
+            resp.raise_for_status()
+            data = resp.json()
             return self._parse_orderbook(data)
         except Exception:
-            logger.exception("Failed to fetch orderbook for %s", token_id)
+            self._log.exception("Failed to fetch orderbook for %s", token_id)
             return OrderBook(bids=(), asks=(), timestamp=time.time())
 
     @staticmethod

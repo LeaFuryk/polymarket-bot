@@ -8,8 +8,6 @@ import httpx
 
 from polybot.domain.models import Candle
 
-logger = logging.getLogger(__name__)
-
 BINANCE_BASE_URL = "https://api.binance.com"
 KLINES_ENDPOINT = "/api/v3/klines"
 
@@ -33,11 +31,16 @@ class BinanceVolumeAdapter:
     def __init__(
         self,
         symbol: str = "BTCUSDT",
-        *,
         base_url: str = BINANCE_BASE_URL,
+        logger: logging.Logger | None = None,
     ) -> None:
         self._symbol = symbol
-        self._base_url = base_url
+        self._log = logger or logging.getLogger(__name__)
+        self._client = httpx.AsyncClient(base_url=base_url, timeout=10.0)
+
+    async def close(self) -> None:
+        """Close the HTTP client."""
+        await self._client.aclose()
 
     async def get_volume(self, start_time: float, end_time: float) -> float:
         """Get BTC volume between start_time and end_time (epoch seconds)."""
@@ -56,7 +59,6 @@ class BinanceVolumeAdapter:
         if not kline:
             return 0.0
 
-        # Index 5 = base asset volume (BTC)
         return float(kline[0][5])
 
     async def get_candle_volumes(self, count: int, interval_sec: int = 300) -> list[float]:
@@ -89,7 +91,6 @@ class BinanceVolumeAdapter:
         if not klines:
             return []
 
-        # Binance kline: [open_time, open, high, low, close, volume, close_time, ...]
         return [
             Candle(
                 open=float(k[1]),
@@ -106,14 +107,9 @@ class BinanceVolumeAdapter:
     async def _fetch_klines(self, params: dict) -> list:
         """Call Binance klines endpoint."""
         try:
-            async with httpx.AsyncClient() as client:
-                resp = await client.get(
-                    f"{self._base_url}{KLINES_ENDPOINT}",
-                    params=params,
-                    timeout=10.0,
-                )
-                resp.raise_for_status()
-                return resp.json()
+            resp = await self._client.get(KLINES_ENDPOINT, params=params)
+            resp.raise_for_status()
+            return resp.json()
         except Exception:
-            logger.exception("Binance klines request failed")
+            self._log.exception("Binance klines request failed")
             return []

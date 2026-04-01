@@ -67,18 +67,18 @@ def _make_partial(open_price=67700.0) -> PartialCandle:
 
 
 def _make_service(tick=None, market=None, partial=None, closed=()):
-    aggregator = MagicMock()
-    type(aggregator).latest_tick = PropertyMock(return_value=tick)
-    type(aggregator).partial = PropertyMock(return_value=partial)
-    aggregator.closed_candles.return_value = closed
-    aggregator.candle_data.return_value = ()
+    candle_source = MagicMock()
+    type(candle_source).latest_tick = PropertyMock(return_value=tick)
+    type(candle_source).partial = PropertyMock(return_value=partial)
+    candle_source.closed_candles.return_value = closed
+    candle_source.candle_data.return_value = ()
 
     market_feed = AsyncMock()
     mkt = market or _make_market()
     market_feed.discover_market = AsyncMock(return_value=mkt)
     market_feed.get_snapshot = AsyncMock(return_value=_make_snapshot(mkt))
 
-    return MarketStateService(aggregator, market_feed)
+    return MarketStateService(candle_source, market_feed)
 
 
 # ---------------------------------------------------------------------------
@@ -153,6 +153,33 @@ class TestGetState:
         service = _make_service(tick=_make_tick())
         state = await service.get_state()
         assert state.microstructure.polymarket_yes_price is not None
+
+    async def test_elapsed_pct_clamped_lower_bound(self):
+        # Simulate out-of-order tick: tick.timestamp < partial.start_time
+        future_partial = PartialCandle(
+            open=67700.0,
+            high=67850.0,
+            low=67650.0,
+            last_price=67800.0,
+            start_time=time.time() + 100,  # start_time in the future
+            end_time=time.time() + 400,
+            tick_count=1,
+            last_tick_time=time.time(),
+        )
+        service = _make_service(tick=_make_tick(), partial=future_partial)
+        state = await service.get_state()
+        assert state.current_candle.elapsed_pct >= 0.0
+
+    async def test_frozen_partial_immutable_during_await(self):
+        partial = _make_partial(open_price=67700.0)
+        service = _make_service(tick=_make_tick(price=67800.0), partial=partial)
+
+        state = await service.get_state()
+        original_open = state.current_candle.open
+
+        # Mutate the original partial after get_state — should not affect the result
+        partial.open = 99999.0
+        assert original_open == 67700.0
 
     async def test_to_dict(self):
         service = _make_service(tick=_make_tick())

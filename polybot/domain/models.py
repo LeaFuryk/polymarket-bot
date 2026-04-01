@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import dataclasses
-import time
 from dataclasses import dataclass
 
 # ---------------------------------------------------------------------------
@@ -19,20 +18,6 @@ class BtcTick:
     bid: float
     ask: float
     timestamp: float  # observationsTimestamp (seconds since epoch)
-
-
-# ---------------------------------------------------------------------------
-# BTC volume
-# ---------------------------------------------------------------------------
-
-
-@dataclass(frozen=True)
-class BtcVolume:
-    """BTC trading volume for a candle interval."""
-
-    volume: float  # base asset volume (BTC)
-    start_time: float
-    end_time: float
 
 
 # ---------------------------------------------------------------------------
@@ -75,6 +60,29 @@ class PartialCandle:
         self.last_price = tick.price
         self.last_tick_time = tick.timestamp
         self.tick_count += 1
+
+    def freeze(self) -> PartialCandleSnapshot:
+        """Return an immutable snapshot of the current state."""
+        return PartialCandleSnapshot(
+            open=self.open,
+            high=self.high,
+            low=self.low,
+            last_price=self.last_price,
+            start_time=self.start_time,
+            end_time=self.end_time,
+        )
+
+
+@dataclass(frozen=True)
+class PartialCandleSnapshot:
+    """Immutable snapshot of a PartialCandle, safe to use across awaits."""
+
+    open: float
+    high: float
+    low: float
+    last_price: float
+    start_time: float
+    end_time: float
 
 
 # ---------------------------------------------------------------------------
@@ -145,10 +153,6 @@ class Market:
     question: str
     end_time: float  # resolution timestamp (epoch seconds)
     volume: float = 0.0  # cumulative market volume (USD)
-
-    @property
-    def time_remaining(self) -> float:
-        return max(0.0, self.end_time - time.time())
 
 
 @dataclass(frozen=True)

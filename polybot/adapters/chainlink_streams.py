@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import hmac
 import json
@@ -12,8 +13,6 @@ from collections.abc import AsyncIterator
 import websockets
 
 from polybot.domain.models import BtcTick
-
-logger = logging.getLogger(__name__)
 
 WS_BASE_URL = "wss://ws.dataengine.chain.link"
 WS_PATH = "/api/v1/ws"
@@ -50,13 +49,16 @@ class ChainlinkStreamsAdapter:
         user_id: str,
         secret: str,
         feed_id: str = BTC_USD_FEED_ID,
-        *,
         ws_base_url: str = WS_BASE_URL,
+        max_reconnect_retries: int = 5,
+        logger: logging.Logger | None = None,
     ) -> None:
         self._user_id = user_id
         self._secret = secret
         self._feed_id = feed_id
         self._ws_base_url = ws_base_url
+        self._max_reconnect_retries = max_reconnect_retries
+        self._log = logger or logging.getLogger(__name__)
         self._ws: websockets.WebSocketClientProtocol | None = None
         self._running = False
 
@@ -68,10 +70,10 @@ class ChainlinkStreamsAdapter:
         url = f"{self._ws_base_url}{path}"
         headers = self._build_auth_headers("GET", path)
 
-        logger.info("Connecting to Chainlink Data Streams: %s", url)
+        self._log.info("Connecting to Chainlink Data Streams: %s", url)
         self._ws = await websockets.connect(url, additional_headers=headers)
         self._running = True
-        logger.info("Connected to Chainlink Data Streams")
+        self._log.info("Connected to Chainlink Data Streams")
 
     async def disconnect(self) -> None:
         """Close WebSocket connection."""
@@ -79,7 +81,7 @@ class ChainlinkStreamsAdapter:
         if self._ws is not None:
             await self._ws.close()
             self._ws = None
-            logger.info("Disconnected from Chainlink Data Streams")
+            self._log.info("Disconnected from Chainlink Data Streams")
 
     async def ticks(self) -> AsyncIterator[BtcTick]:
         """Yield BtcTick for each incoming V3 report."""
@@ -93,11 +95,11 @@ class ChainlinkStreamsAdapter:
                 if tick is not None:
                     yield tick
             except websockets.ConnectionClosed:
-                logger.warning("WebSocket connection closed")
+                self._log.warning("WebSocket connection closed")
                 if self._running:
                     await self._reconnect()
             except Exception:
-                logger.exception("Error processing WebSocket message")
+                self._log.exception("Error processing WebSocket message")
 
     # -- Auth --------------------------------------------------------------
 
@@ -125,17 +127,17 @@ class ChainlinkStreamsAdapter:
         try:
             data = json.loads(raw)
         except json.JSONDecodeError:
-            logger.warning("Non-JSON message received: %s", raw[:100])
+            self._log.warning("Non-JSON message received: %s", raw[:100])
             return None
 
         report = data.get("report")
         if report is None:
-            logger.debug("Message without report key: %s", data)
+            self._log.debug("Message without report key: %s", data)
             return None
 
         full_report_hex = report.get("fullReport")
         if full_report_hex is None:
-            logger.warning("Report missing fullReport field")
+            self._log.warning("Report missing fullReport field")
             return None
 
         return self._decode_v3_report(full_report_hex)
@@ -145,17 +147,12 @@ class ChainlinkStreamsAdapter:
         from eth_abi import decode
 
         try:
-            # Strip 0x prefix
             hex_str = full_report_hex
             if hex_str.startswith("0x") or hex_str.startswith("0X"):
                 hex_str = hex_str[2:]
 
             report_bytes = bytes.fromhex(hex_str)
-
-            # Stage 1: outer envelope → extract reportBlob
             _, report_blob, _, _, _ = decode(_OUTER_ABI, report_bytes)
-
-            # Stage 2: inner V3 fields
             v3 = decode(_V3_ABI, report_blob)
 
             return BtcTick(
@@ -165,17 +162,25 @@ class ChainlinkStreamsAdapter:
                 timestamp=float(v3[2]),
             )
         except Exception:
-            logger.exception("Failed to decode V3 report")
+            self._log.exception("Failed to decode V3 report")
             return None
 
     # -- Reconnect ---------------------------------------------------------
 
     async def _reconnect(self) -> None:
-        """Attempt to reconnect after a dropped connection."""
-        logger.info("Attempting to reconnect...")
+        """Reconnect with exponential backoff."""
         self._ws = None
-        try:
-            await self.connect()
-        except Exception:
-            logger.exception("Reconnect failed")
-            self._running = False
+        base_delay = 1.0
+
+        for attempt in range(1, self._max_reconnect_retries + 1):
+            delay = base_delay * 2 ** (attempt - 1)
+            self._log.info("Reconnect attempt %d/%d in %.1fs", attempt, self._max_reconnect_retries, delay)
+            await asyncio.sleep(delay)
+            try:
+                await self.connect()
+                return
+            except Exception:
+                self._log.warning("Reconnect attempt %d/%d failed", attempt, self._max_reconnect_retries)
+
+        self._log.error("All reconnect attempts exhausted, stopping stream")
+        self._running = False

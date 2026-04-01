@@ -16,6 +16,18 @@ from polybot.services.market_state import MarketStateService
 logging.basicConfig(level=logging.WARNING, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 
 
+async def poll_state(service: MarketStateService) -> None:
+    """Print market state every 30 seconds."""
+    await asyncio.sleep(2)  # wait for first tick
+    while True:
+        state = await service.get_state()
+        if state is not None:
+            print(json.dumps(state.to_dict(), indent=2))
+        else:
+            print("Waiting for data...")
+        await asyncio.sleep(30)
+
+
 async def main() -> None:
     load_dotenv()
 
@@ -30,18 +42,18 @@ async def main() -> None:
     service = MarketStateService(aggregator, market_feed)
 
     await price_stream.connect()
-    asyncio.create_task(aggregator.run())
 
-    # Wait for first tick
-    await asyncio.sleep(2)
-
-    while True:
-        state = await service.get_state()
-        if state is not None:
-            print(json.dumps(state.to_dict(), indent=2))
-        else:
-            print("Waiting for data...")
-        await asyncio.sleep(30)
+    try:
+        # Run aggregator and poll loop concurrently.
+        # If either fails, the exception propagates and we shut down.
+        await asyncio.gather(
+            aggregator.run(),
+            poll_state(service),
+        )
+    finally:
+        await price_stream.disconnect()
+        await volume_feed.close()
+        await market_feed.close()
 
 
 if __name__ == "__main__":
