@@ -236,7 +236,8 @@ class TestGetSnapshot:
         up_book = PolymarketAdapter._parse_orderbook(SAMPLE_ORDERBOOK)
         down_book = PolymarketAdapter._parse_orderbook(SAMPLE_ORDERBOOK)
         adapter.get_orderbooks = AsyncMock(return_value=(up_book, down_book))
-        adapter.get_last_trade_price = AsyncMock(return_value=0.57)
+        adapter.get_last_trade_price = AsyncMock(side_effect=[0.57, 0.43])
+        adapter.get_market_volume = AsyncMock(return_value=12345.0)
 
         snapshot = await adapter.get_snapshot(SAMPLE_MARKET)
 
@@ -244,3 +245,27 @@ class TestGetSnapshot:
         assert snapshot.up_book.best_bid == pytest.approx(0.55)
         assert snapshot.down_book.best_ask == pytest.approx(0.57)
         assert snapshot.last_trade_price == pytest.approx(0.57)
+        assert snapshot.down_last_trade_price == pytest.approx(0.43)
+        assert snapshot.volume == pytest.approx(12345.0)
+
+
+class TestGetMarketVolume:
+    async def test_get_market_volume(self):
+        adapter = _make_adapter(gamma_data=[{"markets": [{"volumeClob": "9999.5"}]}])
+        vol = await adapter.get_market_volume("some-slug")
+        assert vol == pytest.approx(9999.5)
+
+    async def test_get_market_volume_fallback_to_volume(self):
+        adapter = _make_adapter(gamma_data=[{"markets": [{"volume": "500.0"}]}])
+        vol = await adapter.get_market_volume("some-slug")
+        assert vol == pytest.approx(500.0)
+
+    async def test_get_market_volume_empty_events(self):
+        adapter = _make_adapter(gamma_data=[])
+        vol = await adapter.get_market_volume("some-slug")
+        assert vol == 0.0
+
+    async def test_get_market_volume_error(self):
+        adapter = _make_adapter(error=Exception("timeout"))
+        vol = await adapter.get_market_volume("some-slug")
+        assert vol == 0.0

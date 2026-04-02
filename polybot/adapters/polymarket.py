@@ -86,16 +86,34 @@ class PolymarketAdapter:
 
     async def get_snapshot(self, market: Market) -> MarketSnapshot:
         """Fetch complete market state."""
-        (up_book, down_book), last_price = await asyncio.gather(
+        (up_book, down_book), up_price, down_price, volume = await asyncio.gather(
             self.get_orderbooks(market),
             self.get_last_trade_price(market.up_token_id),
+            self.get_last_trade_price(market.down_token_id),
+            self.get_market_volume(market.slug),
         )
         return MarketSnapshot(
             market=market,
             up_book=up_book,
             down_book=down_book,
-            last_trade_price=last_price,
+            last_trade_price=up_price,
+            down_last_trade_price=down_price,
+            volume=volume,
         )
+
+    async def get_market_volume(self, slug: str) -> float:
+        """Fetch fresh cumulative volume from Gamma API."""
+        try:
+            resp = await self._gamma_client.get("/events", params={"slug": slug})
+            resp.raise_for_status()
+            events = resp.json()
+            if not events:
+                return 0.0
+            mkt = events[0].get("markets", [{}])[0]
+            return float(mkt.get("volumeClob", mkt.get("volume", 0)))
+        except Exception:
+            self._log.exception("Failed to fetch volume for %s", slug)
+            return 0.0
 
     # -- Gamma API ----------------------------------------------------------
 

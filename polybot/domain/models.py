@@ -131,12 +131,22 @@ class OrderBook:
         return sum(level.price * level.size for level in self.asks)
 
     @property
+    def bid_volume(self) -> float:
+        """Raw bid size (unweighted)."""
+        return sum(level.size for level in self.bids)
+
+    @property
+    def ask_volume(self) -> float:
+        """Raw ask size (unweighted)."""
+        return sum(level.size for level in self.asks)
+
+    @property
     def imbalance(self) -> float:
-        """(bid_depth - ask_depth) / (bid_depth + ask_depth). Range [-1, 1]."""
-        total = self.bid_depth + self.ask_depth
+        """(bid_vol - ask_vol) / (bid_vol + ask_vol). Range [-1, 1]."""
+        total = self.bid_volume + self.ask_volume
         if total == 0:
             return 0.0
-        return (self.bid_depth - self.ask_depth) / total
+        return (self.bid_volume - self.ask_volume) / total
 
 
 # ---------------------------------------------------------------------------
@@ -160,7 +170,9 @@ class MarketSnapshot:
     market: Market
     up_book: OrderBook
     down_book: OrderBook
-    last_trade_price: float | None
+    last_trade_price: float | None  # UP token
+    down_last_trade_price: float | None  # DOWN token
+    volume: float  # fresh cumulative volume from Gamma
 
 
 # ---------------------------------------------------------------------------
@@ -208,7 +220,10 @@ class Microstructure:
     spread_bps: float
     ob_imbalance: float
     polymarket_yes_price: float | None
+    polymarket_no_price: float | None
+    polymarket_spread: float | None
     polymarket_yes_delta: float | None
+    polymarket_no_delta: float | None
     polymarket_vol_delta: float | None
 
 
@@ -230,4 +245,15 @@ class PromptState:
 
     def to_dict(self) -> dict:
         """Serialize to the exact JSON structure the model expects."""
-        return dataclasses.asdict(self)
+        return _round_floats(dataclasses.asdict(self))
+
+
+def _round_floats(obj: object, precision: int = 6) -> object:
+    """Recursively round floats to remove floating-point noise."""
+    if isinstance(obj, float):
+        return round(obj, precision)
+    if isinstance(obj, dict):
+        return {k: _round_floats(v, precision) for k, v in obj.items()}
+    if isinstance(obj, list | tuple):
+        return type(obj)(_round_floats(x, precision) for x in obj)
+    return obj

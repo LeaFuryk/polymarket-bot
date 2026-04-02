@@ -44,12 +44,33 @@ class TestOrderBook:
 
     def test_imbalance(self):
         book = OrderBook(
-            bids=(OrderBookLevel(0.50, 100),),  # depth = 50
-            asks=(OrderBookLevel(0.50, 300),),  # depth = 150
+            bids=(OrderBookLevel(0.50, 100),),  # volume = 100
+            asks=(OrderBookLevel(0.50, 300),),  # volume = 300
             timestamp=0.0,
         )
-        # (50 - 150) / (50 + 150) = -100/200 = -0.5
+        # (100 - 300) / (100 + 300) = -200/400 = -0.5
         assert book.imbalance == pytest.approx(-0.5)
+
+    def test_bid_ask_volume(self):
+        book = OrderBook(
+            bids=(OrderBookLevel(0.55, 100), OrderBookLevel(0.54, 200)),
+            asks=(OrderBookLevel(0.57, 150), OrderBookLevel(0.58, 50)),
+            timestamp=0.0,
+        )
+        assert book.bid_volume == pytest.approx(300.0)
+        assert book.ask_volume == pytest.approx(200.0)
+
+    def test_imbalance_uses_raw_volume(self):
+        """Imbalance uses raw size, not price-weighted depth."""
+        book = OrderBook(
+            bids=(OrderBookLevel(0.90, 100),),  # depth=90, volume=100
+            asks=(OrderBookLevel(0.10, 100),),  # depth=10, volume=100
+            timestamp=0.0,
+        )
+        # Raw volumes equal → imbalance = 0, even though depths differ
+        assert book.imbalance == pytest.approx(0.0)
+        # But depths are unequal
+        assert book.bid_depth != pytest.approx(book.ask_depth)
 
     def test_empty_book(self):
         book = OrderBook(bids=(), asks=(), timestamp=0.0)
@@ -59,6 +80,8 @@ class TestOrderBook:
         assert book.spread_pct is None
         assert book.bid_depth == 0.0
         assert book.ask_depth == 0.0
+        assert book.bid_volume == 0.0
+        assert book.ask_volume == 0.0
         assert book.imbalance == 0.0
 
     def test_frozen(self):

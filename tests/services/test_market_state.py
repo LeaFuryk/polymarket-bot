@@ -51,6 +51,8 @@ def _make_snapshot(market: Market) -> MarketSnapshot:
         up_book=_make_orderbook(),
         down_book=_make_orderbook(),
         last_trade_price=0.56,
+        down_last_trade_price=0.44,
+        volume=5000.0,
     )
 
 
@@ -207,6 +209,91 @@ class TestGetState:
         service = _make_service(tick=_make_tick(), volume=10.0)
         state = await service.get_state()
         assert state.current_candle.volume_pace is None
+
+    async def test_polymarket_yes_delta_computed(self):
+        """First call captures reference, so yes_delta = 0."""
+        service = _make_service(tick=_make_tick(), partial=_make_partial())
+        state = await service.get_state()
+        assert state.microstructure.polymarket_yes_delta == pytest.approx(0.0)
+
+    async def test_polymarket_vol_delta_computed(self):
+        """vol_delta = 0 on first call (reference just captured)."""
+        service = _make_service(tick=_make_tick(), partial=_make_partial())
+        state = await service.get_state()
+        assert state.microstructure.polymarket_vol_delta == pytest.approx(0.0)
+
+    async def test_deltas_reset_on_candle_change(self):
+        """When candle changes, reference is recaptured, deltas reset to 0."""
+        partial1 = _make_partial(open_price=67700.0)
+        service = _make_service(tick=_make_tick(), partial=partial1)
+        await service.get_state()  # captures reference
+
+        # Change partial to a new candle (different start_time)
+        partial2 = PartialCandle(
+            open=68000.0,
+            high=68050.0,
+            low=67950.0,
+            last_price=68000.0,
+            start_time=time.time() + 300,
+            end_time=time.time() + 600,
+            tick_count=1,
+            last_tick_time=time.time(),
+        )
+        type(service._candles).partial = PropertyMock(return_value=partial2)
+
+        state2 = await service.get_state()
+        assert state2.microstructure.polymarket_yes_delta == pytest.approx(0.0)
+
+    async def test_deltas_none_with_empty_orderbook(self):
+        """When orderbook is empty, yes_delta is None and ref is not poisoned."""
+        service = _make_service(tick=_make_tick(), partial=_make_partial())
+
+        # First call with empty book — reference not captured
+        empty_book = OrderBook(bids=(), asks=(), timestamp=time.time())
+        empty_snapshot = MarketSnapshot(
+            market=_make_market(),
+            up_book=empty_book,
+            down_book=empty_book,
+            last_trade_price=None,
+            down_last_trade_price=None,
+            volume=0.0,
+        )
+        service._market_feed.get_snapshot = AsyncMock(return_value=empty_snapshot)
+        state1 = await service.get_state()
+        assert state1.microstructure.polymarket_yes_delta is None
+
+        # Second call with real book — reference captured, delta = 0
+        service._market_feed.get_snapshot = AsyncMock(return_value=_make_snapshot(_make_market()))
+        state2 = await service.get_state()
+        assert state2.microstructure.polymarket_yes_delta == pytest.approx(0.0)
+
+    async def test_nonzero_delta_on_second_call(self):
+        """Second call in same candle with different price shows non-zero delta."""
+        service = _make_service(tick=_make_tick(), partial=_make_partial())
+
+        # First call — captures reference (last_trade_price = 0.56 from _make_snapshot)
+        await service.get_state()
+
+        # Second call — change snapshot to have a different last_trade_price
+        new_book = OrderBook(
+            bids=(OrderBookLevel(0.60, 100),),
+            asks=(OrderBookLevel(0.62, 100),),
+            timestamp=time.time(),
+        )
+        new_snapshot = MarketSnapshot(
+            market=_make_market(),
+            up_book=new_book,
+            down_book=new_book,
+            last_trade_price=0.61,
+            down_last_trade_price=0.39,
+            volume=6000.0,
+        )
+        service._market_feed.get_snapshot = AsyncMock(return_value=new_snapshot)
+        state2 = await service.get_state()
+
+        # last_trade_price = 0.61, reference = 0.56 → delta = 0.05
+        assert state2.microstructure.polymarket_yes_delta is not None
+        assert state2.microstructure.polymarket_yes_delta != 0.0
 
     async def test_to_dict(self):
         service = _make_service(tick=_make_tick())
