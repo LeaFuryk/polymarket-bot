@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import math
 import time
@@ -55,25 +56,37 @@ class MarketStateService:
             self._log.warning("No Chainlink tick available yet")
             return None
 
-        # Snapshot candle state BEFORE any network await.
+        # Snapshot ALL state BEFORE any network await for consistency.
+        now = time.time()
         candles = self._candles.candle_data()
         partial = self._candles.partial
         partial_snapshot = partial.freeze() if partial else None
         closed = self._candles.closed_candles()
+
+        vol_start = partial_snapshot.start_time if partial_snapshot else now - (now % CANDLE_INTERVAL)
+        vol_end = min(now, partial_snapshot.end_time) if partial_snapshot else now
 
         market = await self._market_feed.discover_market(self._series_slug)
         if market is None:
             self._log.warning("No Polymarket market found")
             return None
 
-        snapshot = await self._market_feed.get_snapshot(market)
+        # Only fetch volume if we have an active partial candle
+        if partial_snapshot:
+            snapshot, volume_so_far = await asyncio.gather(
+                self._market_feed.get_snapshot(market),
+                self._candles.get_partial_volume(vol_start, vol_end),
+            )
+        else:
+            snapshot = await self._market_feed.get_snapshot(market)
+            volume_so_far = 0.0
 
         return PromptState(
             candles=candles,
-            current_candle=self._build_current_candle(tick, market, partial_snapshot, closed),
+            current_candle=self._build_current_candle(tick, market, partial_snapshot, closed, volume_so_far, now),
             technicals=self._build_technicals(closed),
             microstructure=self._build_microstructure(tick, snapshot),
-            bet_state=self._build_bet_state(market),
+            bet_state=self._build_bet_state(market, now),
         )
 
     # -- Private builders --------------------------------------------------
@@ -84,17 +97,19 @@ class MarketStateService:
         market: Market,
         partial: PartialCandleSnapshot | None,
         closed: tuple[Candle, ...],
+        volume_so_far: float = 0.0,
+        snapshot_time: float = 0.0,
     ) -> CurrentCandleData:
+        now = snapshot_time or time.time()
         if partial:
             candle_start = partial.start_time
             elapsed = tick.timestamp - candle_start
         else:
-            now = time.time()
             candle_start = now - (now % CANDLE_INTERVAL)
             elapsed = now - candle_start
 
         elapsed_pct = max(0.0, min(elapsed / CANDLE_INTERVAL, 1.0))
-        time_remaining = max(0.0, market.end_time - time.time())
+        time_remaining = max(0.0, market.end_time - now)
 
         candle_open = partial.open if partial else None
         high_so_far = partial.high if partial else None
@@ -104,12 +119,13 @@ class MarketStateService:
         if candle_open is not None and candle_open > 0:
             partial_ret = math.log(tick.price / candle_open)
 
-        # Volume not yet wired for mid-candle.
-        # volume_so_far is 0.0 because the schema requires float (not Optional).
-        # volume_pace is None (Optional) to signal "unknown" to the model.
-        # TODO: wire Binance mid-candle volume to populate these correctly.
-        volume_so_far = 0.0
+        # volume_pace = volume_so_far / (elapsed_pct × avg_volume)
         volume_pace = None
+        if closed and elapsed_pct > 0:
+            avg_vol = sum(c.volume for c in closed) / len(closed)
+            expected = elapsed_pct * avg_vol
+            if expected > 0:
+                volume_pace = volume_so_far / expected
 
         return CurrentCandleData(
             open=candle_open,
@@ -122,7 +138,7 @@ class MarketStateService:
             elapsed_sec=elapsed,
             elapsed_pct=elapsed_pct,
             time_remaining_sec=time_remaining,
-            chainlink_heartbeat_age_sec=time.time() - tick.timestamp,
+            chainlink_heartbeat_age_sec=now - tick.timestamp,
         )
 
     def _build_technicals(self, closed: tuple[Candle, ...]) -> Technicals:
@@ -146,10 +162,10 @@ class MarketStateService:
             polymarket_vol_delta=None,  # TODO: track volume at candle open
         )
 
-    def _build_bet_state(self, market: Market) -> BetState:
+    def _build_bet_state(self, market: Market, now: float) -> BetState:
         return BetState(
             bet_open_price=None,
             unrealised_ret=None,
             hold_count=0,
-            time_remaining_sec=max(0.0, market.end_time - time.time()),
+            time_remaining_sec=max(0.0, market.end_time - now),
         )

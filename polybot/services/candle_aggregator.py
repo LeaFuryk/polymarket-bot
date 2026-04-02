@@ -190,6 +190,26 @@ class CandleAggregator(CandleSource):
         """Last N closed candles, oldest first."""
         return tuple(self._history)
 
+    async def get_partial_volume(self, start_time: float = 0, end_time: float = 0) -> float:
+        """Get BTC volume for a candle interval.
+
+        If start_time/end_time are provided, uses those (for snapshot consistency).
+        Otherwise reads from the current partial candle.
+        """
+        if start_time and end_time:
+            s, e = start_time, end_time
+        elif self._partial is not None:
+            s = self._partial.start_time
+            e = min(time.time(), self._partial.end_time)
+        else:
+            return 0.0
+
+        try:
+            return await self._volume_feed.get_volume(s, min(e, time.time()))
+        except Exception:
+            self._log.exception("Failed to fetch partial volume")
+            return 0.0
+
     def candle_data(self) -> tuple[CandleData, ...]:
         """Closed candles as CandleData with log_ret and vol_pace (causal)."""
         candles = tuple(self._history)

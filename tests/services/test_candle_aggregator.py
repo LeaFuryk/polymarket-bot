@@ -218,6 +218,25 @@ class TestCloseCandle:
             await agg._close_current_candle()
         assert len(agg.closed_candles()) <= 3
 
+    async def test_get_partial_volume(self):
+        agg = _make_aggregator(interval=10)
+        agg._volume_feed.get_volume = AsyncMock(return_value=12.5)
+        _feed_ticks(agg, [_make_tick(price=100.0, timestamp=5.0)])
+        vol = await agg.get_partial_volume()
+        assert vol == pytest.approx(12.5)
+
+    async def test_get_partial_volume_no_partial(self):
+        agg = _make_aggregator(interval=10)
+        vol = await agg.get_partial_volume()
+        assert vol == 0.0
+
+    async def test_get_partial_volume_error_returns_zero(self):
+        agg = _make_aggregator(interval=10)
+        agg._volume_feed.get_volume = AsyncMock(side_effect=Exception("timeout"))
+        _feed_ticks(agg, [_make_tick(price=100.0, timestamp=5.0)])
+        vol = await agg.get_partial_volume()
+        assert vol == 0.0
+
 
 # ---------------------------------------------------------------------------
 # Stream end tests

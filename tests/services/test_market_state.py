@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, PropertyMock
 import pytest
 from polybot.domain.models import (
     BtcTick,
+    Candle,
     Market,
     MarketSnapshot,
     OrderBook,
@@ -66,12 +67,13 @@ def _make_partial(open_price=67700.0) -> PartialCandle:
     )
 
 
-def _make_service(tick=None, market=None, partial=None, closed=()):
+def _make_service(tick=None, market=None, partial=None, closed=(), volume=0.0):
     candle_source = MagicMock()
     type(candle_source).latest_tick = PropertyMock(return_value=tick)
     type(candle_source).partial = PropertyMock(return_value=partial)
     candle_source.closed_candles.return_value = closed
     candle_source.candle_data.return_value = ()
+    candle_source.get_partial_volume = AsyncMock(return_value=volume)
 
     market_feed = AsyncMock()
     mkt = market or _make_market()
@@ -180,6 +182,31 @@ class TestGetState:
         # Mutate the original partial after get_state — should not affect the result
         partial.open = 99999.0
         assert original_open == 67700.0
+
+    async def test_volume_so_far_from_candle_source(self):
+        service = _make_service(tick=_make_tick(), partial=_make_partial(), volume=18.42)
+        state = await service.get_state()
+        assert state.current_candle.volume_so_far == pytest.approx(18.42)
+
+    async def test_volume_zero_without_partial(self):
+        service = _make_service(tick=_make_tick(), volume=18.42)
+        state = await service.get_state()
+        assert state.current_candle.volume_so_far == 0.0
+
+    async def test_volume_pace_computed(self):
+        closed = tuple(
+            Candle(open=100, high=110, low=90, close=105, volume=20.0, start_time=i * 300, end_time=(i + 1) * 300)
+            for i in range(5)
+        )
+        service = _make_service(tick=_make_tick(), partial=_make_partial(), closed=closed, volume=15.0)
+        state = await service.get_state()
+        assert state.current_candle.volume_pace is not None
+        assert state.current_candle.volume_pace > 0
+
+    async def test_volume_pace_none_without_history(self):
+        service = _make_service(tick=_make_tick(), volume=10.0)
+        state = await service.get_state()
+        assert state.current_candle.volume_pace is None
 
     async def test_to_dict(self):
         service = _make_service(tick=_make_tick())
