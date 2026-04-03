@@ -19,6 +19,7 @@ dependencies = [
     "aiosqlite>=0.20.0",
     "python-dotenv>=1.0.0",
     "eth-abi>=5.0.0",
+    "pyee>=13.0.0",
 ]
 
 [project.optional-dependencies]

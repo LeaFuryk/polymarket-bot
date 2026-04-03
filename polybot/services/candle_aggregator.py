@@ -8,6 +8,8 @@ import math
 import time
 from collections import deque
 
+from pyee.asyncio import AsyncIOEventEmitter
+
 from polybot.domain.models import (
     BtcTick,
     Candle,
@@ -39,6 +41,7 @@ class CandleAggregator(CandleSource):
         interval: int = CANDLE_INTERVAL,
         history_size: int = HISTORY_SIZE,
         logger: logging.Logger | None = None,
+        events: AsyncIOEventEmitter | None = None,
     ) -> None:
         self._price_stream = price_stream
         self._volume_feed = volume_feed
@@ -48,6 +51,7 @@ class CandleAggregator(CandleSource):
         self._partial: PartialCandle | None = None
         self._latest_tick: BtcTick | None = None
         self._first_candle_complete = False
+        self.events = events or AsyncIOEventEmitter()
 
     # -- Background tasks --------------------------------------------------
 
@@ -160,6 +164,8 @@ class CandleAggregator(CandleSource):
             candle.close,
             candle.volume,
         )
+
+        self.events.emit("candle_close", candle)
 
     async def _backfill(self) -> None:
         """Load historical candles from VolumeFeed to warm up indicators."""

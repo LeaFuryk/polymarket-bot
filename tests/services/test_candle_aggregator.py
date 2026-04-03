@@ -237,6 +237,28 @@ class TestCloseCandle:
         vol = await agg.get_partial_volume()
         assert vol == 0.0
 
+    async def test_candle_close_event_emitted(self):
+        from pyee.asyncio import AsyncIOEventEmitter
+
+        events = AsyncIOEventEmitter()
+        received = []
+        events.on("candle_close", lambda candle: received.append(candle))
+
+        agg = _make_aggregator(interval=10)
+        agg.events = events
+        agg._first_candle_complete = True
+        _feed_ticks(agg, [_make_tick(price=100.0, timestamp=10.0)])
+        await agg._close_current_candle()
+        assert len(received) == 1
+        assert received[0].open == 100.0
+
+    async def test_no_event_emitter_by_default_still_works(self):
+        agg = _make_aggregator(interval=10)
+        agg._first_candle_complete = True
+        _feed_ticks(agg, [_make_tick(price=100.0, timestamp=10.0)])
+        await agg._close_current_candle()
+        assert len(agg.closed_candles()) == 1
+
 
 # ---------------------------------------------------------------------------
 # Stream end tests

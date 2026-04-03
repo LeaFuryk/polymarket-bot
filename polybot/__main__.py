@@ -5,12 +5,15 @@ import logging
 import os
 
 from dotenv import load_dotenv
+from pyee.asyncio import AsyncIOEventEmitter
 
 from polybot.adapters.binance_volume import BinanceVolumeAdapter
 from polybot.adapters.chainlink_streams import ChainlinkStreamsAdapter
 from polybot.adapters.polymarket import PolymarketAdapter
+from polybot.adapters.sqlite_store import SqliteStore
 from polybot.domain.models import Candle, MarketSnapshot, OrderBook, PromptState
 from polybot.services.candle_aggregator import CandleAggregator
+from polybot.services.data_collector import DataCollector
 from polybot.services.market_state import MarketStateService
 from polybot.services.technicals import (
     ma_crossover,
@@ -237,15 +240,28 @@ async def main() -> None:
     )
     volume_feed = BinanceVolumeAdapter()
     market_feed = PolymarketAdapter()
-    aggregator = CandleAggregator(price_stream, volume_feed)
-    service = MarketStateService(aggregator, market_feed)
+
+    store = SqliteStore("data/collection.db")
+    await store.init()
+
+    # Shared event bus — aggregator publishes, collector subscribes
+    events = AsyncIOEventEmitter()
+    aggregator = CandleAggregator(price_stream, volume_feed, events=events)
+    collector = DataCollector(aggregator, market_feed, store, events=events)
+
+    # service = MarketStateService(aggregator, market_feed)
     await price_stream.connect()
     try:
-        await asyncio.gather(aggregator.run(), poll_state(service))
+        await asyncio.gather(
+            aggregator.run(),
+            # poll_state(service),
+            collector.run(),
+        )
     finally:
         await price_stream.disconnect()
         await volume_feed.close()
         await market_feed.close()
+        await store.close()
 
 
 if __name__ == "__main__":
