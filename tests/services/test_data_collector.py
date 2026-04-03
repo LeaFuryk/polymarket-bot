@@ -15,7 +15,7 @@ from polybot_data.domain.models import (
     OrderBookLevel,
     PartialCandle,
 )
-from polybot_data.services.data_collector import DataCollector
+from polybot_data.services.data_collector import RECORD_EVERY, DataCollector
 from pyee.asyncio import AsyncIOEventEmitter
 
 # ---------------------------------------------------------------------------
@@ -93,20 +93,21 @@ def _make_collector(
     store.write_candle = AsyncMock()
 
     events = AsyncIOEventEmitter()
-    collector = DataCollector(candle_source, market_feed, store, events=events)
+    collector = DataCollector(candle_source, market_feed, store, events=events, broadcast_fn=None)
     collector._recording = True  # tests assume recording is active
+    collector._tick_counter = RECORD_EVERY - 1  # next fetch will record
     return collector, store
 
 
 # ---------------------------------------------------------------------------
-# collect_once tests
+# _fetch_and_dispatch tests
 # ---------------------------------------------------------------------------
 
 
 class TestCollectOnce:
     async def test_writes_snapshot(self):
         collector, store = _make_collector(tick=_make_tick(), partial=_make_partial())
-        await collector.collect_once()
+        await collector._fetch_and_dispatch()
         store.write_snapshot.assert_awaited_once()
 
     async def test_snapshot_has_correct_btc_price(self):
@@ -114,33 +115,33 @@ class TestCollectOnce:
             tick=_make_tick(price=68000.0),
             partial=_make_partial(),
         )
-        await collector.collect_once()
+        await collector._fetch_and_dispatch()
         snap = store.write_snapshot.call_args[0][0]
         assert isinstance(snap, Snapshot)
         assert snap.btc_price == 68000.0
 
     async def test_snapshot_has_up_last_trade(self):
         collector, store = _make_collector(tick=_make_tick(), partial=_make_partial())
-        await collector.collect_once()
+        await collector._fetch_and_dispatch()
         snap = store.write_snapshot.call_args[0][0]
         assert snap.up_last_trade == 0.56
 
     async def test_snapshot_has_tick_timestamp(self):
         tick = _make_tick(timestamp=12345.0)
         collector, store = _make_collector(tick=tick, partial=_make_partial())
-        await collector.collect_once()
+        await collector._fetch_and_dispatch()
         snap = store.write_snapshot.call_args[0][0]
         assert snap.tick_timestamp == 12345.0
 
     async def test_no_write_without_tick(self):
         collector, store = _make_collector(tick=None)
-        await collector.collect_once()
+        await collector._fetch_and_dispatch()
         store.write_snapshot.assert_not_awaited()
 
     async def test_no_write_without_market(self):
         collector, store = _make_collector(tick=_make_tick(), partial=_make_partial())
         collector._market_feed.discover_market = AsyncMock(return_value=None)
-        await collector.collect_once()
+        await collector._fetch_and_dispatch()
         store.write_snapshot.assert_not_awaited()
 
 

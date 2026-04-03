@@ -1,4 +1,4 @@
-"""Data server -- collects market data, broadcasts via WebSocket, records to SQLite."""
+"""Data server — collects market data, broadcasts via WebSocket, records to SQLite."""
 
 import asyncio
 import logging
@@ -34,8 +34,18 @@ async def main() -> None:
     events = AsyncIOEventEmitter()
     aggregator = CandleAggregator(price_stream, volume_feed, events=events)
 
-    collector = DataCollector(aggregator, market_feed, store, events=events)
-    server = CollectorServer(aggregator, market_feed, events=events)
+    # WS server — thin broadcaster, no fetching
+    server = CollectorServer()
+    await server.start()
+
+    # Single fetch loop: builds snapshot → broadcasts via server + records to SQLite
+    collector = DataCollector(
+        aggregator,
+        market_feed,
+        store,
+        events=events,
+        broadcast_fn=server.broadcast_json,
+    )
 
     await price_stream.connect()
 
@@ -43,7 +53,6 @@ async def main() -> None:
         await asyncio.gather(
             aggregator.run(),
             collector.run(),
-            server.run(),
         )
     finally:
         await server.stop()

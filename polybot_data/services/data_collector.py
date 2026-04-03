@@ -1,4 +1,4 @@
-"""Service: collects raw market snapshots, writes candle records on close."""
+"""Service: single fetch loop — builds snapshots, broadcasts, and records."""
 
 from __future__ import annotations
 
@@ -16,17 +16,19 @@ from polybot_data.ports.data_store import DataStore
 from polybot_data.ports.market_feed import MarketFeed
 
 CANDLE_INTERVAL = 300
-COLLECT_INTERVAL = 5
+FETCH_INTERVAL = 1  # build snapshot every 1s
+RECORD_EVERY = 5  # write to SQLite every 5th snapshot
 MAX_OB_LEVELS = 10
 
 
 class DataCollector:
-    """Passive recorder: samples market data every 5s, writes candles on close.
+    """Single fetch loop: builds a Snapshot every ~1s.
+
+    - Broadcasts to WebSocket every iteration (via broadcast_fn callback)
+    - Writes to SQLite every RECORD_EVERY iterations
+    - Writes CandleRecord on candle_close event
 
     Does NOT maintain candle lifecycle — CandleAggregator is the single authority.
-    Subscribes to "candle_close" events via pyee AsyncIOEventEmitter.
-    candle_id consistency: snapshots and candle records both derive candle_id
-    from the same boundary formula to ensure they join correctly.
     """
 
     def __init__(
@@ -35,6 +37,7 @@ class DataCollector:
         market_feed: MarketFeed,
         store: DataStore,
         events: AsyncIOEventEmitter,
+        broadcast_fn=None,
         series_slug: str = "btc-updown-5m",
         logger: logging.Logger | None = None,
     ) -> None:
@@ -43,38 +46,39 @@ class DataCollector:
         self._store = store
         self._series_slug = series_slug
         self._log = logger or logging.getLogger(__name__)
-        self._recording = False  # start recording after first candle_close
+        self._broadcast_fn = broadcast_fn
+        self._recording = False
+        self._tick_counter = 0
 
         events.on("candle_close", self._on_candle_close)
 
     async def run(self) -> None:
-        """Collect snapshots in a loop, sleeping COLLECT_INTERVAL between iterations."""
+        """Fetch loop — every ~1s, build snapshot, broadcast, and optionally record."""
         while True:
             try:
-                await self.collect_once()
+                await self._fetch_and_dispatch()
             except Exception:
                 self._log.exception("Collection error")
-            await asyncio.sleep(COLLECT_INTERVAL)
+            await asyncio.sleep(FETCH_INTERVAL)
 
-    async def collect_once(self) -> None:
-        """Sample market state and write one snapshot to the store."""
-        if not self._recording:
-            return
+    async def _fetch_and_dispatch(self) -> None:
+        """Single fetch → broadcast + conditional record."""
         tick = self._candles.latest_tick
         if tick is None:
             return
+
         partial = self._candles.partial
         now = time.time()
 
         market = await self._market_feed.discover_market(self._series_slug)
         if market is None:
             return
-        snapshot = await self._market_feed.get_snapshot(market)
+
+        snapshot_data = await self._market_feed.get_snapshot(market)
 
         candle_start = partial.start_time if partial else now - (now % CANDLE_INTERVAL)
         elapsed_pct = max(0.0, min((now - candle_start) / CANDLE_INTERVAL, 1.0))
 
-        # Derive candle_id from boundary — same formula used in on_candle_close
         boundary = int(candle_start - (candle_start % CANDLE_INTERVAL))
         candle_id = f"{self._series_slug}-{boundary}"
 
@@ -86,44 +90,61 @@ class DataCollector:
             btc_price=tick.price,
             btc_bid=tick.bid,
             btc_ask=tick.ask,
-            up_bids=self._levels(snapshot.up_book.bids),
-            up_asks=self._levels(snapshot.up_book.asks),
-            down_bids=self._levels(snapshot.down_book.bids),
-            down_asks=self._levels(snapshot.down_book.asks),
-            up_last_trade=snapshot.last_trade_price,
-            down_last_trade=snapshot.down_last_trade_price,
-            market_volume=snapshot.volume,
+            up_bids=self._levels(snapshot_data.up_book.bids),
+            up_asks=self._levels(snapshot_data.up_book.asks),
+            down_bids=self._levels(snapshot_data.down_book.bids),
+            down_asks=self._levels(snapshot_data.down_book.asks),
+            up_last_trade=snapshot_data.last_trade_price,
+            down_last_trade=snapshot_data.down_last_trade_price,
+            market_volume=snapshot_data.volume,
         )
-        self._log.info(
-            "📸 Snapshot saved | candle=%s elapsed=%.0f%% | "
-            "BTC $%.2f (bid $%.2f ask $%.2f) | "
-            "YES last=%.2f NO last=%.2f | "
-            "UP book: %d bids/%d asks | DOWN book: %d bids/%d asks | "
-            "mkt_vol=$%.0f",
-            snap.candle_id,
-            snap.elapsed_pct * 100,
-            snap.btc_price,
-            snap.btc_bid,
-            snap.btc_ask,
-            snap.up_last_trade or 0,
-            snap.down_last_trade or 0,
-            len(snap.up_bids),
-            len(snap.up_asks),
-            len(snap.down_bids),
-            len(snap.down_asks),
-            snap.market_volume,
-        )
-        await self._store.write_snapshot(snap)
+
+        # Broadcast to WS clients every iteration
+        if self._broadcast_fn is not None:
+            ws_msg = {
+                "type": "snapshot",
+                "timestamp": snap.timestamp,
+                "tick_timestamp": snap.tick_timestamp,
+                "candle_id": snap.candle_id,
+                "elapsed_pct": round(snap.elapsed_pct, 4),
+                "btc_price": snap.btc_price,
+                "btc_bid": snap.btc_bid,
+                "btc_ask": snap.btc_ask,
+                "up_bids": list(snap.up_bids),
+                "up_asks": list(snap.up_asks),
+                "down_bids": list(snap.down_bids),
+                "down_asks": list(snap.down_asks),
+                "up_last_trade": snap.up_last_trade,
+                "down_last_trade": snap.down_last_trade,
+                "market_volume": snap.market_volume,
+            }
+            await self._broadcast_fn(ws_msg)
+
+        # Record to SQLite every RECORD_EVERY iterations
+        if self._recording:
+            self._tick_counter += 1
+            if self._tick_counter >= RECORD_EVERY:
+                self._tick_counter = 0
+                self._log.info(
+                    "📸 Snapshot saved | candle=%s elapsed=%.0f%% | BTC $%.2f | YES=%.2f NO=%.2f | vol=$%.0f",
+                    snap.candle_id,
+                    snap.elapsed_pct * 100,
+                    snap.btc_price,
+                    snap.up_last_trade or 0,
+                    snap.down_last_trade or 0,
+                    snap.market_volume,
+                )
+                await self._store.write_snapshot(snap)
 
     async def _on_candle_close(self, candle: Candle) -> None:
         """Handle candle_close event from CandleAggregator."""
         if not self._recording:
             self._recording = True
             self._log.info("🟢 First valid candle closed — data collection now active")
+
         outcome = "UP" if candle.close >= candle.open else "DOWN"
         final_ret = math.log(candle.close / candle.open) if candle.open > 0 else 0.0
 
-        # Same boundary formula as collect_once — ensures candle_id matches snapshots
         boundary = int(candle.start_time - (candle.start_time % CANDLE_INTERVAL))
         candle_id = f"{self._series_slug}-{boundary}"
 
@@ -141,7 +162,7 @@ class DataCollector:
         )
         await self._store.write_candle(record)
         self._log.info(
-            "🕯️ Candle closed | %s | O=$%.2f H=$%.2f L=$%.2f C=$%.2f V=%.2f | outcome=%s final_ret=%+.4f",
+            "🕯️ Candle closed | %s | O=$%.2f H=$%.2f L=$%.2f C=$%.2f V=%.2f | outcome=%s ret=%+.4f",
             candle_id,
             record.open,
             record.high,
@@ -151,6 +172,22 @@ class DataCollector:
             outcome,
             final_ret,
         )
+
+        # Broadcast candle_close to WS clients
+        if self._broadcast_fn is not None:
+            await self._broadcast_fn(
+                {
+                    "type": "candle_close",
+                    "candle_id": candle_id,
+                    "open": candle.open,
+                    "high": candle.high,
+                    "low": candle.low,
+                    "close": candle.close,
+                    "volume": candle.volume,
+                    "outcome": outcome,
+                    "final_ret": final_ret,
+                }
+            )
 
     @staticmethod
     def _levels(book_levels: tuple, max_n: int = MAX_OB_LEVELS) -> tuple[tuple[float, float], ...]:
