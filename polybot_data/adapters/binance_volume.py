@@ -6,7 +6,7 @@ import logging
 
 import httpx
 
-from polybot.domain.models import Candle
+from polybot_data.domain.models import Candle
 
 BINANCE_BASE_URL = "https://api.binance.com"
 KLINES_ENDPOINT = "/api/v3/klines"

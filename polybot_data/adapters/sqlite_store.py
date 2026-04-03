@@ -7,7 +7,7 @@ from pathlib import Path
 
 import aiosqlite
 
-from polybot.domain.collection import CandleRecord, Snapshot
+from polybot_data.domain.collection import CandleRecord, Snapshot
 
 _SCHEMA = """\
 CREATE TABLE IF NOT EXISTS snapshots (

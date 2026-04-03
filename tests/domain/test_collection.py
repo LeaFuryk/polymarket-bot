@@ -3,7 +3,7 @@
 import dataclasses
 
 import pytest
-from polybot.domain.collection import CandleRecord, Snapshot
+from polybot_data.domain.collection import CandleRecord, Snapshot
 
 
 class TestSnapshot:

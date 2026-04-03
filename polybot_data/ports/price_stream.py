@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from typing import Protocol, runtime_checkable
 
-from polybot.domain.models import BtcTick
+from polybot_data.domain.models import BtcTick
 
 
 @runtime_checkable

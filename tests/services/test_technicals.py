@@ -1,8 +1,8 @@
 """Tests for technical indicator functions."""
 
 import pytest
-from polybot.domain.models import Candle
-from polybot.services.technicals import (
+from polybot_data.domain.models import Candle
+from polybot_data.services.technicals import (
     atr_normalized,
     bollinger_pct_b,
     ma_crossover,

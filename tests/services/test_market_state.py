@@ -4,7 +4,8 @@ import time
 from unittest.mock import AsyncMock, MagicMock, PropertyMock
 
 import pytest
-from polybot.domain.models import (
+from polybot.services.market_state import MarketStateService
+from polybot_data.domain.models import (
     BtcTick,
     Candle,
     Market,
@@ -14,7 +15,6 @@ from polybot.domain.models import (
     PartialCandle,
     PromptState,
 )
-from polybot.services.market_state import MarketStateService
 
 # ---------------------------------------------------------------------------
 # Fakes

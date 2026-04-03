@@ -7,7 +7,7 @@ import logging
 import math
 import time
 
-from polybot.domain.models import (
+from polybot_data.domain.models import (
     BetState,
     BtcTick,
     Candle,
@@ -19,9 +19,9 @@ from polybot.domain.models import (
     PromptState,
     Technicals,
 )
-from polybot.ports.candle_source import CandleSource
-from polybot.ports.market_feed import MarketFeed
-from polybot.services.technicals import (
+from polybot_data.ports.candle_source import CandleSource
+from polybot_data.ports.market_feed import MarketFeed
+from polybot_data.services.technicals import (
     atr_normalized,
     bollinger_pct_b,
     macd_histogram,

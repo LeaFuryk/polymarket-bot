@@ -34,30 +34,23 @@ dev = [
     "types-PyYAML>=6.0",
     "matplotlib>=3.10.8",
     "numpy>=2.4.2",
+    "tqdm>=4.67.3",
 ]
 server = [
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.32.0",
 ]
 
-[project.scripts]
-polybot-analyze = "polybot.analysis.report:main"
-polybot-analyze-deep = "polybot.analysis.deep_report:main"
-polybot-archive = "polybot.analysis.archive:main"
-polybot-compare = "polybot.analysis.compare:main"
-polybot-validate = "polybot.analysis.validate:main"
-polybot-replay = "polybot.analysis.replay:main"
-polybot-forensics = "polybot.forensics.cli:main"
-polybot-server = "polybot.server.run:main"
-polybot-check = "polybot.scripts.check:main"
+# Console scripts removed — legacy code moved to legacy/ folder
 
 [tool.setuptools.packages.find]
 where = ["."]
+include = ["polybot*", "polybot_data*", "collector*"]
 
 [tool.ruff]
 target-version = "py311"
 line-length = 120
-src = ["polybot", "tests"]
+src = ["polybot", "polybot_data", "collector", "tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]

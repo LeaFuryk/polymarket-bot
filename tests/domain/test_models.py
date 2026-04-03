@@ -3,7 +3,7 @@
 from dataclasses import FrozenInstanceError
 
 import pytest
-from polybot.domain.models import BtcTick
+from polybot_data.domain.models import BtcTick
 
 
 class TestBtcTick:

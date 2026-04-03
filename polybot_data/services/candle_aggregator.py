@@ -10,15 +10,15 @@ from collections import deque
 
 from pyee.asyncio import AsyncIOEventEmitter
 
-from polybot.domain.models import (
+from polybot_data.domain.models import (
     BtcTick,
     Candle,
     CandleData,
     PartialCandle,
 )
-from polybot.ports.candle_source import CandleSource
-from polybot.ports.price_stream import PriceStream
-from polybot.ports.volume_feed import VolumeFeed
+from polybot_data.ports.candle_source import CandleSource
+from polybot_data.ports.price_stream import PriceStream
+from polybot_data.ports.volume_feed import VolumeFeed
 
 CANDLE_INTERVAL = 300  # 5 minutes
 HISTORY_SIZE = 40  # needs 35+ for MACD, keep extra buffer

@@ -3,9 +3,9 @@
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from polybot.adapters.binance_volume import BinanceVolumeAdapter
-from polybot.domain.models import Candle
-from polybot.ports.volume_feed import VolumeFeed
+from polybot_data.adapters.binance_volume import BinanceVolumeAdapter
+from polybot_data.domain.models import Candle
+from polybot_data.ports.volume_feed import VolumeFeed
 
 # Sample Binance kline: [open_time, open, high, low, close, volume, close_time, ...]
 SAMPLE_KLINE = [

@@ -3,9 +3,9 @@
 from pathlib import Path
 
 import pytest
-from polybot.adapters.sqlite_store import SqliteStore
-from polybot.domain.collection import CandleRecord, Snapshot
-from polybot.ports.data_store import DataStore
+from polybot_data.adapters.sqlite_store import SqliteStore
+from polybot_data.domain.collection import CandleRecord, Snapshot
+from polybot_data.ports.data_store import DataStore
 
 
 @pytest.fixture

@@ -7,12 +7,12 @@ from unittest.mock import patch
 
 import pytest
 from eth_abi import encode
-from polybot.adapters.chainlink_streams import (
+from polybot_data.adapters.chainlink_streams import (
     _OUTER_ABI,
     _V3_ABI,
     ChainlinkStreamsAdapter,
 )
-from polybot.domain.models import BtcTick
+from polybot_data.domain.models import BtcTick
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -76,7 +76,7 @@ class TestAuthHeaders:
     def test_signature_is_valid_hmac(self):
         adapter = ChainlinkStreamsAdapter(user_id="my-key", secret="my-secret")
 
-        with patch("polybot.adapters.chainlink_streams.time") as mock_time:
+        with patch("polybot_data.adapters.chainlink_streams.time") as mock_time:
             mock_time.time.return_value = 1700000.0  # fixed time
             headers = adapter._build_auth_headers("GET", "/api/v1/ws")
 

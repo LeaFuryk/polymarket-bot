@@ -1,7 +1,7 @@
 """Tests for OrderBook domain model."""
 
 import pytest
-from polybot.domain.models import OrderBook, OrderBookLevel
+from polybot_data.domain.models import OrderBook, OrderBookLevel
 
 
 class TestOrderBook:

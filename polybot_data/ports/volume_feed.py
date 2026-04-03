@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
-    from polybot.domain.models import Candle
+    from polybot_data.domain.models import Candle
 
 
 @runtime_checkable

@@ -9,11 +9,11 @@ import time
 
 from pyee.asyncio import AsyncIOEventEmitter
 
-from polybot.domain.collection import CandleRecord, Snapshot
-from polybot.domain.models import Candle
-from polybot.ports.candle_source import CandleSource
-from polybot.ports.data_store import DataStore
-from polybot.ports.market_feed import MarketFeed
+from polybot_data.domain.collection import CandleRecord, Snapshot
+from polybot_data.domain.models import Candle
+from polybot_data.ports.candle_source import CandleSource
+from polybot_data.ports.data_store import DataStore
+from polybot_data.ports.market_feed import MarketFeed
 
 CANDLE_INTERVAL = 300
 COLLECT_INTERVAL = 5

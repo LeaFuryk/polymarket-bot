@@ -2,8 +2,8 @@
 
 from unittest.mock import AsyncMock
 
-from polybot.ports.candle_source import CandleSource
-from polybot.services.candle_aggregator import CandleAggregator
+from polybot_data.ports.candle_source import CandleSource
+from polybot_data.services.candle_aggregator import CandleAggregator
 
 
 def test_aggregator_satisfies_candle_source():

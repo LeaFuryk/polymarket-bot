@@ -5,8 +5,8 @@ import time
 from unittest.mock import AsyncMock
 
 import pytest
-from polybot.domain.models import BtcTick, Candle, PartialCandle
-from polybot.services.candle_aggregator import CandleAggregator
+from polybot_data.domain.models import BtcTick, Candle, PartialCandle
+from polybot_data.services.candle_aggregator import CandleAggregator
 
 # ---------------------------------------------------------------------------
 # Helpers

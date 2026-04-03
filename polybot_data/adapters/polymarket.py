@@ -10,7 +10,7 @@ from datetime import datetime
 
 import httpx
 
-from polybot.domain.models import Market, MarketSnapshot, OrderBook, OrderBookLevel
+from polybot_data.domain.models import Market, MarketSnapshot, OrderBook, OrderBookLevel
 
 CLOB_HOST = "https://clob.polymarket.com"
 GAMMA_HOST = "https://gamma-api.polymarket.com"

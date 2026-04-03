@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Protocol, runtime_checkable
 
-from polybot.domain.models import Market, MarketSnapshot, OrderBook
+from polybot_data.domain.models import Market, MarketSnapshot, OrderBook
 
 
 @runtime_checkable

@@ -4,9 +4,9 @@ import time
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from polybot.adapters.polymarket import PolymarketAdapter
-from polybot.domain.models import Market, OrderBook
-from polybot.ports.market_feed import MarketFeed
+from polybot_data.adapters.polymarket import PolymarketAdapter
+from polybot_data.domain.models import Market, OrderBook
+from polybot_data.ports.market_feed import MarketFeed
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -165,7 +165,7 @@ class TestMarketDiscovery:
         """Discovery probes current, then next, then previous boundary."""
         import time
 
-        from polybot.adapters.polymarket import CANDLE_INTERVAL
+        from polybot_data.adapters.polymarket import CANDLE_INTERVAL
 
         adapter = PolymarketAdapter()
         slugs_tried: list[str] = []

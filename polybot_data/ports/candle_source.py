@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
-    from polybot.domain.models import BtcTick, Candle, CandleData, PartialCandle
+    from polybot_data.domain.models import BtcTick, Candle, CandleData, PartialCandle
 
 
 @runtime_checkable

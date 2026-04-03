@@ -6,7 +6,7 @@ import math
 import statistics
 from collections.abc import Sequence
 
-from polybot.domain.models import Candle
+from polybot_data.domain.models import Candle
 
 
 def _ema(values: Sequence[float], period: int) -> list[float]:

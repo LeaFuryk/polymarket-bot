@@ -5,8 +5,8 @@ import time
 from unittest.mock import AsyncMock, MagicMock, PropertyMock
 
 import pytest
-from polybot.domain.collection import CandleRecord, Snapshot
-from polybot.domain.models import (
+from polybot_data.domain.collection import CandleRecord, Snapshot
+from polybot_data.domain.models import (
     BtcTick,
     Candle,
     Market,
@@ -15,7 +15,7 @@ from polybot.domain.models import (
     OrderBookLevel,
     PartialCandle,
 )
-from polybot.services.data_collector import DataCollector
+from polybot_data.services.data_collector import DataCollector
 from pyee.asyncio import AsyncIOEventEmitter
 
 # ---------------------------------------------------------------------------

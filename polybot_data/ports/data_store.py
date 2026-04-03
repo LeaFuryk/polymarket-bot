@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Protocol, runtime_checkable
 
-from polybot.domain.collection import CandleRecord, Snapshot
+from polybot_data.domain.collection import CandleRecord, Snapshot
 
 
 @runtime_checkable

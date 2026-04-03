@@ -12,7 +12,7 @@ from collections.abc import AsyncIterator
 
 import websockets
 
-from polybot.domain.models import BtcTick
+from polybot_data.domain.models import BtcTick
 
 WS_BASE_URL = "wss://ws.dataengine.chain.link"
 WS_PATH = "/api/v1/ws"
