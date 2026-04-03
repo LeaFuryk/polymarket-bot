@@ -213,18 +213,21 @@ class Technicals:
     macd_hist: float | None
     bb_pct_b: float | None
     atr14_norm: float | None
+    trend_consistency: float | None
+    range_position: float | None
 
 
 @dataclass(frozen=True)
 class Microstructure:
     spread_bps: float
-    ob_imbalance: float
     polymarket_yes_price: float | None
     polymarket_no_price: float | None
-    polymarket_spread: float | None
+    yes_ob: float  # YES token orderbook imbalance
+    no_ob: float  # NO token orderbook imbalance
     polymarket_yes_delta: float | None
     polymarket_no_delta: float | None
     polymarket_vol_delta: float | None
+    vol_timing: float | None  # elapsed_pct at largest vol spike
 
 
 @dataclass(frozen=True)

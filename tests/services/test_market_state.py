@@ -295,6 +295,21 @@ class TestGetState:
         assert state2.microstructure.polymarket_yes_delta is not None
         assert state2.microstructure.polymarket_yes_delta != 0.0
 
+    async def test_yes_ob_from_orderbook(self):
+        service = _make_service(tick=_make_tick(), partial=_make_partial())
+        state = await service.get_state()
+        assert -1.0 <= state.microstructure.yes_ob <= 1.0
+
+    async def test_no_ob_from_orderbook(self):
+        service = _make_service(tick=_make_tick(), partial=_make_partial())
+        state = await service.get_state()
+        assert -1.0 <= state.microstructure.no_ob <= 1.0
+
+    async def test_vol_timing_none_initially(self):
+        service = _make_service(tick=_make_tick(), partial=_make_partial())
+        state = await service.get_state()
+        assert state.microstructure.vol_timing is None
+
     async def test_to_dict(self):
         service = _make_service(tick=_make_tick())
         state = await service.get_state()

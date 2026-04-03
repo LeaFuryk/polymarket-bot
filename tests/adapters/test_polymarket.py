@@ -90,6 +90,24 @@ class TestOrderbookParsing:
         assert len(book.bids) == 0
         assert len(book.asks) == 0
 
+    def test_parse_unsorted_orderbook(self):
+        """CLOB returns levels unsorted — parser must sort them."""
+        unsorted = {
+            "bids": [
+                {"price": "0.01", "size": "10000"},
+                {"price": "0.50", "size": "100"},
+                {"price": "0.30", "size": "500"},
+            ],
+            "asks": [
+                {"price": "0.99", "size": "10000"},
+                {"price": "0.51", "size": "100"},
+                {"price": "0.70", "size": "500"},
+            ],
+        }
+        book = PolymarketAdapter._parse_orderbook(unsorted)
+        assert book.best_bid == pytest.approx(0.50)
+        assert book.best_ask == pytest.approx(0.51)
+
     async def test_fetch_orderbook(self):
         adapter = _make_adapter(clob_data=SAMPLE_ORDERBOOK)
         book = await adapter._fetch_orderbook("token_123")

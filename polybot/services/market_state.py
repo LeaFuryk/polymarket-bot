@@ -25,7 +25,9 @@ from polybot.services.technicals import (
     atr_normalized,
     bollinger_pct_b,
     macd_histogram,
+    range_position,
     rsi,
+    trend_consistency,
 )
 
 CANDLE_INTERVAL = 300  # 5 minutes
@@ -52,6 +54,13 @@ class MarketStateService:
         self._ref_yes_price: float | None = None
         self._ref_no_price: float | None = None
         self._ref_volume: float | None = None
+        self._max_vol_spike: float = 0.0
+        self._vol_timing: float | None = None
+        self._prev_volume: float | None = None
+        self._midpoint_history: list[float] = []
+        self._cycle_count: int = 0
+        self._last_snapshot: MarketSnapshot | None = None
+        self._last_closed: tuple[Candle, ...] = ()
 
     async def get_state(self) -> PromptState | None:
         """Build the full market state snapshot."""
@@ -88,10 +97,29 @@ class MarketStateService:
         candle_start = partial_snapshot.start_time if partial_snapshot else now - (now % CANDLE_INTERVAL)
         self._update_candle_open_ref(candle_start, snapshot)
 
+        # Track midpoint history and cycle count
+        mid = snapshot.up_book.midpoint
+        if mid is not None:
+            self._midpoint_history.append(mid)
+        self._cycle_count += 1
+
+        # Track vol_timing — elapsed_pct at largest aggregate vol spike
+        if self._prev_volume is not None and partial_snapshot:
+            spike = abs(snapshot.volume - self._prev_volume)
+            if spike > self._max_vol_spike:
+                self._max_vol_spike = spike
+                elapsed_for_timing = (now - partial_snapshot.start_time) / CANDLE_INTERVAL
+                self._vol_timing = max(0.0, min(elapsed_for_timing, 1.0))
+        self._prev_volume = snapshot.volume
+
+        # Store for prompt formatter access (consistent with this snapshot)
+        self._last_snapshot = snapshot
+        self._last_closed = closed
+
         return PromptState(
             candles=candles,
             current_candle=self._build_current_candle(tick, market, partial_snapshot, closed, volume_so_far, now),
-            technicals=self._build_technicals(closed),
+            technicals=self._build_technicals(closed, tick),
             microstructure=self._build_microstructure(tick, snapshot),
             bet_state=self._build_bet_state(market, now),
         )
@@ -111,6 +139,10 @@ class MarketStateService:
             self._ref_yes_price = None
             self._ref_no_price = None
             self._ref_volume = None
+            self._max_vol_spike = 0.0
+            self._vol_timing = None
+            self._prev_volume = None
+            self._midpoint_history = []
 
         # Backfill any refs that are still None (handles partial availability
         # where YES trade exists but DOWN trade doesn't yet, or vice versa)
@@ -177,13 +209,15 @@ class MarketStateService:
             chainlink_heartbeat_age_sec=now - tick.timestamp,
         )
 
-    def _build_technicals(self, closed: tuple[Candle, ...]) -> Technicals:
+    def _build_technicals(self, closed: tuple[Candle, ...], tick: BtcTick) -> Technicals:
         closes = [c.close for c in closed]
         return Technicals(
             rsi14=rsi(closes),
             macd_hist=macd_histogram(closes),
             bb_pct_b=bollinger_pct_b(closes),
             atr14_norm=atr_normalized(closed),
+            trend_consistency=trend_consistency(closes),
+            range_position=range_position(closed, tick.price),
         )
 
     def _build_microstructure(self, tick: BtcTick, snapshot: MarketSnapshot) -> Microstructure:
@@ -192,10 +226,6 @@ class MarketStateService:
 
         yes_price = snapshot.last_trade_price
         no_price = snapshot.down_last_trade_price
-
-        poly_spread = None
-        if yes_price is not None and no_price is not None:
-            poly_spread = 1.0 - yes_price - no_price
 
         yes_delta = None
         if yes_price is not None and self._ref_yes_price is not None:
@@ -211,13 +241,14 @@ class MarketStateService:
 
         return Microstructure(
             spread_bps=spread_bps,
-            ob_imbalance=snapshot.up_book.imbalance,
             polymarket_yes_price=yes_price,
             polymarket_no_price=no_price,
-            polymarket_spread=poly_spread,
+            yes_ob=snapshot.up_book.imbalance,
+            no_ob=snapshot.down_book.imbalance,
             polymarket_yes_delta=yes_delta,
             polymarket_no_delta=no_delta,
             polymarket_vol_delta=vol_delta,
+            vol_timing=self._vol_timing,
         )
 
     def _build_bet_state(self, market: Market, now: float) -> BetState:

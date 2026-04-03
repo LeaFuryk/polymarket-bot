@@ -191,11 +191,27 @@ class PolymarketAdapter:
 
     @staticmethod
     def _parse_orderbook(data: dict) -> OrderBook:
-        """Parse CLOB orderbook response into domain OrderBook."""
+        """Parse CLOB orderbook response into domain OrderBook.
+
+        CLOB returns levels unsorted. Sort bids descending (highest first)
+        and asks ascending (lowest first) so best_bid/best_ask are correct.
+        """
         bids = tuple(
-            OrderBookLevel(price=float(level["price"]), size=float(level["size"])) for level in data.get("bids", [])
+            sorted(
+                (
+                    OrderBookLevel(price=float(level["price"]), size=float(level["size"]))
+                    for level in data.get("bids", [])
+                ),
+                key=lambda lvl: -lvl.price,
+            )
         )
         asks = tuple(
-            OrderBookLevel(price=float(level["price"]), size=float(level["size"])) for level in data.get("asks", [])
+            sorted(
+                (
+                    OrderBookLevel(price=float(level["price"]), size=float(level["size"]))
+                    for level in data.get("asks", [])
+                ),
+                key=lambda lvl: lvl.price,
+            )
         )
         return OrderBook(bids=bids, asks=asks, timestamp=time.time())

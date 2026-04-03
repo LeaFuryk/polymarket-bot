@@ -5,8 +5,14 @@ from polybot.domain.models import Candle
 from polybot.services.technicals import (
     atr_normalized,
     bollinger_pct_b,
+    ma_crossover,
     macd_histogram,
+    range_position,
+    reversal_regime,
     rsi,
+    trend_consistency,
+    trend_score,
+    velocity_conflict,
 )
 
 # ---------------------------------------------------------------------------
@@ -182,3 +188,149 @@ class TestATRNormalized:
         low_vol = _make_candles(CLOSES, spread=20.0)
         high_vol = _make_candles(CLOSES, spread=200.0)
         assert atr_normalized(high_vol) > atr_normalized(low_vol)
+
+
+# ---------------------------------------------------------------------------
+# Trend consistency tests
+# ---------------------------------------------------------------------------
+
+
+class TestTrendConsistency:
+    def test_insufficient_data(self):
+        assert trend_consistency([]) is None
+
+    def test_all_up(self):
+        closes = [100 + i for i in range(11)]
+        assert trend_consistency(closes) == pytest.approx(1.0)
+
+    def test_all_down(self):
+        closes = [200 - i for i in range(11)]
+        assert trend_consistency(closes) == pytest.approx(-1.0)
+
+    def test_choppy(self):
+        closes = [100, 101, 100, 101, 100, 101, 100, 101, 100, 101, 100]
+        result = trend_consistency(closes)
+        assert result == pytest.approx(0.0, abs=0.01)
+
+
+# ---------------------------------------------------------------------------
+# Range position tests
+# ---------------------------------------------------------------------------
+
+
+class TestRangePosition:
+    def test_insufficient_data(self):
+        assert range_position([], 67000.0) is None
+
+    def test_at_high(self):
+        candles = _make_candles(CLOSES[:40])
+        high = max(c.high for c in candles)
+        assert range_position(candles, high) == pytest.approx(1.0)
+
+    def test_at_low(self):
+        candles = _make_candles(CLOSES[:40])
+        low = min(c.low for c in candles)
+        assert range_position(candles, low) == pytest.approx(0.0)
+
+    def test_mid_range(self):
+        candles = _make_candles(CLOSES[:40])
+        high = max(c.high for c in candles)
+        low = min(c.low for c in candles)
+        mid = (high + low) / 2
+        assert range_position(candles, mid) == pytest.approx(0.5, abs=0.05)
+
+
+# ---------------------------------------------------------------------------
+# MA crossover tests
+# ---------------------------------------------------------------------------
+
+
+class TestMACrossover:
+    def test_insufficient_data(self):
+        assert ma_crossover([100.0] * 4) is None
+
+    def test_bullish(self):
+        closes = [100 + i * 2 for i in range(15)]
+        result = ma_crossover(closes)
+        assert result is not None
+        assert result[2] == "BULLISH"
+
+    def test_bearish(self):
+        closes = [200 - i * 2 for i in range(15)]
+        result = ma_crossover(closes)
+        assert result[2] == "BEARISH"
+
+
+# ---------------------------------------------------------------------------
+# Trend score tests
+# ---------------------------------------------------------------------------
+
+
+class TestTrendScore:
+    def test_insufficient_data(self):
+        assert trend_score([]) is None
+
+    def test_bullish_trend(self):
+        candles = _make_candles([100 + i for i in range(13)])
+        result = trend_score(candles)
+        assert result is not None
+        assert result > 0
+
+    def test_bearish_trend(self):
+        # Build candles where open > close (DOWN direction) with decreasing closes
+        closes = [200 - i for i in range(13)]
+        candles = [
+            Candle(
+                open=c + 10,  # open above close → DOWN candle
+                high=c + 25,
+                low=c - 25,
+                close=c,
+                volume=10.0,
+                start_time=i * 300.0,
+                end_time=(i + 1) * 300.0,
+            )
+            for i, c in enumerate(closes)
+        ]
+        result = trend_score(candles)
+        assert result < 0
+
+
+# ---------------------------------------------------------------------------
+# Velocity conflict tests
+# ---------------------------------------------------------------------------
+
+
+class TestVelocityConflict:
+    def test_no_data(self):
+        assert velocity_conflict(None, None, []) == ("NONE", 0.0)
+
+    def test_aligned(self):
+        candles = _make_candles([100 + i for i in range(6)])
+        label, _ = velocity_conflict(105.0, 100.0, candles)
+        assert label == "NONE"
+
+    def test_flat_move(self):
+        candles = _make_candles([100, 100, 100, 100, 100])
+        label, _ = velocity_conflict(100.0, 100.0, candles)
+        assert label == "NONE"
+
+
+# ---------------------------------------------------------------------------
+# Reversal regime tests
+# ---------------------------------------------------------------------------
+
+
+class TestReversalRegime:
+    def test_no_data(self):
+        assert reversal_regime([]) == ("DIRECTIONAL", 0.0)
+
+    def test_directional(self):
+        # Use small spread so body/range ratio is high (low intensity → directional)
+        candles = _make_candles([100 + i for i in range(10)], spread=20.0)
+        label, score = reversal_regime(candles)
+        assert label == "DIRECTIONAL"
+
+    def test_reversal_pattern(self):
+        candles = _make_candles([100, 102, 99, 103, 98, 104, 97, 105, 96, 106, 95, 107])
+        label, score = reversal_regime(candles)
+        assert score > 0.3
