@@ -43,6 +43,7 @@ class DataCollector:
         self._store = store
         self._series_slug = series_slug
         self._log = logger or logging.getLogger(__name__)
+        self._recording = False  # start recording after first candle_close
 
         events.on("candle_close", self._on_candle_close)
 
@@ -57,6 +58,8 @@ class DataCollector:
 
     async def collect_once(self) -> None:
         """Sample market state and write one snapshot to the store."""
+        if not self._recording:
+            return
         tick = self._candles.latest_tick
         if tick is None:
             return
@@ -91,10 +94,32 @@ class DataCollector:
             down_last_trade=snapshot.down_last_trade_price,
             market_volume=snapshot.volume,
         )
+        self._log.info(
+            "📸 Snapshot saved | candle=%s elapsed=%.0f%% | "
+            "BTC $%.2f (bid $%.2f ask $%.2f) | "
+            "YES last=%.2f NO last=%.2f | "
+            "UP book: %d bids/%d asks | DOWN book: %d bids/%d asks | "
+            "mkt_vol=$%.0f",
+            snap.candle_id,
+            snap.elapsed_pct * 100,
+            snap.btc_price,
+            snap.btc_bid,
+            snap.btc_ask,
+            snap.up_last_trade or 0,
+            snap.down_last_trade or 0,
+            len(snap.up_bids),
+            len(snap.up_asks),
+            len(snap.down_bids),
+            len(snap.down_asks),
+            snap.market_volume,
+        )
         await self._store.write_snapshot(snap)
 
     async def _on_candle_close(self, candle: Candle) -> None:
         """Handle candle_close event from CandleAggregator."""
+        if not self._recording:
+            self._recording = True
+            self._log.info("🟢 First valid candle closed — data collection now active")
         outcome = "UP" if candle.close >= candle.open else "DOWN"
         final_ret = math.log(candle.close / candle.open) if candle.open > 0 else 0.0
 
@@ -115,7 +140,17 @@ class DataCollector:
             final_ret=final_ret,
         )
         await self._store.write_candle(record)
-        self._log.info("Candle recorded: %s outcome=%s ret=%.4f", candle_id, outcome, final_ret)
+        self._log.info(
+            "🕯️ Candle closed | %s | O=$%.2f H=$%.2f L=$%.2f C=$%.2f V=%.2f | outcome=%s final_ret=%+.4f",
+            candle_id,
+            record.open,
+            record.high,
+            record.low,
+            record.close,
+            record.volume,
+            outcome,
+            final_ret,
+        )
 
     @staticmethod
     def _levels(book_levels: tuple, max_n: int = MAX_OB_LEVELS) -> tuple[tuple[float, float], ...]:

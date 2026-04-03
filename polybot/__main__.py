@@ -22,7 +22,7 @@ from polybot.services.technicals import (
     velocity_conflict,
 )
 
-logging.basicConfig(level=logging.WARNING, format="%(asctime)s %(name)s %(levelname)s %(message)s")
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 
 
 def _f(val: float | None, d: int = 2, sign: bool = False) -> str:

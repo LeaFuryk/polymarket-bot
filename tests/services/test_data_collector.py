@@ -94,6 +94,7 @@ def _make_collector(
 
     events = AsyncIOEventEmitter()
     collector = DataCollector(candle_source, market_feed, store, events=events)
+    collector._recording = True  # tests assume recording is active
     return collector, store
 
 

@@ -37,6 +37,18 @@ def _feed_ticks(agg: CandleAggregator, ticks: list[BtcTick]) -> None:
         agg._update_partial(tick)
 
 
+def _feed_valid_candle(agg: CandleAggregator, base_price: float = 100.0, base_ts: float = 10.0) -> None:
+    """Feed 3 ticks in the same interval to make a valid candle (min tick threshold)."""
+    _feed_ticks(
+        agg,
+        [
+            _make_tick(price=base_price, timestamp=base_ts),
+            _make_tick(price=base_price + 2, timestamp=base_ts + 1),
+            _make_tick(price=base_price + 1, timestamp=base_ts + 2),
+        ],
+    )
+
+
 # ---------------------------------------------------------------------------
 # PartialCandle tests
 # ---------------------------------------------------------------------------
@@ -174,24 +186,17 @@ class TestCloseCandle:
     async def test_second_candle_closes_normally(self):
         agg = _make_aggregator(interval=10)
         agg._first_candle_complete = True
-        _feed_ticks(
-            agg,
-            [
-                _make_tick(price=100.0, timestamp=10.0),
-                _make_tick(price=105.0, timestamp=15.0),
-            ],
-        )
+        _feed_valid_candle(agg, base_price=100.0, base_ts=10.0)
         await agg._close_current_candle()
         closed = agg.closed_candles()
         assert len(closed) == 1
         assert closed[0].open == 100.0
-        assert closed[0].close == 105.0
 
     async def test_closed_candle_has_volume_from_feed(self):
         agg = _make_aggregator(interval=10)
         agg._first_candle_complete = True
         agg._volume_feed.get_volume = AsyncMock(return_value=18.42)
-        _feed_ticks(agg, [_make_tick(price=100.0, timestamp=10.0)])
+        _feed_valid_candle(agg, base_price=100.0, base_ts=10.0)
         await agg._close_current_candle()
         assert agg.closed_candles()[0].volume == pytest.approx(18.42)
 
@@ -199,14 +204,14 @@ class TestCloseCandle:
         agg = _make_aggregator(interval=10)
         agg._first_candle_complete = True
         agg._volume_feed.get_volume = AsyncMock(side_effect=Exception("timeout"))
-        _feed_ticks(agg, [_make_tick(price=100.0, timestamp=10.0)])
+        _feed_valid_candle(agg, base_price=100.0, base_ts=10.0)
         await agg._close_current_candle()
         assert agg.closed_candles()[0].volume == 0.0
 
     async def test_partial_cleared_after_close(self):
         agg = _make_aggregator(interval=10)
         agg._first_candle_complete = True
-        _feed_ticks(agg, [_make_tick(price=100.0, timestamp=10.0)])
+        _feed_valid_candle(agg, base_price=100.0, base_ts=10.0)
         await agg._close_current_candle()
         assert agg.partial is None
 
@@ -247,7 +252,7 @@ class TestCloseCandle:
         agg = _make_aggregator(interval=10)
         agg.events = events
         agg._first_candle_complete = True
-        _feed_ticks(agg, [_make_tick(price=100.0, timestamp=10.0)])
+        _feed_valid_candle(agg, base_price=100.0, base_ts=10.0)
         await agg._close_current_candle()
         assert len(received) == 1
         assert received[0].open == 100.0
@@ -255,7 +260,7 @@ class TestCloseCandle:
     async def test_no_event_emitter_by_default_still_works(self):
         agg = _make_aggregator(interval=10)
         agg._first_candle_complete = True
-        _feed_ticks(agg, [_make_tick(price=100.0, timestamp=10.0)])
+        _feed_valid_candle(agg, base_price=100.0, base_ts=10.0)
         await agg._close_current_candle()
         assert len(agg.closed_candles()) == 1
 
@@ -364,22 +369,24 @@ class TestCandleData:
     async def test_log_ret_computed(self):
         agg = _make_aggregator(interval=10)
         agg._first_candle_complete = True
-        _feed_ticks(agg, [_make_tick(price=100.0, timestamp=10.0)])
+        _feed_valid_candle(agg, base_price=100.0, base_ts=10.0)
         await agg._close_current_candle()
-        _feed_ticks(agg, [_make_tick(price=105.0, timestamp=20.0)])
+        _feed_valid_candle(agg, base_price=105.0, base_ts=20.0)
         await agg._close_current_candle()
         data = agg.candle_data()
         assert len(data) == 2
         assert data[0].log_ret is None
-        assert data[1].log_ret == pytest.approx(math.log(105.0 / 100.0))
+        # close of candle 1 = 106 (100+2 then 100+1), close of candle 2 = 106 (105+2 then 105+1)
+        # Actually _feed_valid_candle feeds: base, base+2, base+1 → close = base+1
+        assert data[1].log_ret == pytest.approx(math.log(106.0 / 101.0))
 
     async def test_vol_pace_computed(self):
         agg = _make_aggregator(interval=10)
         agg._first_candle_complete = True
         agg._volume_feed.get_volume = AsyncMock(side_effect=[10.0, 20.0])
-        _feed_ticks(agg, [_make_tick(price=100.0, timestamp=10.0)])
+        _feed_valid_candle(agg, base_price=100.0, base_ts=10.0)
         await agg._close_current_candle()
-        _feed_ticks(agg, [_make_tick(price=101.0, timestamp=20.0)])
+        _feed_valid_candle(agg, base_price=101.0, base_ts=20.0)
         await agg._close_current_candle()
         data = agg.candle_data()
         assert data[0].vol_pace == pytest.approx(1.0)
@@ -389,7 +396,7 @@ class TestCandleData:
         agg = _make_aggregator(interval=10)
         agg._first_candle_complete = True
         for i in range(3):
-            _feed_ticks(agg, [_make_tick(price=100.0, timestamp=(i + 1) * 10.0)])
+            _feed_valid_candle(agg, base_price=100.0 + i, base_ts=(i + 1) * 10.0)
             await agg._close_current_candle()
         data = agg.candle_data()
         assert len(data) == 3

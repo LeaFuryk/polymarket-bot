@@ -32,6 +32,8 @@ dev = [
     "pre-commit>=4.0.0",
     "mypy>=1.8",
     "types-PyYAML>=6.0",
+    "matplotlib>=3.10.8",
+    "numpy>=2.4.2",
 ]
 server = [
     "fastapi>=0.115.0",

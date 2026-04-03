@@ -73,7 +73,7 @@ class ChainlinkStreamsAdapter:
         self._log.info("Connecting to Chainlink Data Streams: %s", url)
         self._ws = await websockets.connect(url, additional_headers=headers)
         self._running = True
-        self._log.info("Connected to Chainlink Data Streams")
+        self._log.info("🔗 Connected to Chainlink Data Streams")
 
     async def disconnect(self) -> None:
         """Close WebSocket connection."""

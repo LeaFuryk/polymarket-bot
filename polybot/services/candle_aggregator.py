@@ -111,7 +111,19 @@ class CandleAggregator(CandleSource):
             if self._partial is not None:
                 delay = self._partial.end_time - time.time()
                 if delay > 0:
+                    self._log.info(
+                        "⏳ Expiry loop sleeping %.1fs (partial ticks=%d, end=%.0f)",
+                        delay,
+                        self._partial.tick_count,
+                        self._partial.end_time,
+                    )
                     await asyncio.sleep(delay)
+                self._log.info(
+                    "⏰ Expiry loop woke — closing candle (ticks=%d O=%.2f C=%.2f)",
+                    self._partial.tick_count if self._partial else 0,
+                    self._partial.open if self._partial else 0,
+                    self._partial.last_price if self._partial else 0,
+                )
                 await self._close_current_candle()
             else:
                 await asyncio.sleep(1)
@@ -122,7 +134,14 @@ class CandleAggregator(CandleSource):
             return
 
         if not self._first_candle_complete:
-            self._log.info("Discarding incomplete startup candle, backfilling history")
+            self._log.info(
+                "⏭️ Discarding incomplete startup candle (O=%.2f H=%.2f L=%.2f C=%.2f ticks=%d), backfilling...",
+                self._partial.open,
+                self._partial.high,
+                self._partial.low,
+                self._partial.last_price,
+                self._partial.tick_count,
+            )
             self._first_candle_complete = True
             self._partial = None
             await self._backfill()
@@ -157,12 +176,13 @@ class CandleAggregator(CandleSource):
         )
         self._history.append(candle)
         self._log.info(
-            "Candle closed: O=%.2f H=%.2f L=%.2f C=%.2f V=%.2f",
+            "✅ Candle closed: O=$%.2f H=$%.2f L=$%.2f C=$%.2f V=%.2f | history=%d",
             candle.open,
             candle.high,
             candle.low,
             candle.close,
             candle.volume,
+            len(self._history),
         )
 
         self.events.emit("candle_close", candle)
@@ -178,7 +198,12 @@ class CandleAggregator(CandleSource):
                 candles = candles[:-1]
             for candle in candles:
                 self._history.append(candle)
-            self._log.info("Backfilled %d candles from volume feed", len(self._history))
+            self._log.info(
+                "📦 Backfilled %d candles from volume feed (oldest=$%.0f newest=$%.0f)",
+                len(self._history),
+                self._history[0].close if self._history else 0,
+                self._history[-1].close if self._history else 0,
+            )
         except Exception:
             self._log.exception("Backfill failed")
 
