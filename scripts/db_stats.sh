@@ -2,7 +2,7 @@
 # Quick stats for the collection database.
 DB="${1:-data/collection.db}"
 
-sqlite3 -header -column "$DB" "
+sqlite3 -header -column -readonly "$DB" "
 SELECT
     (SELECT COUNT(*) FROM candles) AS total_candles,
     (SELECT COUNT(*) FROM snapshots) AS total_snapshots,
