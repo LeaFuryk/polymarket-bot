@@ -34,6 +34,14 @@ class IndicatorService:
     def synced(self) -> bool:
         return self._synced
 
+    @property
+    def prior_candles(self) -> list[CandleRecord]:
+        return self._prior_candles
+
+    @property
+    def snapshots_so_far(self) -> list[IndicatorSnapshot]:
+        return self._snapshots_so_far
+
     def on_snapshot(self, snapshot: IndicatorSnapshot) -> dict | None:
         """Compute indicators for a snapshot. Returns the model row, or None if not synced."""
         if not self._synced:

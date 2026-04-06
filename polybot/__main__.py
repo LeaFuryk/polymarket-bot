@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import os
+from dataclasses import asdict
 
 from polybot.adapters.collector_client import CollectorClient
 from polybot.adapters.jsonl_session_store import JsonlSessionStore
@@ -17,20 +18,26 @@ log = logging.getLogger("polybot")
 
 
 async def main() -> None:
-    broadcaster = Broadcaster()
-    server = PolybotServer(broadcaster)
-    await server.start()
-
     repo = SqliteCandleRepository("data/collection.db")
     await repo.init()
 
     indicators = IndicatorService(candle_repo=repo)
-
     initial_cash = float(os.environ.get("POLYBOT_TRADING_INITIAL_CASH", "1000.0"))
     portfolio = PortfolioService(initial_cash=initial_cash)
     session_store = JsonlSessionStore("data/sessions.jsonl")
-
     agent = AgentService(indicators=indicators, portfolio=portfolio)
+
+    def build_initial_state() -> dict:
+        return {
+            "type": "initial_state",
+            "candles": [asdict(c) for c in indicators.prior_candles],
+            "snapshots_so_far": [asdict(s) for s in indicators.snapshots_so_far],
+            "portfolio": portfolio.session_summary(),
+        }
+
+    broadcaster = Broadcaster()
+    server = PolybotServer(broadcaster, initial_state_fn=build_initial_state)
+    await server.start()
 
     async def on_message(msg: dict) -> None:
         await agent.process(msg)
