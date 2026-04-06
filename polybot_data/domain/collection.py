@@ -39,3 +39,19 @@ class CandleRecord:
     volume: float
     outcome: str  # "UP" | "DOWN"
     final_ret: float  # ln(close / open)
+
+    @classmethod
+    def from_ws(cls, d: dict) -> CandleRecord:
+        """Decode a candle_close WS message into a CandleRecord."""
+        return cls(
+            candle_id=d.get("candle_id", ""),
+            start_time=d.get("start_time", 0.0),
+            end_time=d.get("end_time", 0.0),
+            open=d["open"],
+            high=d["high"],
+            low=d["low"],
+            close=d["close"],
+            volume=d["volume"],
+            outcome=d["outcome"],
+            final_ret=d["final_ret"],
+        )

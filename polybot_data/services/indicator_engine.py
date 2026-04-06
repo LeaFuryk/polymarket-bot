@@ -27,6 +27,7 @@ from polybot_data.domain.collection import CandleRecord
 class IndicatorSnapshot:
     """Single point-in-time market observation for indicator computation."""
 
+    candle_id: str
     timestamp: float
     elapsed_pct: float
     btc_price: float
@@ -37,6 +38,22 @@ class IndicatorSnapshot:
     down_bids: list[list[float]]
     down_asks: list[list[float]]
     market_volume: float
+
+    @classmethod
+    def from_dict(cls, d: dict) -> IndicatorSnapshot:
+        return cls(
+            candle_id=d.get("candle_id", ""),
+            timestamp=d["timestamp"],
+            elapsed_pct=d["elapsed_pct"],
+            btc_price=d["btc_price"],
+            btc_bid=d["btc_bid"],
+            btc_ask=d["btc_ask"],
+            up_bids=d["up_bids"],
+            up_asks=d["up_asks"],
+            down_bids=d["down_bids"],
+            down_asks=d["down_asks"],
+            market_volume=d["market_volume"],
+        )
 
 
 # ---------------------------------------------------------------------------

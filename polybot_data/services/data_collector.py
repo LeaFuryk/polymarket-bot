@@ -6,6 +6,7 @@ import asyncio
 import logging
 import math
 import time
+from dataclasses import asdict
 
 from pyee.asyncio import AsyncIOEventEmitter
 
@@ -101,24 +102,9 @@ class DataCollector:
 
         # Broadcast to WS clients every iteration
         if self._broadcast_fn is not None:
-            ws_msg = {
-                "type": "snapshot",
-                "timestamp": snap.timestamp,
-                "tick_timestamp": snap.tick_timestamp,
-                "candle_id": snap.candle_id,
-                "elapsed_pct": round(snap.elapsed_pct, 4),
-                "btc_price": snap.btc_price,
-                "btc_bid": snap.btc_bid,
-                "btc_ask": snap.btc_ask,
-                "up_bids": list(snap.up_bids),
-                "up_asks": list(snap.up_asks),
-                "down_bids": list(snap.down_bids),
-                "down_asks": list(snap.down_asks),
-                "up_last_trade": snap.up_last_trade,
-                "down_last_trade": snap.down_last_trade,
-                "market_volume": snap.market_volume,
-            }
-            await self._broadcast_fn(ws_msg)
+            msg = asdict(snap)
+            msg["type"] = "snapshot"
+            await self._broadcast_fn(msg)
 
         # Record to SQLite every RECORD_EVERY iterations
         if not self._recording:
@@ -174,21 +160,11 @@ class DataCollector:
             final_ret,
         )
 
-        # Broadcast candle_close to WS clients
+        # Broadcast the full CandleRecord as a dict
         if self._broadcast_fn is not None:
-            await self._broadcast_fn(
-                {
-                    "type": "candle_close",
-                    "candle_id": candle_id,
-                    "open": candle.open,
-                    "high": candle.high,
-                    "low": candle.low,
-                    "close": candle.close,
-                    "volume": candle.volume,
-                    "outcome": outcome,
-                    "final_ret": final_ret,
-                }
-            )
+            msg = asdict(record)
+            msg["type"] = "candle_close"
+            await self._broadcast_fn(msg)
 
     @staticmethod
     def _levels(book_levels: tuple, max_n: int = MAX_OB_LEVELS) -> tuple[tuple[float, float], ...]:
