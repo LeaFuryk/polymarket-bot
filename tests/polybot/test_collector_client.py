@@ -1,37 +1,47 @@
-"""Tests for CollectorClient with MessageRelay integration."""
+"""Tests for CollectorClient."""
 
 import json
-from unittest.mock import AsyncMock
 
 import pytest
 
 from polybot.adapters.collector_client import CollectorClient
 
 
-class TestCollectorClientRelay:
-    async def test_snapshot_forwarded_to_relay(self):
-        relay = AsyncMock()
-        client = CollectorClient(relay=relay)
+class TestCollectorClientCallback:
+    async def test_snapshot_invokes_on_message(self):
+        received = []
+
+        async def handler(msg):
+            received.append(msg)
+
+        client = CollectorClient(on_message=handler)
         msg = {"type": "snapshot", "btc_price": 69000.0}
         await client._handle_message(json.dumps(msg))
-        relay.broadcast_json.assert_awaited_once_with(msg)
+        assert len(received) == 1
+        assert received[0] == msg
 
-    async def test_candle_close_forwarded_to_relay(self):
-        relay = AsyncMock()
-        client = CollectorClient(relay=relay)
+    async def test_candle_close_invokes_on_message(self):
+        received = []
+
+        async def handler(msg):
+            received.append(msg)
+
+        client = CollectorClient(on_message=handler)
         msg = {"type": "candle_close", "candle_id": "test-123", "outcome": "UP"}
         await client._handle_message(json.dumps(msg))
-        relay.broadcast_json.assert_awaited_once_with(msg)
+        assert len(received) == 1
 
-    async def test_no_relay_still_works(self):
+    async def test_no_callback_still_works(self):
         client = CollectorClient()
         msg = {"type": "snapshot", "btc_price": 69000.0}
         await client._handle_message(json.dumps(msg))
         assert client.snapshot == msg
 
-    async def test_properties_updated_with_relay(self):
-        relay = AsyncMock()
-        client = CollectorClient(relay=relay)
+    async def test_properties_updated(self):
+        async def noop(msg):
+            pass
+
+        client = CollectorClient(on_message=noop)
         snap = {"type": "snapshot", "btc_price": 69000.0}
         await client._handle_message(json.dumps(snap))
         assert client.snapshot == snap
@@ -40,24 +50,16 @@ class TestCollectorClientRelay:
         await client._handle_message(json.dumps(candle))
         assert client.candle_close == candle
 
-    async def test_unknown_message_type_still_relayed(self):
-        relay = AsyncMock()
-        client = CollectorClient(relay=relay)
-        msg = {"type": "unknown", "data": 123}
+    async def test_callback_error_does_not_crash(self):
+        async def bad_handler(msg):
+            raise RuntimeError("boom")
+
+        client = CollectorClient(on_message=bad_handler)
+        msg = {"type": "snapshot", "btc_price": 69000.0}
         await client._handle_message(json.dumps(msg))
-        relay.broadcast_json.assert_awaited_once_with(msg)
-        assert client.snapshot is None
-        assert client.candle_close is None
+        assert client.snapshot == msg
 
     async def test_malformed_json_raises(self):
         client = CollectorClient()
         with pytest.raises(json.JSONDecodeError):
             await client._handle_message("not json")
-
-    async def test_relay_error_does_not_crash(self):
-        relay = AsyncMock()
-        relay.broadcast_json.side_effect = Exception("relay down")
-        client = CollectorClient(relay=relay)
-        msg = {"type": "snapshot", "btc_price": 69000.0}
-        await client._handle_message(json.dumps(msg))
-        assert client.snapshot == msg  # state still updated despite relay failure

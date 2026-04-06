@@ -5,15 +5,15 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from typing import TYPE_CHECKING
+from collections.abc import Callable, Coroutine
+from typing import Any
 
 import websockets
 
-if TYPE_CHECKING:
-    from polybot.ports.message_relay import MessageRelay
-
 WS_URL = "ws://localhost:8765"
 RECONNECT_DELAY = 3
+
+OnMessage = Callable[[dict], Coroutine[Any, Any, None]]
 
 
 class CollectorClient:
@@ -22,12 +22,12 @@ class CollectorClient:
     def __init__(
         self,
         ws_url: str = WS_URL,
-        relay: MessageRelay | None = None,
+        on_message: OnMessage | None = None,
         logger: logging.Logger | None = None,
     ) -> None:
         self._ws_url = ws_url
         self._log = logger or logging.getLogger(__name__)
-        self._relay = relay
+        self._on_message = on_message
         self._latest_snapshot: dict | None = None
         self._latest_candle_close: dict | None = None
         self._running = False
@@ -46,34 +46,18 @@ class CollectorClient:
                 await asyncio.sleep(RECONNECT_DELAY)
 
     async def _handle_message(self, raw: str) -> None:
-        """Parse raw WebSocket message, update state, and forward to relay."""
+        """Parse raw WebSocket message, update state, and dispatch to handler."""
         msg = json.loads(raw)
         msg_type = msg.get("type")
         if msg_type == "snapshot":
             self._latest_snapshot = msg
-            self._log.info(
-                "📊 BTC $%.2f | YES %.2f | NO %.2f | elapsed %.0f%% | %s",
-                msg.get("btc_price", 0),
-                msg.get("up_last_trade") or 0,
-                msg.get("down_last_trade") or 0,
-                msg.get("elapsed_pct", 0) * 100,
-                msg.get("candle_id", "?"),
-            )
         elif msg_type == "candle_close":
             self._latest_candle_close = msg
-            self._log.info(
-                "🕯️ Candle %s | %s | O=$%.2f C=$%.2f | ret=%+.4f",
-                msg.get("candle_id"),
-                msg.get("outcome"),
-                msg.get("open", 0),
-                msg.get("close", 0),
-                msg.get("final_ret", 0),
-            )
-        if self._relay is not None:
+        if self._on_message is not None:
             try:
-                await self._relay.broadcast_json(msg)
+                await self._on_message(msg)
             except Exception:
-                self._log.exception("Relay broadcast failed")
+                self._log.exception("on_message handler failed")
 
     async def stop(self) -> None:
         """Stop the run loop."""
