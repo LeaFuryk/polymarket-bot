@@ -7,8 +7,10 @@ import logging
 import aiosqlite
 from polybot_data.domain.collection import CandleRecord
 
+from polybot.ports.candle_repository import CandleRepository
 
-class SqliteCandleRepository:
+
+class SqliteCandleRepository(CandleRepository):
     """Reads candles from SQLite in read-only mode."""
 
     def __init__(self, db_path: str, logger: logging.Logger | None = None) -> None:

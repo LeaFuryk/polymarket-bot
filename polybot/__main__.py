@@ -6,6 +6,7 @@ import os
 from dataclasses import asdict
 
 from polybot.adapters.collector_client import CollectorClient
+from polybot.adapters.joblib_predictor import JoblibPredictor
 from polybot.adapters.jsonl_session_store import JsonlSessionStore
 from polybot.adapters.sqlite_candle_repo import SqliteCandleRepository
 from polybot.services.agent_service import AgentService
@@ -13,19 +14,38 @@ from polybot.services.indicator_service import IndicatorService
 from polybot.services.portfolio_service import PortfolioService
 from polybot.ws import Broadcaster, PolybotServer
 
+# ---------------------------------------------------------------------------
+# Configuration (overridable via environment variables)
+# ---------------------------------------------------------------------------
+
+DB_PATH = os.environ.get("POLYBOT_DB_PATH", "data/collection.db")
+SESSION_PATH = os.environ.get("POLYBOT_SESSION_PATH", "data/sessions.jsonl")
+MODEL_PATH = os.environ.get("POLYBOT_MODEL_PATH", "models/logistic_v1.joblib")
+SCALER_PATH = os.environ.get("POLYBOT_SCALER_PATH", "models/scaler_v1.joblib")
+FEATURES_PATH = os.environ.get("POLYBOT_FEATURES_PATH", "models/feature_cols_v1.joblib")
+INITIAL_CASH = float(os.environ.get("POLYBOT_TRADING_INITIAL_CASH", "1000.0"))
+
+# ---------------------------------------------------------------------------
+
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 log = logging.getLogger("polybot")
 
 
 async def main() -> None:
-    repo = SqliteCandleRepository("data/collection.db")
+    repo = SqliteCandleRepository(DB_PATH)
     await repo.init()
 
     indicators = IndicatorService(candle_repo=repo)
-    initial_cash = float(os.environ.get("POLYBOT_TRADING_INITIAL_CASH", "1000.0"))
-    portfolio = PortfolioService(initial_cash=initial_cash)
-    session_store = JsonlSessionStore("data/sessions.jsonl")
-    agent = AgentService(indicators=indicators, portfolio=portfolio)
+    portfolio = PortfolioService(initial_cash=INITIAL_CASH)
+    session_store = JsonlSessionStore(SESSION_PATH)
+
+    predictor = JoblibPredictor(
+        model_path=MODEL_PATH,
+        scaler_path=SCALER_PATH,
+        feature_cols_path=FEATURES_PATH,
+    )
+
+    agent = AgentService(indicators=indicators, portfolio=portfolio, predictor=predictor)
 
     def build_initial_state() -> dict:
         return {

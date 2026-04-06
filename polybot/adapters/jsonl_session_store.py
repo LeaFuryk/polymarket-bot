@@ -7,8 +7,10 @@ import logging
 import time
 from pathlib import Path
 
+from polybot.ports.session_store import SessionStore
 
-class JsonlSessionStore:
+
+class JsonlSessionStore(SessionStore):
     """Appends one JSON line per session to a file."""
 
     def __init__(self, path: str, logger: logging.Logger | None = None) -> None:
