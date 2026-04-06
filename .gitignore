@@ -23,6 +23,7 @@ logs/*.db
 
 archive/
 legacy/
+data/
 
 .DS_Store
 *.swp

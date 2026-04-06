@@ -48,7 +48,7 @@ class DataCollector:
         self._log = logger or logging.getLogger(__name__)
         self._broadcast_fn = broadcast_fn
         self._tick_counter = 0
-        self._first_candle_seen = False
+        self._recording = False
 
         events.on("candle_close", self._on_candle_close)
 
@@ -120,8 +120,8 @@ class DataCollector:
             }
             await self._broadcast_fn(ws_msg)
 
-        # Record to SQLite every RECORD_EVERY iterations (skip first incomplete candle)
-        if not self._first_candle_seen:
+        # Record to SQLite every RECORD_EVERY iterations
+        if not self._recording:
             return
         self._tick_counter += 1
         if self._tick_counter >= RECORD_EVERY:
@@ -139,10 +139,9 @@ class DataCollector:
 
     async def _on_candle_close(self, candle: Candle) -> None:
         """Handle candle_close event from CandleAggregator."""
-        if not self._first_candle_seen:
-            self._first_candle_seen = True
-            self._log.info("⏭️ First incomplete candle discarded — recording starts next candle")
-            return
+        if not self._recording:
+            self._recording = True
+            self._log.info("🟢 First candle closed — recording active")
 
         outcome = "UP" if candle.close >= candle.open else "DOWN"
         final_ret = math.log(candle.close / candle.open) if candle.open > 0 else 0.0

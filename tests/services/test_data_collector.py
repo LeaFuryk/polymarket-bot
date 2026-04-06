@@ -94,7 +94,7 @@ def _make_collector(
 
     events = AsyncIOEventEmitter()
     collector = DataCollector(candle_source, market_feed, store, events=events, broadcast_fn=None)
-    collector._first_candle_seen = True  # tests assume first incomplete candle already discarded
+    collector._recording = True  # tests assume recording is active
     collector._tick_counter = RECORD_EVERY - 1  # next fetch will record
     return collector, store
 
