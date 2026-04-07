@@ -64,6 +64,10 @@ class AgentService:
             candle = CandleRecord.from_ws(msg)
             await self._on_candle_close(candle)
             return None
+        if msg_type == "candle_correction":
+            candle = CandleRecord.from_ws(msg)
+            self._on_candle_correction(candle)
+            return None
         return None
 
     def _on_snapshot(self, snapshot: IndicatorSnapshot) -> dict | None:
@@ -201,3 +205,20 @@ class AgentService:
         self._cash_before_bet = 0.0
 
         await self._indicators.on_candle_close(candle)
+
+    def _on_candle_correction(self, corrected: CandleRecord) -> None:
+        """Handle outcome/price correction from Polymarket resolution."""
+        # Update candle in indicator history
+        for i, c in enumerate(self._indicators.prior_candles):
+            if c.candle_id == corrected.candle_id:
+                old_outcome = c.outcome
+                self._indicators.prior_candles[i] = corrected
+
+                if old_outcome != corrected.outcome:
+                    self._log.warning(
+                        "🔄 Correction applied | %s | %s→%s",
+                        corrected.candle_id,
+                        old_outcome,
+                        corrected.outcome,
+                    )
+                break

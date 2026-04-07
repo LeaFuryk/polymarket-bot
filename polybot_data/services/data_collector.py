@@ -111,7 +111,11 @@ class DataCollector:
                 final_ret=final_ret,
             )
 
-            if pm_outcome != chainlink_outcome:
+            outcome_changed = pm_outcome != chainlink_outcome
+            open_changed = abs(pm_open - original.open) > 0.01
+            close_changed = abs(pm_close - original.close) > 0.01
+
+            if outcome_changed or open_changed or close_changed:
                 self._log.warning(
                     "🔄 Resolution correction | %s | %s→%s | open: $%.2f→$%.2f | close: $%.2f→$%.2f",
                     original.candle_id,
@@ -122,7 +126,6 @@ class DataCollector:
                     original.close,
                     pm_close,
                 )
-                # Broadcast correction to downstream consumers
                 if self._broadcast_fn is not None:
                     corrected = CandleRecord(
                         candle_id=original.candle_id,
