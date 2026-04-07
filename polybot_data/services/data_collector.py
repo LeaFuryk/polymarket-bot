@@ -166,6 +166,65 @@ class DataCollector:
             msg["type"] = "candle_close"
             await self._broadcast_fn(msg)
 
+        # Fire-and-forget: verify Polymarket resolution and correct if needed
+        asyncio.create_task(self._verify_resolution(candle_id, record))
+
+    async def _verify_resolution(self, candle_id: str, original: CandleRecord) -> None:
+        """Background: fetch Polymarket resolution and update DB if prices differ."""
+        await asyncio.sleep(5)
+
+        resolution = await self._market_feed.get_resolution(candle_id)
+        if resolution is None:
+            self._log.warning("⚠️ No Polymarket resolution for %s — keeping Chainlink values", candle_id)
+            return
+
+        pm_open = resolution["open"]
+        pm_close = resolution["close"]
+        pm_outcome = resolution["outcome"]
+
+        chainlink_outcome = "UP" if original.close >= original.open else "DOWN"
+
+        if pm_outcome == chainlink_outcome and abs(pm_open - original.open) < 0.01:
+            return
+
+        final_ret = math.log(pm_close / pm_open) if pm_open > 0 else 0.0
+
+        await self._store.update_candle(
+            candle_id=candle_id,
+            open=pm_open,
+            close=pm_close,
+            outcome=pm_outcome,
+            final_ret=final_ret,
+        )
+
+        self._log.warning(
+            "🔄 Polymarket correction | %s | %s→%s | open: $%.2f→$%.2f | close: $%.2f→$%.2f",
+            candle_id,
+            chainlink_outcome,
+            pm_outcome,
+            original.open,
+            pm_open,
+            original.close,
+            pm_close,
+        )
+
+        if self._broadcast_fn is not None:
+            corrected = CandleRecord(
+                candle_id=candle_id,
+                start_time=original.start_time,
+                end_time=original.end_time,
+                open=pm_open,
+                high=original.high,
+                low=original.low,
+                close=pm_close,
+                volume=original.volume,
+                outcome=pm_outcome,
+                final_ret=final_ret,
+            )
+            msg = asdict(corrected)
+            msg["type"] = "candle_correction"
+            await self._broadcast_fn(msg)
+
     @staticmethod
     def _levels(book_levels: tuple, max_n: int = MAX_OB_LEVELS) -> tuple[tuple[float, float], ...]:
         """Extract up to max_n (price, size) pairs from orderbook levels."""

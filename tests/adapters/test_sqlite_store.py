@@ -156,3 +156,94 @@ class TestSnapshotRoundTrip:
         loaded = (await store.get_snapshots(snap.candle_id))[0]
         assert loaded.up_last_trade is None
         assert loaded.down_last_trade is None
+
+
+# ---------------------------------------------------------------------------
+# update_candle tests
+# ---------------------------------------------------------------------------
+
+
+class TestUpdateCandle:
+    async def test_updates_existing_candle(self, store: SqliteStore):
+        """update_candle modifies open, close, outcome, final_ret for an existing row."""
+        original = _make_candle_record()
+        await store.write_candle(original)
+
+        await store.update_candle(
+            candle_id=original.candle_id,
+            open=67750.0,
+            close=67700.0,
+            outcome="DOWN",
+            final_ret=-0.0007,
+        )
+
+        loaded = await store.get_candle(original.candle_id)
+        assert loaded is not None
+        assert loaded.open == pytest.approx(67750.0)
+        assert loaded.close == pytest.approx(67700.0)
+        assert loaded.outcome == "DOWN"
+        assert loaded.final_ret == pytest.approx(-0.0007)
+
+    async def test_update_preserves_untouched_columns(self, store: SqliteStore):
+        """Columns not in the UPDATE SET clause stay unchanged."""
+        original = _make_candle_record()
+        await store.write_candle(original)
+
+        await store.update_candle(
+            candle_id=original.candle_id,
+            open=99999.0,
+            close=99999.0,
+            outcome="DOWN",
+            final_ret=0.0,
+        )
+
+        loaded = await store.get_candle(original.candle_id)
+        assert loaded is not None
+        # These columns should remain from the original insert
+        assert loaded.start_time == pytest.approx(original.start_time)
+        assert loaded.end_time == pytest.approx(original.end_time)
+        assert loaded.high == pytest.approx(original.high)
+        assert loaded.low == pytest.approx(original.low)
+        assert loaded.volume == pytest.approx(original.volume)
+
+    async def test_update_nonexistent_candle_is_noop(self, store: SqliteStore):
+        """UPDATE on a missing candle_id affects zero rows and does not raise."""
+        # Should not raise any exception
+        await store.update_candle(
+            candle_id="does-not-exist",
+            open=100.0,
+            close=200.0,
+            outcome="UP",
+            final_ret=0.5,
+        )
+
+        # Confirm nothing was created
+        loaded = await store.get_candle("does-not-exist")
+        assert loaded is None
+
+    async def test_update_persists_after_reread(self, store: SqliteStore):
+        """Verify the update is durable — read back multiple times."""
+        original = _make_candle_record()
+        await store.write_candle(original)
+
+        await store.update_candle(
+            candle_id=original.candle_id,
+            open=68000.0,
+            close=68100.0,
+            outcome="UP",
+            final_ret=0.00147,
+        )
+
+        # First read
+        loaded1 = await store.get_candle(original.candle_id)
+        assert loaded1 is not None
+        assert loaded1.open == pytest.approx(68000.0)
+        assert loaded1.close == pytest.approx(68100.0)
+
+        # Second read — same values
+        loaded2 = await store.get_candle(original.candle_id)
+        assert loaded2 is not None
+        assert loaded2.open == pytest.approx(68000.0)
+        assert loaded2.close == pytest.approx(68100.0)
+        assert loaded2.outcome == "UP"
+        assert loaded2.final_ret == pytest.approx(0.00147)

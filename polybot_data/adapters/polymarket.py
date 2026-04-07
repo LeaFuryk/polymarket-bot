@@ -115,6 +115,52 @@ class PolymarketAdapter:
             self._log.exception("Failed to fetch volume for %s", slug)
             return 0.0
 
+    async def get_resolution(self, slug: str) -> dict | None:
+        """Fetch Polymarket resolution from Gamma API eventMetadata.
+
+        Returns dict with:
+            open: float (priceToBeat)
+            close: float (finalPrice)
+            outcome: str ("UP" or "DOWN")
+        Or None if resolution not available yet.
+        """
+        try:
+            resp = await self._gamma_client.get("/events", params={"slug": slug})
+            resp.raise_for_status()
+            events = resp.json()
+            if not events:
+                return None
+
+            event = events[0]
+            meta = event.get("eventMetadata", {})
+            if isinstance(meta, str):
+                meta = json.loads(meta)
+
+            price_to_beat = meta.get("priceToBeat")
+            final_price = meta.get("finalPrice")
+            if price_to_beat is None or final_price is None:
+                return None
+
+            mkt = event.get("markets", [{}])[0]
+            outcome_prices = mkt.get("outcomePrices", "[]")
+            if isinstance(outcome_prices, str):
+                outcome_prices = json.loads(outcome_prices)
+
+            if len(outcome_prices) < 2:
+                return None
+
+            up_price = float(outcome_prices[0])
+            outcome = "UP" if up_price > 0.5 else "DOWN"
+
+            return {
+                "open": float(price_to_beat),
+                "close": float(final_price),
+                "outcome": outcome,
+            }
+        except Exception:
+            self._log.exception("Failed to fetch resolution for %s", slug)
+            return None
+
     # -- Gamma API ----------------------------------------------------------
 
     async def _fetch_market_by_slug(self, slug: str) -> Market | None:

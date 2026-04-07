@@ -175,6 +175,15 @@ class SqliteStore:
             )
         return result
 
+    async def update_candle(self, candle_id: str, open: float, close: float, outcome: str, final_ret: float) -> None:
+        """Update open, close, outcome, final_ret for an existing candle."""
+        assert self._db is not None
+        await self._db.execute(
+            "UPDATE candles SET open = ?, close = ?, outcome = ?, final_ret = ? WHERE candle_id = ?",
+            (open, close, outcome, final_ret, candle_id),
+        )
+        await self._db.commit()
+
     async def close(self) -> None:
         """Close the database connection."""
         if self._db is not None:
