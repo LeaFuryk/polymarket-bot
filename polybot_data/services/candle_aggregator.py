@@ -4,28 +4,22 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import math
 import time
-from collections import deque
 
 from pyee.asyncio import AsyncIOEventEmitter
 
 from polybot_data.domain.models import (
     BtcTick,
     Candle,
-    CandleData,
     PartialCandle,
 )
-from polybot_data.ports.candle_source import CandleSource
 from polybot_data.ports.price_stream import PriceStream
 from polybot_data.ports.volume_feed import VolumeFeed
 
 CANDLE_INTERVAL = 300  # 5 minutes
-HISTORY_SIZE = 40  # needs 35+ for MACD, keep extra buffer
-VOL_PACE_WINDOW = 20  # trailing bars for volume pace
 
 
-class CandleAggregator(CandleSource):
+class CandleAggregator:
     """Consumes Chainlink ticks and builds 5-minute OHLCV candles.
 
     Single-authority design:
@@ -39,7 +33,6 @@ class CandleAggregator(CandleSource):
         price_stream: PriceStream,
         volume_feed: VolumeFeed,
         interval: int = CANDLE_INTERVAL,
-        history_size: int = HISTORY_SIZE,
         logger: logging.Logger | None = None,
         events: AsyncIOEventEmitter | None = None,
     ) -> None:
@@ -47,10 +40,10 @@ class CandleAggregator(CandleSource):
         self._volume_feed = volume_feed
         self._log = logger or logging.getLogger(__name__)
         self._interval = interval
-        self._history: deque[Candle] = deque(maxlen=history_size)
         self._partial: PartialCandle | None = None
         self._latest_tick: BtcTick | None = None
         self._first_candle_complete = False
+        self._last_closed_end: float = 0.0
         self.events = events or AsyncIOEventEmitter()
 
     # -- Background tasks --------------------------------------------------
@@ -87,8 +80,10 @@ class CandleAggregator(CandleSource):
         candle_end = candle_start + self._interval
 
         if self._partial is not None and candle_start >= self._partial.end_time:
-            # Tick belongs to a future interval — drop it.
-            # The expiry loop will close the current candle shortly.
+            return
+
+        # Reject ticks for an interval we already closed
+        if candle_end <= self._last_closed_end:
             return
 
         if self._partial is None:
@@ -111,40 +106,26 @@ class CandleAggregator(CandleSource):
             if self._partial is not None:
                 delay = self._partial.end_time - time.time()
                 if delay > 0:
-                    self._log.info(
-                        "⏳ Expiry loop sleeping %.1fs (partial ticks=%d, end=%.0f)",
-                        delay,
-                        self._partial.tick_count,
-                        self._partial.end_time,
-                    )
                     await asyncio.sleep(delay)
-                self._log.info(
-                    "⏰ Expiry loop woke — closing candle (ticks=%d O=%.2f C=%.2f)",
-                    self._partial.tick_count if self._partial else 0,
-                    self._partial.open if self._partial else 0,
-                    self._partial.last_price if self._partial else 0,
-                )
                 await self._close_current_candle()
             else:
                 await asyncio.sleep(1)
 
     async def _close_current_candle(self) -> None:
-        """Close the partial candle and add to history."""
+        """Close the partial candle and emit candle_close event."""
         if self._partial is None:
             return
 
         if not self._first_candle_complete:
             self._log.info(
-                "⏭️ Discarding incomplete startup candle (O=%.2f H=%.2f L=%.2f C=%.2f ticks=%d), backfilling...",
+                "⏭️ Discarding incomplete startup candle (O=%.2f C=%.2f ticks=%d)",
                 self._partial.open,
-                self._partial.high,
-                self._partial.low,
                 self._partial.last_price,
                 self._partial.tick_count,
             )
             self._first_candle_complete = True
+            self._last_closed_end = self._partial.end_time
             self._partial = None
-            await self._backfill()
             return
 
         # Snapshot fields before any await
@@ -155,9 +136,8 @@ class CandleAggregator(CandleSource):
         p_start = self._partial.start_time
         p_end = self._partial.end_time
 
-        # Clear partial — ticks arriving during the await are dropped (future interval),
-        # and the next tick after close starts a fresh partial naturally.
         self._partial = None
+        self._last_closed_end = p_end
 
         try:
             volume = await self._volume_feed.get_volume(p_start, p_end)
@@ -174,38 +154,7 @@ class CandleAggregator(CandleSource):
             start_time=p_start,
             end_time=p_end,
         )
-        self._history.append(candle)
-        self._log.info(
-            "✅ Candle closed: O=$%.2f H=$%.2f L=$%.2f C=$%.2f V=%.2f | history=%d",
-            candle.open,
-            candle.high,
-            candle.low,
-            candle.close,
-            candle.volume,
-            len(self._history),
-        )
-
         self.events.emit("candle_close", candle)
-
-    async def _backfill(self) -> None:
-        """Load historical candles from VolumeFeed to warm up indicators."""
-        try:
-            candles = await self._volume_feed.get_candles(self._history.maxlen, self._interval)
-            if not candles:
-                return
-            now = time.time()
-            if candles[-1].end_time > now:
-                candles = candles[:-1]
-            for candle in candles:
-                self._history.append(candle)
-            self._log.info(
-                "📦 Backfilled %d candles from volume feed (oldest=$%.0f newest=$%.0f)",
-                len(self._history),
-                self._history[0].close if self._history else 0,
-                self._history[-1].close if self._history else 0,
-            )
-        except Exception:
-            self._log.exception("Backfill failed")
 
     # -- Public read interface ---------------------------------------------
 
@@ -216,10 +165,6 @@ class CandleAggregator(CandleSource):
     @property
     def partial(self) -> PartialCandle | None:
         return self._partial
-
-    def closed_candles(self) -> tuple[Candle, ...]:
-        """Last N closed candles, oldest first."""
-        return tuple(self._history)
 
     async def get_partial_volume(self, start_time: float = 0, end_time: float = 0) -> float:
         """Get BTC volume for a candle interval.
@@ -240,37 +185,3 @@ class CandleAggregator(CandleSource):
         except Exception:
             self._log.exception("Failed to fetch partial volume")
             return 0.0
-
-    def candle_data(self) -> tuple[CandleData, ...]:
-        """Closed candles as CandleData with log_ret and vol_pace (causal)."""
-        candles = tuple(self._history)
-        if not candles:
-            return ()
-
-        result: list[CandleData] = []
-        count = len(candles)
-
-        for i, candle in enumerate(candles):
-            if i > 0 and candles[i - 1].close > 0:
-                log_ret = math.log(candle.close / candles[i - 1].close)
-            else:
-                log_ret = None
-
-            trailing = candles[max(0, i - VOL_PACE_WINDOW + 1) : i + 1]
-            avg_vol = sum(c.volume for c in trailing) / len(trailing)
-            vol_pace = candle.volume / avg_vol if avg_vol > 0 else None
-
-            result.append(
-                CandleData(
-                    t=i - count,
-                    open=candle.open,
-                    high=candle.high,
-                    low=candle.low,
-                    close=candle.close,
-                    volume=candle.volume,
-                    log_ret=log_ret,
-                    vol_pace=vol_pace,
-                )
-            )
-
-        return tuple(result)

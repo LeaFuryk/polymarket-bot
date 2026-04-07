@@ -132,6 +132,12 @@ class PolymarketAdapter:
                 return None
 
             event = events[0]
+            mkt = event.get("markets", [{}])[0]
+
+            # Market must be closed before resolution is available
+            if not mkt.get("closed", False):
+                return None
+
             meta = event.get("eventMetadata", {})
             if isinstance(meta, str):
                 meta = json.loads(meta)
@@ -140,8 +146,6 @@ class PolymarketAdapter:
             final_price = meta.get("finalPrice")
             if price_to_beat is None or final_price is None:
                 return None
-
-            mkt = event.get("markets", [{}])[0]
             outcome_prices = mkt.get("outcomePrices", "[]")
             if isinstance(outcome_prices, str):
                 outcome_prices = json.loads(outcome_prices)

@@ -1,9 +1,8 @@
 """Tests for DataCollector service."""
 
-import logging
 import math
 import time
-from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
+from unittest.mock import AsyncMock, MagicMock, PropertyMock
 
 import pytest
 from polybot_data.domain.collection import CandleRecord, Snapshot
@@ -290,68 +289,44 @@ def _make_resolution_collector(
     return collector, store, market_feed
 
 
-class TestVerifyResolutionMatch:
-    """When Polymarket resolution matches Chainlink, no update should occur."""
+class TestResolutionQueueMatch:
+    """When Polymarket resolution matches Chainlink, prices still updated but no broadcast."""
 
-    @patch("polybot_data.services.data_collector.asyncio.sleep", new_callable=AsyncMock)
-    async def test_no_update_when_resolution_matches(self, mock_sleep):
-        """Matching outcome and open price => no update_candle call."""
+    async def test_always_updates_with_polymarket_prices(self):
         original = _make_candle_record(open_=67800.0, close=67850.0, outcome="UP")
         resolution = {"open": 67800.0, "close": 67850.0, "outcome": "UP"}
         collector, store, _ = _make_resolution_collector(resolution=resolution)
+        collector._pending_resolutions.append(original)
 
-        await collector._verify_resolution(original.candle_id, original)
+        await collector._process_pending_resolutions()
 
-        store.update_candle.assert_not_awaited()
-
-    @patch("polybot_data.services.data_collector.asyncio.sleep", new_callable=AsyncMock)
-    async def test_no_update_when_open_within_tolerance(self, mock_sleep):
-        """Open prices within 0.01 tolerance and same outcome => no update."""
-        original = _make_candle_record(open_=67800.0, close=67850.0, outcome="UP")
-        resolution = {"open": 67800.005, "close": 67850.0, "outcome": "UP"}
-        collector, store, _ = _make_resolution_collector(resolution=resolution)
-
-        await collector._verify_resolution(original.candle_id, original)
-
-        store.update_candle.assert_not_awaited()
+        store.update_candle.assert_awaited_once()
+        assert len(collector._pending_resolutions) == 0
 
 
-class TestVerifyResolutionNone:
-    """When resolution is None, log warning and do nothing."""
+class TestResolutionQueuePending:
+    """When resolution not available, candle stays in queue."""
 
-    @patch("polybot_data.services.data_collector.asyncio.sleep", new_callable=AsyncMock)
-    async def test_no_update_when_resolution_is_none(self, mock_sleep):
-        """None resolution => no update_candle call."""
+    async def test_stays_in_queue_when_resolution_none(self):
         original = _make_candle_record()
         collector, store, _ = _make_resolution_collector(resolution=None)
+        collector._pending_resolutions.append(original)
 
-        await collector._verify_resolution(original.candle_id, original)
+        await collector._process_pending_resolutions()
 
-        store.update_candle.assert_not_awaited()
-
-    @patch("polybot_data.services.data_collector.asyncio.sleep", new_callable=AsyncMock)
-    async def test_logs_warning_when_resolution_is_none(self, mock_sleep, caplog):
-        """None resolution should produce a warning log."""
-        original = _make_candle_record()
-        collector, store, _ = _make_resolution_collector(resolution=None)
-
-        with caplog.at_level(logging.WARNING):
-            await collector._verify_resolution(original.candle_id, original)
-
-        assert any("No Polymarket resolution" in msg for msg in caplog.messages)
+        assert len(collector._pending_resolutions) == 1  # still pending
 
 
-class TestVerifyResolutionOutcomeDiffers:
-    """When Polymarket outcome differs from Chainlink, update_candle is called."""
+class TestResolutionQueueOutcomeDiffers:
+    """When Polymarket outcome differs, update_candle is called."""
 
-    @patch("polybot_data.services.data_collector.asyncio.sleep", new_callable=AsyncMock)
-    async def test_update_called_when_outcome_differs(self, mock_sleep):
-        """Chainlink says UP, Polymarket says DOWN => update triggered."""
+    async def test_update_called_when_outcome_differs(self):
         original = _make_candle_record(open_=67800.0, close=67850.0, outcome="UP")
         resolution = {"open": 67800.0, "close": 67750.0, "outcome": "DOWN"}
         collector, store, _ = _make_resolution_collector(resolution=resolution)
+        collector._pending_resolutions.append(original)
 
-        await collector._verify_resolution(original.candle_id, original)
+        await collector._process_pending_resolutions()
 
         store.update_candle.assert_awaited_once()
         call_kwargs = store.update_candle.call_args[1]
@@ -359,186 +334,104 @@ class TestVerifyResolutionOutcomeDiffers:
         assert call_kwargs["open"] == pytest.approx(67800.0)
         assert call_kwargs["close"] == pytest.approx(67750.0)
         assert call_kwargs["outcome"] == "DOWN"
+        assert len(collector._pending_resolutions) == 0
 
 
-class TestVerifyResolutionOpenDiffers:
-    """When Polymarket open price differs beyond tolerance, update is triggered."""
+class TestResolutionQueueOpenDiffers:
+    """When open price differs beyond tolerance, update is triggered."""
 
-    @patch("polybot_data.services.data_collector.asyncio.sleep", new_callable=AsyncMock)
-    async def test_update_called_when_open_differs(self, mock_sleep):
-        """Open price differs by > 0.01 with same outcome => update triggered."""
+    async def test_update_called_when_open_differs(self):
         original = _make_candle_record(open_=67800.0, close=67850.0, outcome="UP")
         resolution = {"open": 67810.0, "close": 67850.0, "outcome": "UP"}
         collector, store, _ = _make_resolution_collector(resolution=resolution)
+        collector._pending_resolutions.append(original)
 
-        await collector._verify_resolution(original.candle_id, original)
+        await collector._process_pending_resolutions()
 
         store.update_candle.assert_awaited_once()
         call_kwargs = store.update_candle.call_args[1]
         assert call_kwargs["open"] == pytest.approx(67810.0)
-        assert call_kwargs["close"] == pytest.approx(67850.0)
-        assert call_kwargs["outcome"] == "UP"
 
 
-class TestVerifyResolutionCloseDiffers:
-    """When Polymarket close price differs, update is triggered (via outcome change)."""
-
-    @patch("polybot_data.services.data_collector.asyncio.sleep", new_callable=AsyncMock)
-    async def test_update_called_when_close_differs_changing_outcome(self, mock_sleep):
-        """Close price change that flips outcome => update triggered."""
-        # Chainlink: open=67800, close=67850 => UP
-        # Polymarket: open=67800, close=67750 => DOWN (outcome flips)
-        original = _make_candle_record(open_=67800.0, close=67850.0, outcome="UP")
-        resolution = {"open": 67800.0, "close": 67750.0, "outcome": "DOWN"}
-        collector, store, _ = _make_resolution_collector(resolution=resolution)
-
-        await collector._verify_resolution(original.candle_id, original)
-
-        store.update_candle.assert_awaited_once()
-        call_kwargs = store.update_candle.call_args[1]
-        assert call_kwargs["close"] == pytest.approx(67750.0)
-
-    @patch("polybot_data.services.data_collector.asyncio.sleep", new_callable=AsyncMock)
-    async def test_update_called_when_open_differs_with_same_outcome(self, mock_sleep):
-        """Open price difference alone triggers update even when outcome matches."""
-        original = _make_candle_record(open_=67800.0, close=67900.0, outcome="UP")
-        resolution = {"open": 67850.0, "close": 67900.0, "outcome": "UP"}
-        collector, store, _ = _make_resolution_collector(resolution=resolution)
-
-        await collector._verify_resolution(original.candle_id, original)
-
-        store.update_candle.assert_awaited_once()
-        call_kwargs = store.update_candle.call_args[1]
-        assert call_kwargs["open"] == pytest.approx(67850.0)
-
-
-class TestVerifyResolutionBroadcast:
+class TestResolutionQueueBroadcast:
     """Test candle_correction broadcast behavior."""
 
-    @patch("polybot_data.services.data_collector.asyncio.sleep", new_callable=AsyncMock)
-    async def test_broadcasts_candle_correction_on_mismatch(self, mock_sleep):
-        """When resolution differs, broadcasts a candle_correction message."""
+    async def test_broadcasts_correction_on_mismatch(self):
         broadcast_fn = AsyncMock()
         original = _make_candle_record(open_=67800.0, close=67850.0, outcome="UP")
         resolution = {"open": 67800.0, "close": 67750.0, "outcome": "DOWN"}
-        collector, store, _ = _make_resolution_collector(
-            resolution=resolution,
-            broadcast_fn=broadcast_fn,
-        )
+        collector, store, _ = _make_resolution_collector(resolution=resolution, broadcast_fn=broadcast_fn)
+        collector._pending_resolutions.append(original)
 
-        await collector._verify_resolution(original.candle_id, original)
+        await collector._process_pending_resolutions()
 
         broadcast_fn.assert_awaited_once()
         msg = broadcast_fn.call_args[0][0]
         assert msg["type"] == "candle_correction"
-        assert msg["open"] == pytest.approx(67800.0)
-        assert msg["close"] == pytest.approx(67750.0)
         assert msg["outcome"] == "DOWN"
-        # Preserved fields from original
-        assert msg["start_time"] == pytest.approx(original.start_time)
-        assert msg["end_time"] == pytest.approx(original.end_time)
-        assert msg["high"] == pytest.approx(original.high)
-        assert msg["low"] == pytest.approx(original.low)
-        assert msg["volume"] == pytest.approx(original.volume)
 
-    @patch("polybot_data.services.data_collector.asyncio.sleep", new_callable=AsyncMock)
-    async def test_no_broadcast_when_resolution_matches(self, mock_sleep):
-        """No broadcast when Polymarket and Chainlink agree."""
+    async def test_no_broadcast_when_matches(self):
         broadcast_fn = AsyncMock()
         original = _make_candle_record(open_=67800.0, close=67850.0, outcome="UP")
         resolution = {"open": 67800.0, "close": 67850.0, "outcome": "UP"}
-        collector, store, _ = _make_resolution_collector(
-            resolution=resolution,
-            broadcast_fn=broadcast_fn,
-        )
+        collector, store, _ = _make_resolution_collector(resolution=resolution, broadcast_fn=broadcast_fn)
+        collector._pending_resolutions.append(original)
 
-        await collector._verify_resolution(original.candle_id, original)
+        await collector._process_pending_resolutions()
 
         broadcast_fn.assert_not_awaited()
 
-    @patch("polybot_data.services.data_collector.asyncio.sleep", new_callable=AsyncMock)
-    async def test_no_broadcast_when_resolution_is_none(self, mock_sleep):
-        """No broadcast when resolution unavailable."""
-        broadcast_fn = AsyncMock()
-        original = _make_candle_record()
-        collector, store, _ = _make_resolution_collector(
-            resolution=None,
-            broadcast_fn=broadcast_fn,
-        )
-
-        await collector._verify_resolution(original.candle_id, original)
-
-        broadcast_fn.assert_not_awaited()
-
-    @patch("polybot_data.services.data_collector.asyncio.sleep", new_callable=AsyncMock)
-    async def test_no_broadcast_when_no_broadcast_fn(self, mock_sleep):
-        """When broadcast_fn is None, mismatch still updates DB without error."""
+    async def test_no_broadcast_when_no_broadcast_fn(self):
         original = _make_candle_record(open_=67800.0, close=67850.0, outcome="UP")
         resolution = {"open": 67800.0, "close": 67750.0, "outcome": "DOWN"}
         collector, store, _ = _make_resolution_collector(resolution=resolution)
-        # broadcast_fn is None by default in _make_resolution_collector
+        collector._pending_resolutions.append(original)
 
-        # Should not raise
-        await collector._verify_resolution(original.candle_id, original)
+        await collector._process_pending_resolutions()
         store.update_candle.assert_awaited_once()
 
 
-class TestVerifyResolutionFinalRet:
-    """Verify correct final_ret computation from Polymarket prices."""
+class TestResolutionQueueFinalRet:
+    """Verify correct final_ret computation."""
 
-    @patch("polybot_data.services.data_collector.asyncio.sleep", new_callable=AsyncMock)
-    async def test_final_ret_computed_from_polymarket_prices(self, mock_sleep):
-        """final_ret = math.log(pm_close / pm_open)."""
+    async def test_final_ret_computed(self):
         original = _make_candle_record(open_=67800.0, close=67850.0, outcome="UP")
         resolution = {"open": 67810.0, "close": 67900.0, "outcome": "UP"}
         collector, store, _ = _make_resolution_collector(resolution=resolution)
+        collector._pending_resolutions.append(original)
 
-        await collector._verify_resolution(original.candle_id, original)
+        await collector._process_pending_resolutions()
 
-        store.update_candle.assert_awaited_once()
         call_kwargs = store.update_candle.call_args[1]
         expected_ret = math.log(67900.0 / 67810.0)
         assert call_kwargs["final_ret"] == pytest.approx(expected_ret)
 
-    @patch("polybot_data.services.data_collector.asyncio.sleep", new_callable=AsyncMock)
-    async def test_final_ret_zero_when_open_zero(self, mock_sleep):
-        """final_ret = 0.0 when pm_open == 0 to avoid division by zero."""
-        original = _make_candle_record(open_=67800.0, close=67850.0, outcome="UP")
-        # Unusual edge case: open=0 from Polymarket
-        resolution = {"open": 0.0, "close": 67750.0, "outcome": "DOWN"}
-        collector, store, _ = _make_resolution_collector(resolution=resolution)
-
-        await collector._verify_resolution(original.candle_id, original)
-
-        store.update_candle.assert_awaited_once()
-        call_kwargs = store.update_candle.call_args[1]
-        assert call_kwargs["final_ret"] == 0.0
-
-    @patch("polybot_data.services.data_collector.asyncio.sleep", new_callable=AsyncMock)
-    async def test_final_ret_negative_for_down_move(self, mock_sleep):
-        """final_ret is negative when pm_close < pm_open."""
+    async def test_final_ret_negative_for_down(self):
         original = _make_candle_record(open_=67800.0, close=67850.0, outcome="UP")
         resolution = {"open": 67800.0, "close": 67700.0, "outcome": "DOWN"}
         collector, store, _ = _make_resolution_collector(resolution=resolution)
+        collector._pending_resolutions.append(original)
 
-        await collector._verify_resolution(original.candle_id, original)
+        await collector._process_pending_resolutions()
 
-        store.update_candle.assert_awaited_once()
         call_kwargs = store.update_candle.call_args[1]
-        expected_ret = math.log(67700.0 / 67800.0)
-        assert call_kwargs["final_ret"] == pytest.approx(expected_ret)
         assert call_kwargs["final_ret"] < 0
 
 
-class TestVerifyResolutionSleep:
-    """Verify that asyncio.sleep is called before resolution fetch."""
+class TestResolutionQueueMultiple:
+    """Test queue with multiple candles."""
 
-    @patch("polybot_data.services.data_collector.asyncio.sleep", new_callable=AsyncMock)
-    async def test_sleeps_5_seconds(self, mock_sleep):
-        """_verify_resolution sleeps 5 seconds before fetching resolution."""
-        original = _make_candle_record()
-        collector, store, _ = _make_resolution_collector(resolution=None)
+    async def test_processes_multiple_candles(self):
+        resolution = {"open": 67800.0, "close": 67850.0, "outcome": "UP"}
+        collector, store, market_feed = _make_resolution_collector(resolution=None)
+        # First candle resolved, second not yet
+        market_feed.get_resolution = AsyncMock(side_effect=[resolution, None])
 
-        await collector._verify_resolution(original.candle_id, original)
+        c1 = _make_candle_record(candle_id="btc-updown-5m-900", open_=67800.0, close=67850.0, outcome="UP")
+        c2 = _make_candle_record(candle_id="btc-updown-5m-1200", open_=67900.0, close=67950.0, outcome="UP")
+        collector._pending_resolutions = [c1, c2]
 
-        mock_sleep.assert_awaited_once_with(5)
+        await collector._process_pending_resolutions()
+
+        assert len(collector._pending_resolutions) == 1
+        assert collector._pending_resolutions[0].candle_id == "btc-updown-5m-1200"

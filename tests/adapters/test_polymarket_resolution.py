@@ -61,6 +61,7 @@ def _gamma_event(
             {
                 "conditionId": "0xabc",
                 "outcomePrices": outcome_prices,
+                "closed": True,
             }
         ],
     }
@@ -249,6 +250,15 @@ class TestGetResolutionEdgeCases:
         assert result is not None
         assert result["outcome"] == "UP"
 
+    async def test_market_not_closed_returns_none(self):
+        """Market with closed=False should return None."""
+        event = _gamma_event(price_to_beat="67800.0", final_price="67850.0")
+        event["markets"][0]["closed"] = False
+        adapter = _make_adapter(gamma_data=[event])
+
+        result = await adapter.get_resolution("btc-updown-5m-900")
+        assert result is None
+
     async def test_missing_event_metadata_key(self):
         """Event has no eventMetadata key at all — falls back to empty dict."""
         event = {
@@ -257,6 +267,7 @@ class TestGetResolutionEdgeCases:
                 {
                     "conditionId": "0xabc",
                     "outcomePrices": ["1", "0"],
+                    "closed": True,
                 }
             ],
         }

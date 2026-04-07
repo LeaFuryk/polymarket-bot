@@ -1,11 +1,10 @@
 """Tests for CandleAggregator."""
 
-import math
 import time
 from unittest.mock import AsyncMock
 
 import pytest
-from polybot_data.domain.models import BtcTick, Candle, PartialCandle
+from polybot_data.domain.models import BtcTick, PartialCandle
 from polybot_data.services.candle_aggregator import CandleAggregator
 
 # ---------------------------------------------------------------------------
@@ -22,12 +21,11 @@ def _make_tick(price=67800.0, timestamp=None) -> BtcTick:
     )
 
 
-def _make_aggregator(interval=300, history_size=20, backfill_candles=None) -> CandleAggregator:
+def _make_aggregator(interval=300) -> CandleAggregator:
     price_stream = AsyncMock()
     volume_feed = AsyncMock()
     volume_feed.get_volume = AsyncMock(return_value=10.0)
-    volume_feed.get_candles = AsyncMock(return_value=backfill_candles or [])
-    return CandleAggregator(price_stream, volume_feed, interval=interval, history_size=history_size)
+    return CandleAggregator(price_stream, volume_feed, interval=interval)
 
 
 def _feed_ticks(agg: CandleAggregator, ticks: list[BtcTick]) -> None:
@@ -157,8 +155,16 @@ class TestUpdatePartial:
         _feed_ticks(agg, [_make_tick(price=120.0, timestamp=15.0)])
         assert agg.partial.open == 120.0
 
-    def test_update_partial_does_not_close_candles(self):
+    def test_update_partial_does_not_emit_event(self):
+        """_update_partial never emits candle_close events."""
+        from pyee.asyncio import AsyncIOEventEmitter
+
+        events = AsyncIOEventEmitter()
+        received = []
+        events.on("candle_close", lambda candle: received.append(candle))
+
         agg = _make_aggregator(interval=10)
+        agg.events = events
         _feed_ticks(
             agg,
             [
@@ -166,7 +172,7 @@ class TestUpdatePartial:
                 _make_tick(price=110.0, timestamp=10.0),
             ],
         )
-        assert len(agg.closed_candles()) == 0
+        assert len(received) == 0
 
 
 # ---------------------------------------------------------------------------
@@ -175,38 +181,59 @@ class TestUpdatePartial:
 
 
 class TestCloseCandle:
-    async def test_first_candle_discarded_and_backfilled(self):
+    async def test_first_candle_discarded(self):
         agg = _make_aggregator(interval=10)
         _feed_ticks(agg, [_make_tick(price=100.0, timestamp=5.0)])
         await agg._close_current_candle()
         assert agg._first_candle_complete is True
         assert agg.partial is None
-        agg._volume_feed.get_candles.assert_awaited_once()
 
     async def test_second_candle_closes_normally(self):
+        from pyee.asyncio import AsyncIOEventEmitter
+
+        events = AsyncIOEventEmitter()
+        received = []
+        events.on("candle_close", lambda candle: received.append(candle))
+
         agg = _make_aggregator(interval=10)
+        agg.events = events
         agg._first_candle_complete = True
         _feed_valid_candle(agg, base_price=100.0, base_ts=10.0)
         await agg._close_current_candle()
-        closed = agg.closed_candles()
-        assert len(closed) == 1
-        assert closed[0].open == 100.0
+        assert len(received) == 1
+        assert received[0].open == 100.0
 
     async def test_closed_candle_has_volume_from_feed(self):
+        from pyee.asyncio import AsyncIOEventEmitter
+
+        events = AsyncIOEventEmitter()
+        received = []
+        events.on("candle_close", lambda candle: received.append(candle))
+
         agg = _make_aggregator(interval=10)
+        agg.events = events
         agg._first_candle_complete = True
         agg._volume_feed.get_volume = AsyncMock(return_value=18.42)
         _feed_valid_candle(agg, base_price=100.0, base_ts=10.0)
         await agg._close_current_candle()
-        assert agg.closed_candles()[0].volume == pytest.approx(18.42)
+        assert len(received) == 1
+        assert received[0].volume == pytest.approx(18.42)
 
     async def test_volume_error_falls_back_to_zero(self):
+        from pyee.asyncio import AsyncIOEventEmitter
+
+        events = AsyncIOEventEmitter()
+        received = []
+        events.on("candle_close", lambda candle: received.append(candle))
+
         agg = _make_aggregator(interval=10)
+        agg.events = events
         agg._first_candle_complete = True
         agg._volume_feed.get_volume = AsyncMock(side_effect=Exception("timeout"))
         _feed_valid_candle(agg, base_price=100.0, base_ts=10.0)
         await agg._close_current_candle()
-        assert agg.closed_candles()[0].volume == 0.0
+        assert len(received) == 1
+        assert received[0].volume == 0.0
 
     async def test_partial_cleared_after_close(self):
         agg = _make_aggregator(interval=10)
@@ -214,14 +241,6 @@ class TestCloseCandle:
         _feed_valid_candle(agg, base_price=100.0, base_ts=10.0)
         await agg._close_current_candle()
         assert agg.partial is None
-
-    async def test_history_limited_to_size(self):
-        agg = _make_aggregator(interval=10, history_size=3)
-        agg._first_candle_complete = True
-        for i in range(6):
-            _feed_ticks(agg, [_make_tick(price=100.0 + i, timestamp=(i + 1) * 10.0)])
-            await agg._close_current_candle()
-        assert len(agg.closed_candles()) <= 3
 
     async def test_get_partial_volume(self):
         agg = _make_aggregator(interval=10)
@@ -258,11 +277,13 @@ class TestCloseCandle:
         assert received[0].open == 100.0
 
     async def test_no_event_emitter_by_default_still_works(self):
+        """Closing a candle without a custom emitter does not raise."""
         agg = _make_aggregator(interval=10)
         agg._first_candle_complete = True
         _feed_valid_candle(agg, base_price=100.0, base_ts=10.0)
+        # Should not raise even though no custom emitter is attached
         await agg._close_current_candle()
-        assert len(agg.closed_candles()) == 1
+        assert agg.partial is None
 
 
 # ---------------------------------------------------------------------------
@@ -282,123 +303,3 @@ class TestStreamEnd:
 
         with pytest.raises(RuntimeError, match="Price stream ended"):
             await agg._consume_ticks()
-
-
-# ---------------------------------------------------------------------------
-# Backfill tests
-# ---------------------------------------------------------------------------
-
-
-class TestBackfill:
-    def _make_backfill_candles(self, count: int) -> list[Candle]:
-        return [
-            Candle(
-                open=67800.0 + i * 10,
-                high=67850.0 + i * 10,
-                low=67750.0 + i * 10,
-                close=67820.0 + i * 10,
-                volume=15.0,
-                start_time=i * 300.0,
-                end_time=(i + 1) * 300.0,
-            )
-            for i in range(count)
-        ]
-
-    async def test_backfill_on_first_discard(self):
-        backfill = self._make_backfill_candles(21)
-        agg = _make_aggregator(interval=10, history_size=20, backfill_candles=backfill)
-        _feed_ticks(agg, [_make_tick(price=100.0, timestamp=5.0)])
-        await agg._close_current_candle()
-        assert len(agg.closed_candles()) == 20
-
-    async def test_backfill_not_called_on_second_close(self):
-        agg = _make_aggregator(interval=10)
-        agg._first_candle_complete = True
-        _feed_ticks(agg, [_make_tick(price=100.0, timestamp=10.0)])
-        await agg._close_current_candle()
-        assert agg._volume_feed.get_candles.await_count == 0
-
-    async def test_backfill_empty_is_safe(self):
-        agg = _make_aggregator(interval=10)
-        _feed_ticks(agg, [_make_tick(price=100.0, timestamp=5.0)])
-        await agg._close_current_candle()
-        assert len(agg.closed_candles()) == 0
-
-
-class TestBackfillSmartDrop:
-    def _make_candles(self, count, end_time_offset=0.0):
-        now = time.time()
-        return [
-            Candle(
-                open=100.0,
-                high=110.0,
-                low=90.0,
-                close=105.0,
-                volume=10.0,
-                start_time=now - (count - i) * 300,
-                end_time=now - (count - i - 1) * 300 + end_time_offset,
-            )
-            for i in range(count)
-        ]
-
-    async def test_keeps_all_if_last_is_closed(self):
-        candles = self._make_candles(5, end_time_offset=-10.0)
-        agg = _make_aggregator(interval=10, backfill_candles=candles)
-        _feed_ticks(agg, [_make_tick(price=100.0, timestamp=5.0)])
-        await agg._close_current_candle()
-        assert len(agg.closed_candles()) == 5
-
-    async def test_drops_last_if_in_progress(self):
-        candles = self._make_candles(5, end_time_offset=600.0)
-        agg = _make_aggregator(interval=10, backfill_candles=candles)
-        _feed_ticks(agg, [_make_tick(price=100.0, timestamp=5.0)])
-        await agg._close_current_candle()
-        assert len(agg.closed_candles()) == 4
-
-
-# ---------------------------------------------------------------------------
-# CandleData computation tests
-# ---------------------------------------------------------------------------
-
-
-class TestCandleData:
-    async def test_empty_history(self):
-        agg = _make_aggregator()
-        assert agg.candle_data() == ()
-
-    async def test_log_ret_computed(self):
-        agg = _make_aggregator(interval=10)
-        agg._first_candle_complete = True
-        _feed_valid_candle(agg, base_price=100.0, base_ts=10.0)
-        await agg._close_current_candle()
-        _feed_valid_candle(agg, base_price=105.0, base_ts=20.0)
-        await agg._close_current_candle()
-        data = agg.candle_data()
-        assert len(data) == 2
-        assert data[0].log_ret is None
-        # close of candle 1 = 106 (100+2 then 100+1), close of candle 2 = 106 (105+2 then 105+1)
-        # Actually _feed_valid_candle feeds: base, base+2, base+1 → close = base+1
-        assert data[1].log_ret == pytest.approx(math.log(106.0 / 101.0))
-
-    async def test_vol_pace_computed(self):
-        agg = _make_aggregator(interval=10)
-        agg._first_candle_complete = True
-        agg._volume_feed.get_volume = AsyncMock(side_effect=[10.0, 20.0])
-        _feed_valid_candle(agg, base_price=100.0, base_ts=10.0)
-        await agg._close_current_candle()
-        _feed_valid_candle(agg, base_price=101.0, base_ts=20.0)
-        await agg._close_current_candle()
-        data = agg.candle_data()
-        assert data[0].vol_pace == pytest.approx(1.0)
-        assert data[1].vol_pace == pytest.approx(20.0 / 15.0)
-
-    async def test_relative_index(self):
-        agg = _make_aggregator(interval=10)
-        agg._first_candle_complete = True
-        for i in range(3):
-            _feed_valid_candle(agg, base_price=100.0 + i, base_ts=(i + 1) * 10.0)
-            await agg._close_current_candle()
-        data = agg.candle_data()
-        assert len(data) == 3
-        assert data[0].t == -3
-        assert data[2].t == -1
