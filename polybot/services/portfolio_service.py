@@ -6,6 +6,14 @@ import logging
 
 from polybot.domain.portfolio import PortfolioState, Position
 
+# Polymarket crypto taker fee: fee = shares * TAKER_FEE_RATE * price * (1 - price)
+TAKER_FEE_RATE = 0.072
+
+
+def _taker_fee(shares: float, price: float) -> float:
+    """Polymarket taker fee for crypto markets."""
+    return shares * TAKER_FEE_RATE * price * (1.0 - price)
+
 
 class PortfolioService:
     """Tracks cash, positions, and PnL. In-memory, resets on restart."""
@@ -24,6 +32,7 @@ class PortfolioService:
         )
         self._last_up_price = 0.50
         self._last_down_price = 0.50
+        self._total_fees = 0.0
 
     @property
     def state(self) -> PortfolioState:
@@ -35,52 +44,69 @@ class PortfolioService:
         return self._state.down_position
 
     def buy(self, side: str, amount_usd: float, price: float) -> None:
-        """Buy shares on the given side. Raises ValueError if insufficient cash."""
+        """Buy shares. Fee collected in shares (fewer shares received)."""
         if amount_usd > self._state.cash:
             raise ValueError(f"Insufficient cash: need ${amount_usd:.2f}, have ${self._state.cash:.2f}")
-        new_shares = amount_usd / price
+
+        gross_shares = amount_usd / price
+        fee_shares = _taker_fee(gross_shares, price)
+        net_shares = gross_shares - fee_shares
+        fee_usd = fee_shares * price
+
         pos = self._get_position(side)
         if pos.shares > 0:
             total_cost = pos.shares * pos.avg_entry_price + amount_usd
-            total_shares = pos.shares + new_shares
+            total_shares = pos.shares + net_shares
             pos.avg_entry_price = total_cost / total_shares
         else:
-            pos.avg_entry_price = price
-        pos.shares += new_shares
+            pos.avg_entry_price = amount_usd / net_shares
+
+        pos.shares += net_shares
         self._state.cash -= amount_usd
+        self._total_fees += fee_usd
+
         self._log.info(
-            "BUY %s: %.1f shares @ $%.4f ($%.2f) | cash=$%.2f",
+            "BUY %s: %.1f shares @ $%.4f ($%.2f, fee=$%.4f) | cash=$%.2f",
             side,
-            new_shares,
+            net_shares,
             price,
             amount_usd,
+            fee_usd,
             self._state.cash,
         )
 
     def sell(self, side: str, shares: float, price: float) -> None:
-        """Sell shares on the given side. Raises ValueError if insufficient shares."""
+        """Sell shares. Fee collected in USDC (less cash received)."""
         pos = self._get_position(side)
         if shares > pos.shares:
             raise ValueError(f"Insufficient shares: need {shares:.1f}, have {pos.shares:.1f}")
-        proceeds = shares * price
-        realized = shares * (price - pos.avg_entry_price)
+
+        gross_proceeds = shares * price
+        fee_usd = _taker_fee(shares, price)
+        net_proceeds = gross_proceeds - fee_usd
+
+        realized = net_proceeds - (shares * pos.avg_entry_price)
         pos.shares -= shares
         pos.realized_pnl += realized
-        self._state.cash += proceeds
+        self._state.cash += net_proceeds
+        self._total_fees += fee_usd
+
         if pos.shares == 0.0:
             pos.avg_entry_price = 0.0
+
         self._log.info(
-            "SELL %s: %.1f shares @ $%.4f ($%.2f) | realized=$%.2f | cash=$%.2f",
+            "SELL %s: %.1f shares @ $%.4f ($%.2f, fee=$%.4f) | realized=$%.2f | cash=$%.2f",
             side,
             shares,
             price,
-            proceeds,
+            net_proceeds,
+            fee_usd,
             realized,
             self._state.cash,
         )
 
     def settle(self, winning_side: str) -> None:
-        """Settle the market. Winning shares pay $1 each; losing shares expire worthless."""
+        """Settle the market. Winning shares pay $1 each; losing shares expire worthless. No fees."""
         up = self._state.up_position
         down = self._state.down_position
         has_up = up.shares > 0
@@ -138,5 +164,6 @@ class PortfolioService:
             "realized_pnl": round(s.up_position.realized_pnl + s.down_position.realized_pnl, 4),
             "unrealized_pnl": round(s.unrealized_pnl(up, down), 4),
             "net_pnl": round(net, 4),
+            "total_fees": round(self._total_fees, 4),
             "total_return_pct": round((final_balance - self._initial_cash) / self._initial_cash * 100, 2),
         }

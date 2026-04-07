@@ -898,6 +898,61 @@ def prior_reversal_rate(prior_candles: list[CandleRecord], window: int = 6) -> f
 
 
 # ===================================================================
+# Cat 8: BTC Volume (cross-candle, from Binance volume)
+# ===================================================================
+
+
+def volume_momentum(prior_candles: list[CandleRecord], window: int = 6) -> float | None:
+    """Current candle volume / trailing average volume. >1 = above average."""
+    if len(prior_candles) < window:
+        return None
+    recent = prior_candles[-window:]
+    avg = _mean([c.volume for c in recent[:-1]])
+    if avg == 0:
+        return None
+    return recent[-1].volume / avg
+
+
+def volume_trend(prior_candles: list[CandleRecord], window: int = 6) -> float | None:
+    """Linear regression slope of volume over last N candles. Positive = increasing."""
+    if len(prior_candles) < window:
+        return None
+    recent = prior_candles[-window:]
+    x = list(range(window))
+    y = [c.volume for c in recent]
+    return _linreg_slope(x, y)
+
+
+def volume_price_correlation(prior_candles: list[CandleRecord], window: int = 10) -> float | None:
+    """Pearson correlation between volume and absolute return over last N candles."""
+    if len(prior_candles) < window:
+        return None
+    recent = prior_candles[-window:]
+    vols = [c.volume for c in recent]
+    rets = [abs(c.final_ret) for c in recent]
+    mv = _mean(vols)
+    mr = _mean(rets)
+    sv = _std(vols)
+    sr = _std(rets)
+    if sv == 0 or sr == 0:
+        return None
+    n = len(vols)
+    cov = sum((v - mv) * (r - mr) for v, r in zip(vols, rets, strict=False)) / n
+    return cov / (sv * sr)
+
+
+def relative_volume(prior_candles: list[CandleRecord], window: int = 20) -> float | None:
+    """Last candle volume / average of previous N candles. Like vol_pace but cross-candle."""
+    if len(prior_candles) < window + 1:
+        return None
+    trailing = prior_candles[-(window + 1) : -1]
+    avg = _mean([c.volume for c in trailing])
+    if avg == 0:
+        return None
+    return prior_candles[-1].volume / avg
+
+
+# ===================================================================
 # MASTER FUNCTION
 # ===================================================================
 
@@ -983,4 +1038,9 @@ def compute_all(
         # Cat 7: Reversal detection (validated)
         "btc_drawdown_from_peak": btc_drawdown_from_peak(candle_open, s),
         "prior_reversal_rate": prior_reversal_rate(prior_candles),
+        # Cat 8: BTC Volume (cross-candle)
+        "volume_momentum": volume_momentum(prior_candles),
+        "volume_trend": volume_trend(prior_candles),
+        "volume_price_correlation": volume_price_correlation(prior_candles),
+        "relative_volume": relative_volume(prior_candles),
     }
