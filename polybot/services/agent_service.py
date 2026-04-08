@@ -167,7 +167,7 @@ class AgentService:
         """Settle portfolio, record bet, log result, reset state, update indicators."""
         had_position = self._entries_made > 0
 
-        self._portfolio.settle(candle.outcome)
+        self._portfolio.settle(candle.outcome, candle_id=candle.candle_id)
 
         if had_position:
             state = self._portfolio.state
@@ -215,6 +215,7 @@ class AgentService:
                 self._indicators.prior_candles[i] = corrected
 
                 if old_outcome != corrected.outcome:
+                    self._portfolio.reverse_and_resettle(corrected.candle_id, corrected.outcome)
                     self._log.warning(
                         "🔄 Correction applied | %s | %s→%s",
                         corrected.candle_id,

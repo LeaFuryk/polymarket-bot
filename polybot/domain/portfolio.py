@@ -16,6 +16,17 @@ class Position:
 
 
 @dataclass
+class SettlementRecord:
+    """Snapshot of a settlement for potential reversal."""
+
+    winning_side: str
+    up_shares: float
+    up_avg_entry: float
+    down_shares: float
+    down_avg_entry: float
+
+
+@dataclass
 class PortfolioState:
     """Complete portfolio snapshot."""
 

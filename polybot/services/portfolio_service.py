@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 
-from polybot.domain.portfolio import PortfolioState, Position
+from polybot.domain.portfolio import PortfolioState, Position, SettlementRecord
 
 # Polymarket crypto taker fee: fee = shares * TAKER_FEE_RATE * price * (1 - price)
 TAKER_FEE_RATE = 0.072
@@ -33,6 +33,7 @@ class PortfolioService:
         self._last_up_price = 0.50
         self._last_down_price = 0.50
         self._total_fees = 0.0
+        self._last_settlements: dict[str, SettlementRecord] = {}  # candle_id → record
 
     @property
     def state(self) -> PortfolioState:
@@ -105,7 +106,7 @@ class PortfolioService:
             self._state.cash,
         )
 
-    def settle(self, winning_side: str) -> None:
+    def settle(self, winning_side: str, candle_id: str = "") -> None:
         """Settle the market. Winning shares pay $1 each; losing shares expire worthless. No fees."""
         up = self._state.up_position
         down = self._state.down_position
@@ -113,6 +114,17 @@ class PortfolioService:
         has_down = down.shares > 0
         if not has_up and not has_down:
             return
+
+        # Store pre-settle state for potential reversal
+        if candle_id:
+            self._last_settlements[candle_id] = SettlementRecord(
+                winning_side=winning_side,
+                up_shares=up.shares,
+                up_avg_entry=up.avg_entry_price,
+                down_shares=down.shares,
+                down_avg_entry=down.avg_entry_price,
+            )
+
         if has_up:
             if winning_side == "UP":
                 payout = up.shares * 1.0
@@ -141,6 +153,61 @@ class PortfolioService:
             self._state.cash,
             self._state.wins,
             self._state.losses,
+        )
+
+    def reverse_and_resettle(self, candle_id: str, correct_outcome: str) -> None:
+        """Reverse a previous settlement and re-settle with the correct outcome."""
+        record = self._last_settlements.get(candle_id)
+        if record is None:
+            self._log.warning("Cannot reverse settlement for %s — no record found", candle_id)
+            return
+
+        if record.winning_side == correct_outcome:
+            return  # no change needed
+
+        # Reverse the original settlement
+        up_shares = record.up_shares
+        down_shares = record.down_shares
+        up_avg = record.up_avg_entry
+        down_avg = record.down_avg_entry
+        old_winner = record.winning_side
+
+        # Undo UP position settlement
+        if up_shares > 0:
+            if old_winner == "UP":
+                # Was paid $1 per share — reverse
+                self._state.cash -= up_shares * 1.0
+                self._state.up_position.realized_pnl -= (up_shares * 1.0) - (up_shares * up_avg)
+                self._state.wins -= 1
+            else:
+                self._state.up_position.realized_pnl += up_shares * up_avg
+                self._state.losses -= 1
+
+        # Undo DOWN position settlement
+        if down_shares > 0:
+            if old_winner == "DOWN":
+                self._state.cash -= down_shares * 1.0
+                self._state.down_position.realized_pnl -= (down_shares * 1.0) - (down_shares * down_avg)
+                self._state.wins -= 1
+            else:
+                self._state.down_position.realized_pnl += down_shares * down_avg
+                self._state.losses -= 1
+
+        # Restore positions
+        self._state.up_position.shares = up_shares
+        self._state.up_position.avg_entry_price = up_avg
+        self._state.down_position.shares = down_shares
+        self._state.down_position.avg_entry_price = down_avg
+
+        # Re-settle with correct outcome
+        self.settle(correct_outcome, candle_id)
+
+        self._log.warning(
+            "🔄 Portfolio re-settled | %s | %s→%s | cash=$%.2f",
+            candle_id,
+            old_winner,
+            correct_outcome,
+            self._state.cash,
         )
 
     def update_prices(self, up_price: float, down_price: float) -> None:
