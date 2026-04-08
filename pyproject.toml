@@ -18,6 +18,8 @@ dependencies = [
     "pandas>=2.2.0",
     "aiosqlite>=0.20.0",
     "python-dotenv>=1.0.0",
+    "eth-abi>=5.0.0",
+    "pyee>=13.0.0",
 ]
 
 [project.optional-dependencies]
@@ -25,34 +27,34 @@ dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.24.0",
     "pytest-mock>=3.14.0",
+    "pytest-cov>=5.0",
     "ruff>=0.9.0",
     "pre-commit>=4.0.0",
     "mypy>=1.8",
     "types-PyYAML>=6.0",
+    "matplotlib>=3.10.8",
+    "numpy>=2.4.2",
+    "tqdm>=4.67.3",
+    "scikit-learn>=1.8.0",
+    "torch>=2.11.0",
+    "xgboost>=3.2.0",
+    "ipykernel>=7.2.0",
 ]
 server = [
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.32.0",
 ]
 
-[project.scripts]
-polybot-analyze = "polybot.analysis.report:main"
-polybot-analyze-deep = "polybot.analysis.deep_report:main"
-polybot-archive = "polybot.analysis.archive:main"
-polybot-compare = "polybot.analysis.compare:main"
-polybot-validate = "polybot.analysis.validate:main"
-polybot-replay = "polybot.analysis.replay:main"
-polybot-forensics = "polybot.forensics.cli:main"
-polybot-server = "polybot.server.run:main"
-polybot-check = "polybot.scripts.check:main"
+# Console scripts removed — legacy code moved to legacy/ folder
 
 [tool.setuptools.packages.find]
-where = ["src"]
+where = ["."]
+include = ["polybot*", "polybot_data*", "collector*"]
 
 [tool.ruff]
 target-version = "py311"
 line-length = 120
-src = ["src", "tests"]
+src = ["polybot", "polybot_data", "collector", "tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
