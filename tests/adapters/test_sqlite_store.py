@@ -172,6 +172,8 @@ class TestUpdateCandle:
         await store.update_candle(
             candle_id=original.candle_id,
             open=67750.0,
+            high=67900.0,
+            low=67700.0,
             close=67700.0,
             outcome="DOWN",
             final_ret=-0.0007,
@@ -192,6 +194,8 @@ class TestUpdateCandle:
         await store.update_candle(
             candle_id=original.candle_id,
             open=99999.0,
+            high=99999.0,
+            low=99999.0,
             close=99999.0,
             outcome="DOWN",
             final_ret=0.0,
@@ -202,8 +206,8 @@ class TestUpdateCandle:
         # These columns should remain from the original insert
         assert loaded.start_time == pytest.approx(original.start_time)
         assert loaded.end_time == pytest.approx(original.end_time)
-        assert loaded.high == pytest.approx(original.high)
-        assert loaded.low == pytest.approx(original.low)
+        assert loaded.high == pytest.approx(99999.0)
+        assert loaded.low == pytest.approx(99999.0)
         assert loaded.volume == pytest.approx(original.volume)
 
     async def test_update_nonexistent_candle_is_noop(self, store: SqliteStore):
@@ -212,6 +216,8 @@ class TestUpdateCandle:
         await store.update_candle(
             candle_id="does-not-exist",
             open=100.0,
+            high=200.0,
+            low=100.0,
             close=200.0,
             outcome="UP",
             final_ret=0.5,
@@ -229,6 +235,8 @@ class TestUpdateCandle:
         await store.update_candle(
             candle_id=original.candle_id,
             open=68000.0,
+            high=68100.0,
+            low=68000.0,
             close=68100.0,
             outcome="UP",
             final_ret=0.00147,

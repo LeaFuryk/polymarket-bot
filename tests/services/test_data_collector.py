@@ -79,11 +79,23 @@ def _make_collector(
     partial: PartialCandle | None = None,
 ) -> tuple[DataCollector, AsyncMock]:
     """Build a DataCollector with mocked dependencies. Returns (collector, store_mock)."""
+    p = partial or _make_partial()
+
     candle_source = MagicMock()
     type(candle_source).latest_tick = PropertyMock(return_value=tick)
-    type(candle_source).partial = PropertyMock(return_value=partial)
+    type(candle_source).partial = PropertyMock(return_value=p)
 
-    mkt = market or _make_market()
+    # Market slug must match the candle_id derived from partial's start_time
+    boundary = int(p.start_time - (p.start_time % 300))
+    mkt = market or Market(
+        condition_id="0xabc",
+        up_token_id="up_123",
+        down_token_id="down_456",
+        slug=f"btc-updown-5m-{boundary}",
+        question="Bitcoin up or down?",
+        end_time=p.end_time,
+        volume=5000.0,
+    )
     market_feed = AsyncMock()
     market_feed.discover_market = AsyncMock(return_value=mkt)
     market_feed.get_snapshot = AsyncMock(return_value=_make_snapshot(mkt))

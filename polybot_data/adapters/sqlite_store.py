@@ -175,12 +175,14 @@ class SqliteStore:
             )
         return result
 
-    async def update_candle(self, candle_id: str, open: float, close: float, outcome: str, final_ret: float) -> None:
-        """Update open, close, outcome, final_ret for an existing candle."""
+    async def update_candle(
+        self, candle_id: str, open: float, high: float, low: float, close: float, outcome: str, final_ret: float
+    ) -> None:
+        """Update open, high, low, close, outcome, final_ret for an existing candle."""
         assert self._db is not None
         await self._db.execute(
-            "UPDATE candles SET open = ?, close = ?, outcome = ?, final_ret = ? WHERE candle_id = ?",
-            (open, close, outcome, final_ret, candle_id),
+            "UPDATE candles SET open = ?, high = ?, low = ?, close = ?, outcome = ?, final_ret = ? WHERE candle_id = ?",
+            (open, high, low, close, outcome, final_ret, candle_id),
         )
         await self._db.commit()
 

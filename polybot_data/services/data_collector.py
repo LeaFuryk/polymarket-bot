@@ -21,6 +21,7 @@ FETCH_INTERVAL = 1  # build snapshot every 1s
 RECORD_EVERY = 5  # write to SQLite every 5th snapshot
 MAX_OB_LEVELS = 10
 RESOLUTION_CHECK_INTERVAL = 60  # check pending resolutions every 60s
+VOLUME_TIMEOUT = 10  # seconds to wait for volume lookup
 
 
 class DataCollector:
@@ -66,6 +67,23 @@ class DataCollector:
             self._resolution_loop(),
         )
 
+    async def drain(self) -> None:
+        """Process any remaining pending resolutions before shutdown."""
+        if not self._pending_resolutions:
+            return
+        self._log.info("Draining %d pending resolutions...", len(self._pending_resolutions))
+        try:
+            await self._process_pending_resolutions()
+        except Exception:
+            self._log.exception("Error during resolution drain")
+        if self._pending_resolutions:
+            unresolved = [r.candle_id for r in self._pending_resolutions]
+            self._log.warning(
+                "⚠️ %d candles unresolved at shutdown — run verify_resolutions.py: %s",
+                len(unresolved),
+                unresolved,
+            )
+
     async def _fetch_loop(self) -> None:
         """Build snapshot every ~1s, broadcast, and optionally record."""
         while True:
@@ -88,66 +106,94 @@ class DataCollector:
 
     async def _process_pending_resolutions(self) -> None:
         """Check each pending candle against Polymarket. Remove resolved ones."""
+        # Snapshot the queue — new candles appended during processing won't be lost
+        to_check = self._pending_resolutions
+        self._pending_resolutions = []
         still_pending = []
 
-        for original in self._pending_resolutions:
-            resolution = await self._market_feed.get_resolution(original.candle_id)
+        processed = 0
+        try:
+            for original in to_check:
+                try:
+                    resolved = await self._resolve_single(original)
+                    if not resolved:
+                        still_pending.append(original)
+                except Exception:
+                    self._log.exception("Failed to resolve %s — will retry", original.candle_id)
+                    still_pending.append(original)
+                processed += 1
+        except BaseException:
+            # On CancelledError or any other interruption, keep unprocessed items
+            still_pending.extend(to_check[processed:])
+            raise
+        finally:
+            # Always merge back — never lose candles
+            self._pending_resolutions = still_pending + self._pending_resolutions
 
-            if resolution is None:
-                still_pending.append(original)
-                continue
+        if self._pending_resolutions:
+            self._log.info("⏳ %d candles still pending resolution", len(self._pending_resolutions))
 
-            pm_open = resolution["open"]
-            pm_close = resolution["close"]
-            pm_outcome = resolution["outcome"]
-            chainlink_outcome = original.outcome
+    async def _resolve_single(self, original: CandleRecord) -> bool:
+        """Check one candle against Polymarket. Returns True if resolved."""
+        resolution = await self._market_feed.get_resolution(original.candle_id)
+        if resolution is None:
+            return False
 
-            final_ret = math.log(pm_close / pm_open) if pm_open > 0 else 0.0
-            await self._store.update_candle(
-                candle_id=original.candle_id,
-                open=pm_open,
-                close=pm_close,
-                outcome=pm_outcome,
-                final_ret=final_ret,
+        pm_open = resolution["open"]
+        pm_close = resolution["close"]
+        pm_outcome = resolution["outcome"]
+        chainlink_outcome = original.outcome
+
+        # Adjust high/low if corrected prices fall outside original range
+        high = max(original.high, pm_open, pm_close)
+        low = min(original.low, pm_open, pm_close)
+
+        final_ret = math.log(pm_close / pm_open) if pm_open > 0 else 0.0
+        await self._store.update_candle(
+            candle_id=original.candle_id,
+            open=pm_open,
+            high=high,
+            low=low,
+            close=pm_close,
+            outcome=pm_outcome,
+            final_ret=final_ret,
+        )
+
+        outcome_changed = pm_outcome != chainlink_outcome
+        open_changed = abs(pm_open - original.open) > 0.01
+        close_changed = abs(pm_close - original.close) > 0.01
+
+        if outcome_changed or open_changed or close_changed:
+            self._log.warning(
+                "🔄 Resolution correction | %s | %s→%s | open: $%.2f→$%.2f | close: $%.2f→$%.2f",
+                original.candle_id,
+                chainlink_outcome,
+                pm_outcome,
+                original.open,
+                pm_open,
+                original.close,
+                pm_close,
             )
-
-            outcome_changed = pm_outcome != chainlink_outcome
-            open_changed = abs(pm_open - original.open) > 0.01
-            close_changed = abs(pm_close - original.close) > 0.01
-
-            if outcome_changed or open_changed or close_changed:
-                self._log.warning(
-                    "🔄 Resolution correction | %s | %s→%s | open: $%.2f→$%.2f | close: $%.2f→$%.2f",
-                    original.candle_id,
-                    chainlink_outcome,
-                    pm_outcome,
-                    original.open,
-                    pm_open,
-                    original.close,
-                    pm_close,
+            if self._broadcast_fn is not None:
+                corrected = CandleRecord(
+                    candle_id=original.candle_id,
+                    start_time=original.start_time,
+                    end_time=original.end_time,
+                    open=pm_open,
+                    high=high,
+                    low=low,
+                    close=pm_close,
+                    volume=original.volume,
+                    outcome=pm_outcome,
+                    final_ret=final_ret,
                 )
-                if self._broadcast_fn is not None:
-                    corrected = CandleRecord(
-                        candle_id=original.candle_id,
-                        start_time=original.start_time,
-                        end_time=original.end_time,
-                        open=pm_open,
-                        high=original.high,
-                        low=original.low,
-                        close=pm_close,
-                        volume=original.volume,
-                        outcome=pm_outcome,
-                        final_ret=final_ret,
-                    )
-                    msg = asdict(corrected)
-                    msg["type"] = "candle_correction"
-                    await self._broadcast_fn(msg)
-            else:
-                self._log.info("✅ Resolution verified | %s | %s", original.candle_id, pm_outcome)
+                msg = asdict(corrected)
+                msg["type"] = "candle_correction"
+                await self._broadcast_fn(msg)
+        else:
+            self._log.info("✅ Resolution verified | %s | %s", original.candle_id, pm_outcome)
 
-        self._pending_resolutions = still_pending
-        if still_pending:
-            self._log.info("⏳ %d candles still pending resolution", len(still_pending))
+        return True
 
     async def _fetch_and_dispatch(self) -> None:
         """Single fetch → broadcast + conditional record."""
@@ -156,19 +202,30 @@ class DataCollector:
             return
 
         partial = self._candles.partial
+        if partial is None:
+            return  # aggregator is between candles — skip stale data
         now = time.time()
+
+        candle_start = partial.start_time
+        elapsed_pct = max(0.0, min((now - candle_start) / CANDLE_INTERVAL, 1.0))
+
+        boundary = int(candle_start - (candle_start % CANDLE_INTERVAL))
+        candle_id = f"{self._series_slug}-{boundary}"
 
         market = await self._market_feed.discover_market(self._series_slug)
         if market is None:
             return
 
+        # Verify market covers our candle interval
+        market_start = market.end_time - CANDLE_INTERVAL
+        if not (market_start <= candle_start < market.end_time):
+            return
+
         snapshot_data = await self._market_feed.get_snapshot(market)
 
-        candle_start = partial.start_time if partial else now - (now % CANDLE_INTERVAL)
-        elapsed_pct = max(0.0, min((now - candle_start) / CANDLE_INTERVAL, 1.0))
-
-        boundary = int(candle_start - (candle_start % CANDLE_INTERVAL))
-        candle_id = f"{self._series_slug}-{boundary}"
+        # Re-check partial after await — candle may have closed during I/O
+        if self._candles.partial is None or self._candles.partial.start_time != candle_start:
+            return
 
         snap = Snapshot(
             timestamp=now,
@@ -187,12 +244,6 @@ class DataCollector:
             market_volume=snapshot_data.volume,
         )
 
-        # Broadcast to WS clients every iteration
-        if self._broadcast_fn is not None:
-            msg = asdict(snap)
-            msg["type"] = "snapshot"
-            await self._broadcast_fn(msg)
-
         # Detect candle boundary — start recording when a new candle begins
         if self._current_candle_id is None:
             self._current_candle_id = candle_id
@@ -204,9 +255,12 @@ class DataCollector:
 
         if not self._recording:
             return
+
+        # Record to SQLite BEFORE broadcast — persistence is more important
         self._tick_counter += 1
         if self._tick_counter >= RECORD_EVERY:
             self._tick_counter = 0
+            await self._store.write_snapshot(snap)
             self._log.info(
                 "📸 Snapshot saved | candle=%s elapsed=%.0f%% | BTC $%.2f | YES=%.2f NO=%.2f | vol=$%.0f",
                 snap.candle_id,
@@ -216,12 +270,20 @@ class DataCollector:
                 snap.down_last_trade or 0,
                 snap.market_volume,
             )
-            await self._store.write_snapshot(snap)
+
+        # Broadcast to WS clients
+        if self._broadcast_fn is not None:
+            msg = asdict(snap)
+            msg["type"] = "snapshot"
+            await self._broadcast_fn(msg)
 
     async def _on_candle_close(self, candle: Candle) -> None:
         """Handle candle_close event from CandleAggregator."""
         if not self._recording:
-            return  # incomplete startup candle — discard
+            # First candle_close arms recording for the next candle
+            self._recording = True
+            self._log.info("🟢 First candle closed — recording active")
+            return
 
         outcome = "UP" if candle.close >= candle.open else "DOWN"
         final_ret = math.log(candle.close / candle.open) if candle.open > 0 else 0.0
@@ -251,14 +313,14 @@ class DataCollector:
             final_ret,
         )
 
-        # Broadcast immediately with Chainlink values
+        # Add to resolution queue before broadcast — never lose a candle
+        self._pending_resolutions.append(record)
+
+        # Broadcast with Chainlink values
         if self._broadcast_fn is not None:
             msg = asdict(record)
             msg["type"] = "candle_close"
             await self._broadcast_fn(msg)
-
-        # Add to resolution queue
-        self._pending_resolutions.append(record)
 
     @staticmethod
     def _levels(book_levels: tuple, max_n: int = MAX_OB_LEVELS) -> tuple[tuple[float, float], ...]:

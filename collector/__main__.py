@@ -34,6 +34,7 @@ async def main() -> None:
     await store.init()
 
     events = AsyncIOEventEmitter()
+    events.on("error", lambda err: logging.getLogger("collector.events").exception("Event handler error: %s", err))
     aggregator = CandleAggregator(price_stream, volume_feed, events=events)
 
     # WS server — thin broadcaster, no fetching
@@ -51,12 +52,26 @@ async def main() -> None:
 
     await price_stream.connect()
 
+    agg_task = asyncio.create_task(aggregator.run())
+    col_task = asyncio.create_task(collector.run())
+
     try:
-        await asyncio.gather(
-            aggregator.run(),
-            collector.run(),
-        )
+        done, _ = await asyncio.wait([agg_task, col_task], return_when=asyncio.FIRST_EXCEPTION)
+        # Re-raise the first exception
+        for task in done:
+            task.result()
     finally:
+        # Cancel running tasks
+        for task in [agg_task, col_task]:
+            task.cancel()
+        await asyncio.gather(agg_task, col_task, return_exceptions=True)
+
+        # Wait for pending candle_close event handlers to finish
+        try:
+            await asyncio.wait_for(events.wait_for_complete(), timeout=15.0)
+        except TimeoutError:
+            pass
+        await collector.drain()
         await server.stop()
         await price_stream.disconnect()
         await volume_feed.close()

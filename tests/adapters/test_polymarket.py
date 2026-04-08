@@ -1,6 +1,7 @@
 """Tests for PolymarketAdapter."""
 
 import time
+from datetime import UTC
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -151,7 +152,7 @@ class TestMarketDiscovery:
             nonlocal call_count
             call_count += 1
             resp = MagicMock()
-            resp.json.return_value = [] if call_count <= 2 else [SAMPLE_GAMMA_EVENT]
+            resp.json.return_value = [] if call_count <= 1 else [SAMPLE_GAMMA_EVENT]
             resp.raise_for_status = MagicMock()
             return resp
 
@@ -159,7 +160,7 @@ class TestMarketDiscovery:
         market = await adapter.discover_market("btc-updown-5m")
         assert market is not None
         assert market.condition_id == "0xabc123"
-        assert call_count == 3
+        assert call_count == 2
 
     async def test_discover_order_is_current_next_previous(self):
         """Discovery probes current, then next, then previous boundary."""
@@ -184,24 +185,33 @@ class TestMarketDiscovery:
         now = time.time()
         boundary = int(now - (now % CANDLE_INTERVAL))
 
-        assert len(slugs_tried) == 3
+        assert len(slugs_tried) == 2
         assert slugs_tried[0] == f"btc-updown-5m-{boundary}"
-        assert slugs_tried[1] == f"btc-updown-5m-{boundary + CANDLE_INTERVAL}"
-        assert slugs_tried[2] == f"btc-updown-5m-{boundary - CANDLE_INTERVAL}"
+        assert slugs_tried[1] == f"btc-updown-5m-{boundary - CANDLE_INTERVAL}"
 
 
 class TestMarketCache:
-    def _future_event(self):
-        """SAMPLE_GAMMA_EVENT with end_time in the future."""
+    def _current_event(self):
+        """SAMPLE_GAMMA_EVENT with end_time covering now (current candle)."""
+        import time
+
+        from polybot_data.adapters.polymarket import CANDLE_INTERVAL
+
+        now = time.time()
+        boundary = int(now - (now % CANDLE_INTERVAL))
+        end_ts = boundary + CANDLE_INTERVAL
+        from datetime import datetime
+
+        end_str = datetime.fromtimestamp(end_ts, tz=UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
         return {
             **SAMPLE_GAMMA_EVENT,
-            "endDate": "2099-01-01T00:00:00Z",
-            "markets": [{**SAMPLE_GAMMA_EVENT["markets"][0], "endDate": "2099-01-01T00:00:00Z"}],
+            "endDate": end_str,
+            "markets": [{**SAMPLE_GAMMA_EVENT["markets"][0], "endDate": end_str}],
         }
 
     async def test_cached_within_interval(self):
         """Second call reuses cached market, no API call."""
-        adapter = _make_adapter(gamma_data=[self._future_event()])
+        adapter = _make_adapter(gamma_data=[self._current_event()])
         await adapter.discover_market("btc-updown-5m")
         await adapter.discover_market("btc-updown-5m")
         # Only 1 API call — second was served from cache

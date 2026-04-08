@@ -46,14 +46,18 @@ class PolymarketAdapter:
 
     async def discover_market(self, series_slug: str) -> Market | None:
         """Find the current active candle market. Cached until expiry."""
-        if self._cached_market is not None and self._cached_market.end_time > time.time():
-            return self._cached_market
-
         now = time.time()
+        if self._cached_market is not None:
+            # Only use cache if the market's time range contains now
+            cache_start = self._cached_market.end_time - CANDLE_INTERVAL
+            if cache_start <= now < self._cached_market.end_time:
+                return self._cached_market
+            self._cached_market = None
+
         boundary = int(now - (now % CANDLE_INTERVAL))
 
-        # Try current, then next (approaching boundary), then previous (API lag)
-        for offset in [0, CANDLE_INTERVAL, -CANDLE_INTERVAL]:
+        # Try current, then previous (API lag) — never probe future
+        for offset in [0, -CANDLE_INTERVAL]:
             slug = f"{series_slug}-{boundary + offset}"
             market = await self._fetch_market_by_slug(slug)
             if market is not None:
@@ -146,15 +150,24 @@ class PolymarketAdapter:
             final_price = meta.get("finalPrice")
             if price_to_beat is None or final_price is None:
                 return None
-            outcome_prices = mkt.get("outcomePrices", "[]")
-            if isinstance(outcome_prices, str):
-                outcome_prices = json.loads(outcome_prices)
-
-            if len(outcome_prices) < 2:
-                return None
-
-            up_price = float(outcome_prices[0])
-            outcome = "UP" if up_price > 0.5 else "DOWN"
+            # Derive outcome from outcomePrices if available, else from prices
+            try:
+                outcome_prices = mkt.get("outcomePrices", "[]")
+                if isinstance(outcome_prices, str):
+                    outcome_prices = json.loads(outcome_prices)
+                if len(outcome_prices) >= 2:
+                    up_price = float(outcome_prices[0])
+                    down_price = float(outcome_prices[1])
+                    if up_price > 0.5 and up_price > down_price:
+                        outcome = "UP"
+                    elif down_price > 0.5 and down_price > up_price:
+                        outcome = "DOWN"
+                    else:
+                        outcome = "UP" if float(final_price) >= float(price_to_beat) else "DOWN"
+                else:
+                    outcome = "UP" if float(final_price) >= float(price_to_beat) else "DOWN"
+            except (ValueError, TypeError, json.JSONDecodeError):
+                outcome = "UP" if float(final_price) >= float(price_to_beat) else "DOWN"
 
             return {
                 "open": float(price_to_beat),

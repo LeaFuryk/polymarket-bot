@@ -15,6 +15,13 @@ class DataStore(Protocol):
     async def get_candle(self, candle_id: str) -> CandleRecord | None: ...
     async def get_snapshots(self, candle_id: str) -> list[Snapshot]: ...
     async def update_candle(
-        self, candle_id: str, open: float, close: float, outcome: str, final_ret: float
+        self,
+        candle_id: str,
+        open: float,
+        high: float,
+        low: float,
+        close: float,
+        outcome: str,
+        final_ret: float,
     ) -> None: ...
     async def close(self) -> None: ...

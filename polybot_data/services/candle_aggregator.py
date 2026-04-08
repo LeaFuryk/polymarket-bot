@@ -62,7 +62,6 @@ class CandleAggregator:
         so asyncio.gather propagates the failure and shuts down _expiry_loop.
         """
         async for tick in self._price_stream.ticks():
-            self._latest_tick = tick
             self._update_partial(tick)
 
         raise RuntimeError("Price stream ended unexpectedly")
@@ -80,11 +79,17 @@ class CandleAggregator:
         candle_end = candle_start + self._interval
 
         if self._partial is not None and candle_start >= self._partial.end_time:
-            return
+            return  # future interval — don't update latest_tick
 
         # Reject ticks for an interval we already closed
         if candle_end <= self._last_closed_end:
+            return  # already closed — don't update latest_tick
+
+        # Reject out-of-order ticks within the same interval
+        if self._partial is not None and ts <= self._partial.last_tick_time:
             return
+
+        self._latest_tick = tick  # only accepted, in-order ticks update latest_tick
 
         if self._partial is None:
             self._partial = PartialCandle(
@@ -139,8 +144,13 @@ class CandleAggregator:
         self._partial = None
         self._last_closed_end = p_end
 
+        # Once partial is consumed, we MUST emit — even if cancelled
+        cancelled = False
         try:
-            volume = await self._volume_feed.get_volume(p_start, p_end)
+            volume = await asyncio.wait_for(self._volume_feed.get_volume(p_start, p_end), timeout=10.0)
+        except asyncio.CancelledError:
+            volume = 0.0
+            cancelled = True
         except Exception:
             self._log.exception("Failed to fetch volume for candle, using 0.0")
             volume = 0.0
@@ -155,6 +165,10 @@ class CandleAggregator:
             end_time=p_end,
         )
         self.events.emit("candle_close", candle)
+
+        # Re-raise so the task actually terminates on shutdown
+        if cancelled:
+            raise asyncio.CancelledError
 
     # -- Public read interface ---------------------------------------------
 

@@ -132,21 +132,23 @@ class TestGetResolutionReturnsNone:
         result = await adapter.get_resolution("btc-updown-5m-900")
         assert result is None
 
-    async def test_outcome_prices_fewer_than_two(self):
-        """outcomePrices has only one element."""
-        event = _gamma_event(outcome_prices=["1"])
+    async def test_outcome_prices_fewer_than_two_falls_back_to_prices(self):
+        """outcomePrices has only one element — falls back to price comparison."""
+        event = _gamma_event(price_to_beat="67800.0", final_price="67850.0", outcome_prices=["1"])
         adapter = _make_adapter(gamma_data=[event])
 
         result = await adapter.get_resolution("btc-updown-5m-900")
-        assert result is None
+        assert result is not None
+        assert result["outcome"] == "UP"  # final >= open
 
-    async def test_outcome_prices_empty_list(self):
-        """outcomePrices is an empty list."""
-        event = _gamma_event(outcome_prices=[])
+    async def test_outcome_prices_empty_falls_back_to_prices(self):
+        """outcomePrices empty — falls back to price comparison."""
+        event = _gamma_event(price_to_beat="67800.0", final_price="67750.0", outcome_prices=[])
         adapter = _make_adapter(gamma_data=[event])
 
         result = await adapter.get_resolution("btc-updown-5m-900")
-        assert result is None
+        assert result is not None
+        assert result["outcome"] == "DOWN"  # final < open
 
     async def test_http_error(self):
         """Network error returns None, does not raise."""
@@ -222,11 +224,25 @@ class TestGetResolutionJsonStringHandling:
 
 
 class TestGetResolutionEdgeCases:
-    async def test_up_price_exactly_half(self):
-        """up_price == 0.5 => not > 0.5 => outcome is DOWN."""
+    async def test_up_price_exactly_half_tie_uses_prices(self):
+        """Both at 0.5 => tie => use price comparison. final >= open => UP."""
         event = _gamma_event(
             price_to_beat="67800.0",
             final_price="67800.0",
+            outcome_prices=["0.5", "0.5"],
+        )
+        adapter = _make_adapter(gamma_data=[event])
+
+        result = await adapter.get_resolution("btc-updown-5m-900")
+
+        assert result is not None
+        assert result["outcome"] == "UP"  # final >= open
+
+    async def test_tie_with_price_down(self):
+        """Both at 0.5 => tie => use price comparison. final < open => DOWN."""
+        event = _gamma_event(
+            price_to_beat="67800.0",
+            final_price="67799.0",
             outcome_prices=["0.5", "0.5"],
         )
         adapter = _make_adapter(gamma_data=[event])
