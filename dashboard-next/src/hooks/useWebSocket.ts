@@ -2,13 +2,15 @@
 
 import { useEffect, useRef, useState } from "react";
 import type {
-  MarketUpdate,
-  PositionUpdate,
-  ResolutionEvent,
-  SnapshotData,
-  StatusUpdate,
-  TradeEvent,
-  WSMessage,
+  CandleClose,
+  CandleCorrection,
+  InitialState,
+  ModelEntry,
+  ModelSettlement,
+  PortfolioSummary,
+  Snapshot,
+  SnapshotPoint,
+  PastBet,
 } from "@/lib/types";
 import { RECONNECT_INTERVALS, WS_URL } from "@/lib/constants";
 
@@ -18,24 +20,46 @@ export type WSState =
   | "disconnected"
   | "reconnecting";
 
-export interface WSData {
-  state: WSState;
-  snapshot: SnapshotData | null;
-  market: MarketUpdate | null;
-  position: PositionUpdate | null;
-  status: StatusUpdate | null;
-  trades: TradeEvent[];
-  resolutions: ResolutionEvent[];
+export interface DashboardData {
+  wsState: WSState;
+  candles: CandleClose[];
+  currentCandleId: string | null;
+  currentSnapshots: SnapshotPoint[];
+  currentEntries: ModelEntry[];
+  portfolios: Record<string, PortfolioSummary>;
+  equityHistory: Record<string, number[]>;
+  pastBets: PastBet[];
+  latestSnapshot: Snapshot | null;
 }
 
-export function useWebSocket(url: string = WS_URL): WSData {
-  const [state, setState] = useState<WSState>("disconnected");
-  const [snapshot, setSnapshot] = useState<SnapshotData | null>(null);
-  const [market, setMarket] = useState<MarketUpdate | null>(null);
-  const [position, setPosition] = useState<PositionUpdate | null>(null);
-  const [status, setStatus] = useState<StatusUpdate | null>(null);
-  const [trades, setTrades] = useState<TradeEvent[]>([]);
-  const [resolutions, setResolutions] = useState<ResolutionEvent[]>([]);
+const MAX_PAST_BETS = 100;
+const INITIAL_CASH = 1000; // default, overridden by initial_state
+
+export function useWebSocket(url: string = WS_URL): DashboardData {
+  const [wsState, setWsState] = useState<WSState>("disconnected");
+  const [candles, setCandles] = useState<CandleClose[]>([]);
+  const [currentCandleId, setCurrentCandleId] = useState<string | null>(null);
+  const [currentSnapshots, setCurrentSnapshots] = useState<SnapshotPoint[]>([]);
+  const [currentEntries, setCurrentEntries] = useState<ModelEntry[]>([]);
+  const [portfolios, setPortfolios] = useState<
+    Record<string, PortfolioSummary>
+  >({});
+  const [equityHistory, setEquityHistory] = useState<Record<string, number[]>>(
+    {},
+  );
+  const [pastBets, setPastBets] = useState<PastBet[]>([]);
+  const [latestSnapshot, setLatestSnapshot] = useState<Snapshot | null>(null);
+
+  // Refs to avoid stale closures — these track current candle data for past bet creation
+  const currentEntriesRef = useRef<ModelEntry[]>([]);
+  const currentSnapshotsRef = useRef<SnapshotPoint[]>([]);
+  const currentCandleIdRef = useRef<string | null>(null);
+  const initialCashRef = useRef<number>(INITIAL_CASH);
+
+  // Buffer: store entries/snapshots per candle_id for settlements that arrive after candle_close
+  const candleBufferRef = useRef<
+    Map<string, { entries: ModelEntry[]; snapshots: SnapshotPoint[] }>
+  >(new Map());
 
   const wsRef = useRef<WebSocket | null>(null);
   const retryCount = useRef(0);
@@ -55,63 +79,254 @@ export function useWebSocket(url: string = WS_URL): WSData {
       retryTimeout.current = setTimeout(connect, delay);
     }
 
+    function handleMessage(raw: string) {
+      if (disposed) return;
+      let msg: Record<string, unknown>;
+      try {
+        msg = JSON.parse(raw) as Record<string, unknown>;
+      } catch {
+        return; // ignore malformed JSON
+      }
+
+      const type = msg.type as string | undefined;
+      if (!type) return;
+
+      // Type casts below are safe: messages come from our own polybot WS,
+      // and each branch only runs when `type` matches the expected shape.
+      // Full runtime validation (e.g. zod) would be warranted for external feeds.
+      switch (type) {
+        case "initial_state": {
+          const init = msg as unknown as InitialState;
+          setCandles(init.candles ?? []);
+          setPortfolios(init.portfolios ?? {});
+
+          // Store initial_cash for PnL calculations
+          const firstPortfolio = Object.values(init.portfolios ?? {})[0];
+          if (firstPortfolio?.initial_cash) {
+            initialCashRef.current = firstPortfolio.initial_cash;
+          }
+
+          // Hydrate full equity history from server (survives refresh)
+          if (init.equity_history) {
+            setEquityHistory(init.equity_history);
+          } else {
+            // Fallback: just current balance
+            const hist: Record<string, number[]> = {};
+            for (const [model, p] of Object.entries(init.portfolios ?? {})) {
+              hist[model] = [p.final_balance];
+            }
+            setEquityHistory(hist);
+          }
+
+          // Hydrate current candle state from snapshots_so_far
+          if (init.snapshots_so_far?.length > 0) {
+            const firstSnap = init.snapshots_so_far[0];
+            currentCandleIdRef.current = firstSnap.candle_id;
+            setCurrentCandleId(firstSnap.candle_id);
+
+            const points = init.snapshots_so_far.map((s) => ({
+              elapsed_pct: s.elapsed_pct,
+              timestamp: s.timestamp,
+              up_ask: s.up_asks?.[0]?.[0] ?? null,
+              down_ask: s.down_asks?.[0]?.[0] ?? null,
+              btc_price: s.btc_price,
+            }));
+            currentSnapshotsRef.current = points;
+            setCurrentSnapshots(points);
+            setLatestSnapshot(
+              init.snapshots_so_far[init.snapshots_so_far.length - 1],
+            );
+          }
+
+          // Hydrate current entries from initial_state
+          if (init.current_entries?.length) {
+            currentEntriesRef.current = init.current_entries;
+            setCurrentEntries(init.current_entries);
+          }
+          break;
+        }
+        case "snapshot": {
+          const snap = msg as unknown as Snapshot;
+          setLatestSnapshot(snap);
+
+          if (snap.candle_id !== currentCandleIdRef.current) {
+            // Save buffer for the previous candle before switching
+            // (only if there was a previous candle with data — skip the null→new transition)
+            const prevId = currentCandleIdRef.current;
+            if (prevId && currentSnapshotsRef.current.length > 0) {
+              candleBufferRef.current.set(prevId, {
+                entries: [...currentEntriesRef.current],
+                snapshots: [...currentSnapshotsRef.current],
+              });
+            }
+            currentCandleIdRef.current = snap.candle_id;
+            currentSnapshotsRef.current = [];
+            currentEntriesRef.current = [];
+            setCurrentCandleId(snap.candle_id);
+            setCurrentEntries([]);
+          }
+
+          const point: SnapshotPoint = {
+            elapsed_pct: snap.elapsed_pct,
+            timestamp: snap.timestamp,
+            up_ask: snap.up_asks?.[0]?.[0] ?? null,
+            down_ask: snap.down_asks?.[0]?.[0] ?? null,
+            btc_price: snap.btc_price,
+          };
+          currentSnapshotsRef.current = [...currentSnapshotsRef.current, point];
+          setCurrentSnapshots([...currentSnapshotsRef.current]);
+          break;
+        }
+        case "model_entry": {
+          const entry = msg as unknown as ModelEntry;
+          currentEntriesRef.current = [...currentEntriesRef.current, entry];
+          setCurrentEntries([...currentEntriesRef.current]);
+          break;
+        }
+        case "model_settlement": {
+          const settlement = msg as unknown as ModelSettlement;
+          const ic = initialCashRef.current;
+
+          setPortfolios((prev) => ({
+            ...prev,
+            [settlement.model]: {
+              ...prev[settlement.model],
+              final_balance: settlement.cash,
+              wins: settlement.wins,
+              losses: settlement.losses,
+              win_rate:
+                settlement.wins + settlement.losses > 0
+                  ? settlement.wins / (settlement.wins + settlement.losses)
+                  : 0,
+              net_pnl: settlement.cash - ic,
+              total_return_pct: ((settlement.cash - ic) / ic) * 100,
+            },
+          }));
+
+          setEquityHistory((prev) => ({
+            ...prev,
+            [settlement.model]: [
+              ...(prev[settlement.model] ?? []),
+              settlement.cash,
+            ],
+          }));
+
+          // Get entries/snapshots from current refs or from the candle buffer
+          const buffered = candleBufferRef.current.get(settlement.candle_id);
+          const entriesForCandle =
+            buffered?.entries ??
+            [...currentEntriesRef.current].filter(
+              (e) => e.candle_id === settlement.candle_id,
+            );
+          const snapshotsForCandle = buffered?.snapshots ?? [
+            ...currentSnapshotsRef.current,
+          ];
+
+          setPastBets((prev) => {
+            const existing = prev.find(
+              (b) => b.candle_id === settlement.candle_id,
+            );
+            if (existing) {
+              return prev.map((b) =>
+                b.candle_id === settlement.candle_id
+                  ? {
+                      ...b,
+                      outcome: settlement.outcome,
+                      settlements: {
+                        ...b.settlements,
+                        [settlement.model]: settlement,
+                      },
+                    }
+                  : b,
+              );
+            }
+            return [
+              {
+                candle_id: settlement.candle_id,
+                outcome: settlement.outcome,
+                timestamp: settlement.timestamp,
+                entries: entriesForCandle,
+                settlements: { [settlement.model]: settlement },
+                snapshots: snapshotsForCandle,
+              },
+              ...prev,
+            ].slice(0, MAX_PAST_BETS);
+          });
+          break;
+        }
+        case "candle_close": {
+          const candle = msg as unknown as CandleClose;
+          setCandles((prev) => [...prev.slice(-19), candle]);
+
+          // Save current candle data to buffer before clearing
+          if (currentCandleIdRef.current) {
+            candleBufferRef.current.set(currentCandleIdRef.current, {
+              entries: [...currentEntriesRef.current],
+              snapshots: [...currentSnapshotsRef.current],
+            });
+          }
+
+          // Prune old buffer entries (keep last 10)
+          if (candleBufferRef.current.size > 10) {
+            const keys = Array.from(candleBufferRef.current.keys());
+            for (const key of keys.slice(0, keys.length - 10)) {
+              candleBufferRef.current.delete(key);
+            }
+          }
+
+          currentCandleIdRef.current = null;
+          currentSnapshotsRef.current = [];
+          currentEntriesRef.current = [];
+          setCurrentSnapshots([]);
+          setCurrentEntries([]);
+          setCurrentCandleId(null);
+          break;
+        }
+        case "candle_correction": {
+          const correction = msg as unknown as CandleCorrection;
+          setCandles((prev) =>
+            prev.map((c) =>
+              c.candle_id === correction.candle_id
+                ? { ...c, outcome: correction.outcome }
+                : c,
+            ),
+          );
+          setPastBets((prev) =>
+            prev.map((b) =>
+              b.candle_id === correction.candle_id
+                ? { ...b, outcome: correction.outcome }
+                : b,
+            ),
+          );
+          break;
+        }
+      }
+    }
+
     function connect() {
       if (disposed) return;
       if (wsRef.current?.readyState === WebSocket.OPEN) return;
-
-      setState(retryCount.current > 0 ? "reconnecting" : "connecting");
+      setWsState(retryCount.current > 0 ? "reconnecting" : "connecting");
 
       const ws = new WebSocket(url);
       wsRef.current = ws;
 
       ws.onopen = () => {
         if (disposed) return;
-        setState("connected");
+        setWsState("connected");
         retryCount.current = 0;
       };
 
-      ws.onmessage = (event) => {
-        if (disposed) return;
-        try {
-          const msg: WSMessage = JSON.parse(event.data);
-          switch (msg.type) {
-            case "snapshot":
-              setSnapshot(msg.data as SnapshotData);
-              break;
-            case "market":
-              setMarket(msg.data as MarketUpdate);
-              break;
-            case "position":
-              setPosition(msg.data as PositionUpdate);
-              break;
-            case "status":
-              setStatus(msg.data as StatusUpdate);
-              break;
-            case "trade":
-              setTrades((prev) => [...prev.slice(-99), msg.data as TradeEvent]);
-              break;
-            case "resolution":
-              setResolutions((prev) => [
-                ...prev.slice(-49),
-                msg.data as ResolutionEvent,
-              ]);
-              break;
-          }
-        } catch {
-          // ignore malformed messages
-        }
-      };
+      ws.onmessage = (event) => handleMessage(event.data as string);
 
       ws.onclose = () => {
         if (disposed) return;
-        setState("disconnected");
+        setWsState("disconnected");
         wsRef.current = null;
         scheduleReconnect();
       };
 
-      ws.onerror = () => {
-        ws.close();
-      };
+      ws.onerror = () => ws.close();
     }
 
     connect();
@@ -123,5 +338,15 @@ export function useWebSocket(url: string = WS_URL): WSData {
     };
   }, [url]);
 
-  return { state, snapshot, market, position, status, trades, resolutions };
+  return {
+    wsState,
+    candles,
+    currentCandleId,
+    currentSnapshots,
+    currentEntries,
+    portfolios,
+    equityHistory,
+    pastBets,
+    latestSnapshot,
+  };
 }

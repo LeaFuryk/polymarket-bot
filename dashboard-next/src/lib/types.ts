@@ -1,501 +1,141 @@
-/** TypeScript types matching the Python WS protocol. */
+/** TypeScript types for the multi-model trading dashboard. */
 
-// --- WS Message Types ---
+// --- Model identification ---
 
-export type WSMessageType =
-  | "snapshot"
-  | "trade"
-  | "resolution"
-  | "market"
-  | "position"
-  | "status";
+export type ModelName = "LogisticRegression" | "RandomForest" | "XGBoost";
 
-export interface WSMessage<T = unknown> {
-  type: WSMessageType;
-  data: T;
+// --- Collector events (forwarded by polybot) ---
+
+export interface Snapshot {
+  type: "snapshot";
+  candle_id: string;
+  timestamp: number;
+  elapsed_pct: number;
+  btc_price: number;
+  btc_bid: number;
+  btc_ask: number;
+  up_bids: [number, number][];
+  up_asks: [number, number][];
+  down_bids: [number, number][];
+  down_asks: [number, number][];
+  market_volume: number;
 }
 
-// --- Snapshot (full state) ---
+export interface CandleClose {
+  type: "candle_close";
+  candle_id: string;
+  start_time: number;
+  end_time: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+  outcome: "UP" | "DOWN";
+  final_ret: number;
+}
 
-export interface SessionStats {
+export interface CandleCorrection {
+  type: "candle_correction";
+  candle_id: string;
+  start_time: number;
+  end_time: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+  outcome: "UP" | "DOWN";
+  final_ret: number;
+}
+
+// --- Model events (from polybot runners) ---
+
+export interface BetEntry {
+  price: number;
+  amount_usd: number;
+  elapsed_pct: number;
+  confidence: number;
+  checkpoint: number;
+}
+
+export interface ModelEntry {
+  type: "model_entry";
+  model: ModelName;
+  candle_id: string;
+  direction: "UP" | "DOWN";
+  price: number;
+  amount_usd: number;
+  confidence: number;
+  inference_ms: number;
+  checkpoint: number;
+  elapsed_pct: number;
+  timestamp: number;
+}
+
+export interface ModelSettlement {
+  type: "model_settlement";
+  model: ModelName;
+  candle_id: string;
+  outcome: "UP" | "DOWN";
+  direction: "UP" | "DOWN";
+  won: boolean;
+  entries: BetEntry[];
+  pnl: number;
+  cash: number;
   wins: number;
   losses: number;
-  win_rate: number;
-  total_pnl: number;
-  total_fees: number;
-  total_ai_cost: number;
-  cash: number;
-  portfolio_value: number;
+  timestamp: number;
+}
+
+// --- Initial state (sent on WS connect) ---
+
+export interface PortfolioSummary {
   initial_cash: number;
-  market_trading_pnl: number;
-  cycles_run: number;
-  prefilter_skip_rate: number;
-  prefilter_skipped: number;
-  prefilter_checked: number;
-  calibration_records: number;
-}
-
-export interface AllTimeStats {
+  final_balance: number;
   wins: number;
   losses: number;
   win_rate: number;
-  total_pnl: number;
-  total_resolutions: number;
-  total_trades: number;
-}
-
-export interface CurrentMarket {
-  slug: string;
-  title: string;
-  polymarket_url: string;
-  time_remaining: number;
-  up_mid: number | null;
-  down_mid: number | null;
-}
-
-export interface BtcInfo {
-  price_usd: number;
-  change_24h_pct: number;
-  last_candle_direction: string;
-  chainlink_price: number | null;
-  price_divergence: number | null;
-  price_source: string;
-  candle_sources: {
-    chainlink: number;
-    binance: number;
-    total: number;
-  };
-}
-
-export interface Positions {
-  up_shares: number;
-  up_avg_entry: number;
-  down_shares: number;
-  down_avg_entry: number;
-}
-
-export interface RiskState {
-  daily_pnl: number;
-  daily_trades: number;
-  daily_fees: number;
-  max_drawdown: number;
-  is_halted: boolean;
-}
-
-export interface MonitorState {
-  prefilter_snapshots: number;
-  ai_cooldown_remaining: number;
-  last_trigger_reason: string;
-  status: Record<string, unknown>;
-}
-
-export interface AdaptiveEntry {
-  enabled: boolean;
-  btc_threshold: number;
-  max_entry_price: number;
-  reversal_rate: number;
-  regime: string;
-  signal_type: string;
-  has_enough_history: boolean;
-  window_size: number;
-  history_count: number;
-  market_trend?: number;
-  market_trend_label?: string;
-  using_fakeout?: boolean;
-  fakeout_p75?: number;
-  fakeout_max?: number;
-  fakeout_median?: number;
-  adaptive_cap?: number;
-}
-
-export interface OutageInfo {
-  is_down: boolean;
-  since: number | null;
-  duration: number;
-  failures: number;
-  recovered: boolean;
-  last_outage_duration: number;
-}
-
-export interface LiveTradingInfo {
-  mode: string;
-  dry_run: boolean;
-  wallet_balance: number;
-  kill_switch_active: boolean;
-  max_order_size_usd: number;
-  max_session_loss_usd: number;
-  shadow_paper_pnl: number;
-  execution_cost: number;
-}
-
-export interface LiveOrderInfo {
-  order_id: string;
-  limit_price: number;
-  submit_ts: number;
-  fill_ts: number | null;
-  cancel_ts: number | null;
-  fill_source: string;
-  ttl_used: number;
-  polls: number;
-  final_order_status: string;
-  size_matched: number;
-  decision_ob_ask: number;
-  decision_ob_bid: number;
-  ob_at_submit: Record<string, number>;
-  ob_at_end: Record<string, number>;
-  pre_balance: number;
-  post_balance: number;
-}
-
-export interface TradeEntry {
-  timestamp: string;
-  cycle: number;
-  action: string;
-  token_side: string;
-  size: number;
-  fill_price: number | null;
-  confidence: number;
-  reasoning: string;
-  market_view: string;
-  candle_slug: string;
-  polymarket_url: string;
-  time_remaining_at_trade: number;
-  risk_blocked: boolean;
-  risk_block_reason: string;
-  cash: number;
-  portfolio_value: number;
-  fee: number;
   realized_pnl: number;
-  unrealized_pnl: number;
-  ai_cost: number;
-  midpoint_gap?: number;
-  up_mid_at_trade?: number;
-  down_mid_at_trade?: number;
-  screen_passed?: boolean;
-  screen_input?: string;
-  live_order?: LiveOrderInfo;
+  net_pnl: number;
+  total_fees: number;
+  total_return_pct: number;
 }
 
-export interface ResolutionEntry {
-  timestamp: string;
-  slug: string;
-  winner: string;
-  btc_open: number;
-  btc_close: number;
-  btc_move: number;
-  pnl: number;
+export interface InitialState {
+  type: "initial_state";
+  candles: CandleClose[];
+  snapshots_so_far: Snapshot[];
+  portfolios: Record<string, PortfolioSummary>;
+  equity_history?: Record<string, number[]>;
+  current_entries?: ModelEntry[];
 }
 
-export interface IterationTradeAnalysis {
-  total_buys: number;
-  total_sells: number;
-  total_holds: number;
-  avg_fill_price: number;
-  cheap_entries: number;
-  mid_entries: number;
-  expensive_entries: number;
-  avg_confidence: number;
-  hold_rate: number;
-}
+// --- Derived types for dashboard state ---
 
-export interface IterationResolutionAnalysis {
-  total: number;
-  avg_btc_move: number;
-  max_btc_move: number;
-  avg_win_pnl: number;
-  avg_loss_pnl: number;
-  biggest_win: number;
-  biggest_loss: number;
-  cumulative_pnl: number[];
-}
-
-export interface IterationResolutionDetail {
-  slug: string;
-  pnl: number;
-  btc_move: number;
-  resolution: string;
-}
-
-export interface IterationCalibration {
-  total_records: number;
-  shadow_accuracy: number | null;
-  shadow_total: number;
-  bins: Array<{
-    range: string;
-    wins: number;
-    losses: number;
-    win_rate: number;
-    reliable: boolean;
-  }>;
-}
-
-export interface IterationExitAnalysis {
-  total_exits: number;
-  good_exit_rate: number;
-  good_exits: number;
-  total_saved: number;
-  total_missed: number;
-}
-
-export interface IterationExecutionQuality {
-  total_orders: number;
-  filled_count: number;
-  fill_rate: number;
-  timeout_count: number;
-  by_fill_source: Record<string, number>;
-  avg_size_matched: number;
-}
-
-export interface IterationLiveTrading {
-  mode: string;
-  dry_run: boolean;
-  wallet_balance: number;
-  shadow_paper_pnl: number;
-  execution_cost: number;
-}
-
-export interface IterationSummary {
-  // Core fields from summary.json
-  label: string;
-  version: string;
-  trading_mode?: "paper" | "live" | "dry_run";
-  archived_at?: string;
-  date_range?: { start: string; end: string };
-  total_candles: number;
-  total_trades: number;
-  total_cycles?: number;
-  wins: number;
-  losses: number;
-  win_rate: number;
-  total_pnl: number;
-  total_fees?: number;
-  ai_cost?: number;
-  net_result?: number;
-  final_cash?: number;
-  final_portfolio_value?: number;
-  reflections_count?: number;
-  enabled_indicators?: string[];
-
-  // Enriched analysis (added by _enrich_iteration_summary)
-  trade_analysis?: IterationTradeAnalysis;
-  resolution_analysis?: IterationResolutionAnalysis;
-  resolutions_detail?: IterationResolutionDetail[];
-  calibration?: IterationCalibration;
-  exit_analysis?: IterationExitAnalysis;
-  ml_model?: {
-    training_samples: number;
-    model_trained: boolean;
-    weights?: Record<string, number>;
-    bias?: number;
-  };
-  observations?: Array<{ category: string; text: string; timestamp: string }>;
-  session_history?: string;
-  live_trading?: IterationLiveTrading;
-  execution_quality?: IterationExecutionQuality;
-}
-
-export interface MLModelData {
-  training_samples: number;
-  model_trained: boolean;
-  weights?: Record<string, number>;
-  bias?: number;
-  feature_names?: string[];
-  min_samples?: number;
-}
-
-export interface CalibrationData {
-  total_records: number;
-  shadow_correct?: number;
-  shadow_total?: number;
-  shadow_accuracy: number | null;
-  bins: Array<{
-    range: string;
-    wins: number;
-    losses: number;
-    win_rate: number;
-    reliable: boolean;
-  }>;
-}
-
-export interface ExitAnalysisData {
-  total_exits: number;
-  good_exits: number;
-  good_exit_rate: number;
-  total_saved: number;
-  total_missed: number;
-}
-
-export interface ObservationEntry {
-  id: string;
-  category: string;
-  text: string;
-  timestamp: string;
-  based_on_resolutions: number;
-  expires_after_resolutions: number;
-}
-
-export interface MicrostructureEntry {
+export interface SnapshotPoint {
+  elapsed_pct: number;
   timestamp: number;
-  avg_spread_up: number;
-  avg_spread_down: number;
-  avg_depth: number;
-  avg_imbalance: number;
-  btc_range: number;
-  btc_final_move: number;
-  zero_crossings: number;
-  reversal_intensity: number;
+  up_ask: number | null;
+  down_ask: number | null;
+  btc_price: number;
 }
 
-export interface ReversalRegime {
-  score: number;
-  label: string;
-  avg_crossings: number;
-  avg_intensity: number;
-}
-
-export interface EnsembleStats {
-  screen_calls: number;
-  screen_passes: number;
-  screen_pass_rate: number;
-  sonnet_trades: number;
-  ml_sonnet_agree: number;
-  ml_sonnet_total: number;
-  ml_sonnet_agree_rate: number;
-}
-
-export interface SnapshotData {
-  bot_version: string;
-  updated_at: string;
-  session: SessionStats;
-  all_time: AllTimeStats;
-  current_market: CurrentMarket;
-  btc: BtcInfo;
-  positions: Positions;
-  position_pnl: Record<string, number>;
-  dynamic_sl: Record<string, number>;
-  dynamic_tp: Record<string, number>;
-  trades: TradeEntry[];
-  resolutions: ResolutionEntry[];
-  risk: RiskState;
-  monitor: MonitorState;
-  adaptive_entry: AdaptiveEntry;
-  ensemble: EnsembleStats;
-  ml_model: MLModelData;
-  calibration: CalibrationData;
-  exit_analysis: ExitAnalysisData;
-  outage: OutageInfo;
-  iterations: IterationSummary[];
-  live_trading?: LiveTradingInfo;
-  ws_clients?: number;
-  candle_snapshots?: CandleSnapshots;
-  observations?: ObservationEntry[];
-  resolutions_since_reflection?: number;
-  knowledge_total_resolutions?: number;
-  microstructure?: MicrostructureEntry[];
-  reversal_regime?: ReversalRegime | null;
-}
-
-// --- Candle Snapshots ---
-
-export interface CandleSnapshotPoint {
-  tr: number;
-  up: number | null;
-  dn: number | null;
-  btc_mv: number | null;
-  pf: boolean;
-  pfr: string | null;
-  ind: string | null;
-  u_sp: number | null;
-  d_sp: number | null;
-  u_dep: number | null;
-  d_dep: number | null;
-  btc: number | null;
-  u_ask: number | null;
-  d_ask: number | null;
-  rr_u: number | null;
-  rr_d: number | null;
-  stk: number | null;
-  stk_d: string | null;
-}
-
-export interface CandleSnapshot {
-  winner: string | null;
-  btc_open: number;
-  points: CandleSnapshotPoint[];
-}
-
-export type CandleSnapshots = Record<string, CandleSnapshot>;
-
-// --- Lightweight update messages ---
-
-export interface MarketUpdate {
+export interface PastBet {
+  candle_id: string;
+  outcome: "UP" | "DOWN";
   timestamp: number;
-  time_remaining?: number;
-  up_mid?: number | null;
-  down_mid?: number | null;
-  slug?: string;
-  btc_price?: number;
-  chainlink_price?: number | null;
-  price_source?: string;
+  entries: ModelEntry[];
+  settlements: Partial<Record<ModelName, ModelSettlement>>;
+  snapshots: SnapshotPoint[];
 }
 
-export interface PositionUpdate {
-  timestamp: number;
-  up_shares: number;
-  up_avg_entry: number;
-  down_shares: number;
-  down_avg_entry: number;
-  cash: number;
-  position_pnl: Record<string, number>;
-  dynamic_sl: Record<string, number>;
-  dynamic_tp: Record<string, number>;
-}
+// --- Union type for all incoming messages ---
 
-export interface StatusUpdate {
-  timestamp: number;
-  monitor: MonitorState;
-  risk: RiskState;
-  api_latencies: Record<string, number>;
-  ws_clients: number;
-  sqlite_queue_depth: number;
-  prefilter: {
-    skip_rate: number;
-    skipped: number;
-    checked: number;
-  };
-  ensemble: {
-    screen_calls: number;
-    screen_passes: number;
-  };
-}
-
-// --- Event messages ---
-
-export interface TradeEvent {
-  timestamp: string;
-  action: string;
-  token_side: string;
-  size: number;
-  fill_price: number | null;
-  confidence: number;
-  reasoning: string;
-  candle_slug: string;
-  risk_blocked: boolean;
-  cash: number;
-  portfolio_value: number;
-  fee: number;
-  ai_cost: number;
-  midpoint_gap?: number;
-  up_mid_at_trade?: number;
-  down_mid_at_trade?: number;
-  live_order?: LiveOrderInfo;
-}
-
-export interface ResolutionEvent {
-  slug: string;
-  winner: string;
-  btc_open: number;
-  btc_close: number;
-  btc_move: number;
-  pnl: number;
-}
+export type WSMessage =
+  | Snapshot
+  | CandleClose
+  | CandleCorrection
+  | ModelEntry
+  | ModelSettlement
+  | InitialState;

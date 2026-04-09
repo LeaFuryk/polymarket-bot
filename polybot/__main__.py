@@ -91,11 +91,16 @@ async def main() -> None:
     agent = AgentService(indicators=indicators, runners=runners)
 
     def build_initial_state() -> dict:
+        all_entries: list[dict] = []
+        for r in runners:
+            all_entries.extend(r.current_entries)
         return {
             "type": "initial_state",
             "candles": [asdict(c) for c in indicators.prior_candles],
             "snapshots_so_far": [asdict(s) for s in indicators.snapshots_so_far],
             "portfolios": {r.name: r.portfolio.session_summary() for r in runners},
+            "equity_history": {r.name: r.equity_history for r in runners},
+            "current_entries": all_entries,
         }
 
     server = PolybotServer(broadcaster, initial_state_fn=build_initial_state)

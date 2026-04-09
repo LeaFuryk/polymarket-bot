@@ -48,6 +48,9 @@ class ModelRunner:
         self._broadcaster = broadcaster
         self._log = logger or logging.getLogger(f"{__name__}.{name}")
 
+        # Equity history: balance after each settlement (for dashboard chart)
+        self._equity_history: list[float] = [portfolio.state.cash]
+
         # Per-candle state
         self._predictions: list[int] = []
         self._first_direction: str | None = None
@@ -64,6 +67,31 @@ class ModelRunner:
     @property
     def portfolio(self) -> PortfolioService:
         return self._portfolio
+
+    @property
+    def equity_history(self) -> list[float]:
+        """Balance after each settlement, for dashboard equity chart."""
+        return self._equity_history
+
+    @property
+    def current_entries(self) -> list[dict]:
+        """Return current candle entries as dicts for initial_state broadcast."""
+        return [
+            {
+                "type": "model_entry",
+                "model": self._name,
+                "candle_id": self._current_candle_id or "",
+                "direction": self._first_direction or "",
+                "price": e.price,
+                "amount_usd": e.amount_usd,
+                "confidence": e.confidence,
+                "inference_ms": 0,
+                "checkpoint": e.checkpoint,
+                "elapsed_pct": e.elapsed_pct,
+                "timestamp": 0,
+            }
+            for e in self._bet_entries
+        ]
 
     async def handle_snapshot(self, row: dict, snapshot: IndicatorSnapshot) -> None:
         """Predict, evaluate entry, broadcast if triggered."""
@@ -215,6 +243,9 @@ class ModelRunner:
                     "timestamp": _time.time(),
                 }
             )
+
+        # Track equity history (always, even if no position — balance may change from corrections)
+        self._equity_history.append(self._portfolio.state.cash)
 
         self._reset_candle_state()
 
