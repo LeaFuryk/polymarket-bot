@@ -1,0 +1,232 @@
+"""Service: per-model trading lifecycle — predict, enter, settle, broadcast."""
+
+from __future__ import annotations
+
+import logging
+import time as _time
+from dataclasses import asdict
+from typing import TYPE_CHECKING
+
+from polybot.domain.bet_record import BetEntry, BetRecord
+
+if TYPE_CHECKING:
+    from polybot_data.domain.collection import CandleRecord
+    from polybot_data.services.indicator_engine import IndicatorSnapshot
+
+    from polybot.domain.trading_strategy import TradingStrategy
+    from polybot.ports.bet_store import BetStore
+    from polybot.ports.message_relay import MessageRelay
+    from polybot.ports.predictor import Predictor
+    from polybot.services.portfolio_service import PortfolioService
+
+MAX_BID = 0.85
+BET_PCT = 0.02
+
+
+class ModelRunner:
+    """Owns one model's complete trading lifecycle.
+
+    Uses the Strategy pattern: the TradingStrategy dataclass drives entry
+    decisions (checkpoints, confidence thresholds).
+    """
+
+    def __init__(
+        self,
+        name: str,
+        predictor: Predictor,
+        portfolio: PortfolioService,
+        strategy: TradingStrategy,
+        bet_store: BetStore,
+        broadcaster: MessageRelay,
+        logger: logging.Logger | None = None,
+    ) -> None:
+        self._name = name
+        self._predictor = predictor
+        self._portfolio = portfolio
+        self._strategy = strategy
+        self._bet_store = bet_store
+        self._broadcaster = broadcaster
+        self._log = logger or logging.getLogger(f"{__name__}.{name}")
+
+        # Per-candle state
+        self._predictions: list[int] = []
+        self._first_direction: str | None = None
+        self._entries_made: int = 0
+        self._next_checkpoint: int = 0
+        self._bet_entries: list[BetEntry] = []
+        self._current_candle_id: str | None = None
+        self._cash_before_bet: float = 0.0
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+    @property
+    def portfolio(self) -> PortfolioService:
+        return self._portfolio
+
+    async def handle_snapshot(self, row: dict, snapshot: IndicatorSnapshot) -> None:
+        """Predict, evaluate entry, broadcast if triggered."""
+        if snapshot.up_bids and snapshot.up_asks and snapshot.down_bids and snapshot.down_asks:
+            up_mid = (snapshot.up_bids[0][0] + snapshot.up_asks[0][0]) / 2
+            down_mid = (snapshot.down_bids[0][0] + snapshot.down_asks[0][0]) / 2
+            self._portfolio.update_prices(up_mid, down_mid)
+
+        await self._evaluate_entry(snapshot, row)
+
+    async def _evaluate_entry(self, snapshot: IndicatorSnapshot, row: dict) -> None:
+        """Check if the current snapshot triggers a scaling-in entry."""
+        if self._next_checkpoint >= len(self._strategy.entry_points):
+            return
+
+        min_elapsed, n_consecutive = self._strategy.entry_points[self._next_checkpoint]
+
+        if snapshot.elapsed_pct < min_elapsed:
+            return
+
+        t0 = _time.perf_counter()
+        p_up = self._predictor.predict(row)
+        inference_ms = (_time.perf_counter() - t0) * 1000
+
+        pred = 1 if p_up >= 0.5 else 0
+        self._predictions.append(pred)
+
+        if len(self._predictions) < n_consecutive:
+            return
+
+        recent = self._predictions[-n_consecutive:]
+        if not all(p == recent[0] for p in recent):
+            return
+
+        confidence = max(p_up, 1.0 - p_up)
+        if confidence < self._strategy.min_confidence:
+            return
+
+        direction = "UP" if pred == 1 else "DOWN"
+
+        if self._first_direction is None:
+            self._first_direction = direction
+        elif direction != self._first_direction:
+            return
+
+        if direction == "UP" and snapshot.up_asks:
+            ask = snapshot.up_asks[0][0]
+        elif direction == "DOWN" and snapshot.down_asks:
+            ask = snapshot.down_asks[0][0]
+        else:
+            return
+
+        if ask <= 0 or ask >= MAX_BID:
+            return
+
+        bet_amount = self._portfolio.state.cash * BET_PCT
+        if bet_amount < 0.01:
+            return
+
+        if self._entries_made == 0:
+            self._cash_before_bet = self._portfolio.state.cash
+            self._current_candle_id = snapshot.candle_id
+
+        self._portfolio.buy(direction, amount_usd=bet_amount, price=ask)
+        self._entries_made += 1
+        self._next_checkpoint += 1
+
+        entry = BetEntry(
+            price=ask,
+            amount_usd=bet_amount,
+            elapsed_pct=snapshot.elapsed_pct,
+            confidence=confidence,
+            checkpoint=self._entries_made,
+        )
+        self._bet_entries.append(entry)
+
+        self._log.info(
+            "🎯 ENTRY %d/%d | %s @ $%.4f | candle %s | elapsed %.0f%% | conf=%.2f",
+            self._entries_made,
+            len(self._strategy.entry_points),
+            direction,
+            ask,
+            snapshot.candle_id,
+            snapshot.elapsed_pct * 100,
+            confidence,
+        )
+
+        await self._broadcaster.broadcast_json(
+            {
+                "type": "model_entry",
+                "model": self._name,
+                "candle_id": snapshot.candle_id,
+                "direction": direction,
+                "price": ask,
+                "amount_usd": round(bet_amount, 4),
+                "confidence": round(confidence, 4),
+                "inference_ms": round(inference_ms, 3),
+                "checkpoint": self._entries_made,
+                "elapsed_pct": round(snapshot.elapsed_pct, 4),
+                "timestamp": snapshot.timestamp,
+            }
+        )
+
+    async def handle_candle_close(self, candle: CandleRecord) -> None:
+        """Settle portfolio, record bet, broadcast settlement, reset state."""
+        had_position = self._entries_made > 0
+
+        self._portfolio.settle(candle.outcome, candle_id=candle.candle_id)
+
+        if had_position:
+            state = self._portfolio.state
+            pnl = state.cash - self._cash_before_bet
+
+            record = BetRecord(
+                candle_id=self._current_candle_id or candle.candle_id,
+                direction=self._first_direction or "",
+                outcome=candle.outcome,
+                won=self._first_direction == candle.outcome,
+                entries=self._bet_entries,
+                pnl=round(pnl, 4),
+                timestamp=_time.time(),
+            )
+            await self._bet_store.save_bet(record)
+
+            self._log.info(
+                "🕯️ RESOLVED %s | %s | entries=%d | pnl=$%+.2f | W=%d L=%d | cash=$%.2f",
+                candle.candle_id,
+                candle.outcome,
+                self._entries_made,
+                pnl,
+                state.wins,
+                state.losses,
+                state.cash,
+            )
+
+            await self._broadcaster.broadcast_json(
+                {
+                    "type": "model_settlement",
+                    "model": self._name,
+                    "candle_id": candle.candle_id,
+                    "outcome": candle.outcome,
+                    "direction": self._first_direction or "",
+                    "won": self._first_direction == candle.outcome,
+                    "entries": [asdict(e) for e in self._bet_entries],
+                    "pnl": round(pnl, 4),
+                    "cash": round(state.cash, 4),
+                    "wins": state.wins,
+                    "losses": state.losses,
+                    "timestamp": _time.time(),
+                }
+            )
+
+        self._reset_candle_state()
+
+    def handle_correction(self, corrected: CandleRecord) -> None:
+        """Reverse and re-settle if outcome changed."""
+        self._portfolio.reverse_and_resettle(corrected.candle_id, corrected.outcome)
+
+    def _reset_candle_state(self) -> None:
+        self._predictions = []
+        self._first_direction = None
+        self._entries_made = 0
+        self._next_checkpoint = 0
+        self._bet_entries = []
+        self._current_candle_id = None
+        self._cash_before_bet = 0.0
