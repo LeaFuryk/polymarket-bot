@@ -118,7 +118,7 @@ export function useWebSocket(url: string = WS_URL): DashboardData {
             setEquityHistory(hist);
           }
 
-          // Hydrate current candle state from snapshots_so_far
+          // Hydrate current candle state from snapshots_so_far (or reset if empty)
           if (init.snapshots_so_far?.length > 0) {
             const firstSnap = init.snapshots_so_far[0];
             currentCandleIdRef.current = firstSnap.candle_id;
@@ -136,12 +136,22 @@ export function useWebSocket(url: string = WS_URL): DashboardData {
             setLatestSnapshot(
               init.snapshots_so_far[init.snapshots_so_far.length - 1],
             );
+          } else {
+            // No active candle — clear stale state
+            currentCandleIdRef.current = null;
+            currentSnapshotsRef.current = [];
+            setCurrentCandleId(null);
+            setCurrentSnapshots([]);
+            setLatestSnapshot(null);
           }
 
-          // Hydrate current entries from initial_state
+          // Hydrate current entries from initial_state (or reset if empty)
           if (init.current_entries?.length) {
             currentEntriesRef.current = init.current_entries;
             setCurrentEntries(init.current_entries);
+          } else {
+            currentEntriesRef.current = [];
+            setCurrentEntries([]);
           }
           break;
         }
@@ -161,9 +171,13 @@ export function useWebSocket(url: string = WS_URL): DashboardData {
             }
             currentCandleIdRef.current = snap.candle_id;
             currentSnapshotsRef.current = [];
-            currentEntriesRef.current = [];
+            // Preserve entries that were already received for this new candle
+            const keptEntries = currentEntriesRef.current.filter(
+              (e) => e.candle_id === snap.candle_id,
+            );
+            currentEntriesRef.current = keptEntries;
             setCurrentCandleId(snap.candle_id);
-            setCurrentEntries([]);
+            setCurrentEntries(keptEntries);
           }
 
           const point: SnapshotPoint = {
@@ -179,8 +193,17 @@ export function useWebSocket(url: string = WS_URL): DashboardData {
         }
         case "model_entry": {
           const entry = msg as unknown as ModelEntry;
-          currentEntriesRef.current = [...currentEntriesRef.current, entry];
-          setCurrentEntries([...currentEntriesRef.current]);
+          // If entry arrives for a candle we haven't seen a snapshot for yet,
+          // set it as current so the snapshot handler doesn't clear it
+          if (!currentCandleIdRef.current && entry.candle_id) {
+            currentCandleIdRef.current = entry.candle_id;
+            setCurrentCandleId(entry.candle_id);
+          }
+          // Only add to current candle if candle_id matches
+          if (entry.candle_id === currentCandleIdRef.current) {
+            currentEntriesRef.current = [...currentEntriesRef.current, entry];
+            setCurrentEntries([...currentEntriesRef.current]);
+          }
           break;
         }
         case "model_settlement": {
@@ -284,19 +307,44 @@ export function useWebSocket(url: string = WS_URL): DashboardData {
         }
         case "candle_correction": {
           const correction = msg as unknown as CandleCorrection;
+          // Update full candle data (OHLC, outcome, final_ret)
           setCandles((prev) =>
             prev.map((c) =>
               c.candle_id === correction.candle_id
-                ? { ...c, outcome: correction.outcome }
+                ? {
+                    ...c,
+                    open: correction.open,
+                    high: correction.high,
+                    low: correction.low,
+                    close: correction.close,
+                    volume: correction.volume,
+                    outcome: correction.outcome,
+                    final_ret: correction.final_ret,
+                  }
                 : c,
             ),
           );
+          // Update past bet outcome + invalidate settlement won/pnl
           setPastBets((prev) =>
-            prev.map((b) =>
-              b.candle_id === correction.candle_id
-                ? { ...b, outcome: correction.outcome }
-                : b,
-            ),
+            prev.map((b) => {
+              if (b.candle_id !== correction.candle_id) return b;
+              const updatedSettlements = { ...b.settlements };
+              for (const [model, s] of Object.entries(updatedSettlements)) {
+                if (s) {
+                  updatedSettlements[model as keyof typeof updatedSettlements] =
+                    {
+                      ...s,
+                      outcome: correction.outcome,
+                      won: s.direction === correction.outcome,
+                    };
+                }
+              }
+              return {
+                ...b,
+                outcome: correction.outcome,
+                settlements: updatedSettlements,
+              };
+            }),
           );
           break;
         }
