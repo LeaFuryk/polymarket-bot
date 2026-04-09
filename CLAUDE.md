@@ -82,14 +82,26 @@ Polybot ← WS (port 8765) → AgentService.process(msg) → IndicatorService + 
 
 ## Models
 - Trained models in `models/` directory (joblib format)
-- Default: RandomForest (`rf_v1.joblib`) with 20 optimal features
-- Also available: LogisticRegression (`logistic_v1.joblib`) with 31 optimal features
-- Feature columns saved alongside model (`rf_feature_cols_v1.joblib`)
+- LogisticRegression: `logistic_v1.joblib` + `scaler_v1.joblib` + `feature_cols_v1.joblib`
+- RandomForest: `rf_v1.joblib` + `rf_scaler_v1.joblib` + `rf_feature_cols_v1.joblib`
+- XGBoost (calibrated): `xgb_v1.joblib` + `xgb_scaler_v1.joblib` + `xgb_feature_cols_v1.joblib` + `xgb_calibrator_v1.joblib`
+- Feature configs: `data/optimal_features_{lr,rf,xgb}.json`
+- Strategy configs: `data/optimal_strategy_{lr,rf,xgb}.json`
 
 ## Notebooks
-- `notebooks/0 - build_features.ipynb` — Build features from collection.db → `data/latest_features.jsonl`
-- Run notebook 0 FIRST, all others consume `data/latest_features.jsonl`
-- Notebooks 5, 7, 8, 9, 11, 12 forward-test against newest candles from DB (newer than JSONL)
+Organized into subfolders under `notebooks/`:
+```
+data/     01_build_features, 02_data_experiments
+eval/     01_model_comparison (loads models/, no retraining), 02_advanced_models
+lr/       01_feature_selection → optimal_features_lr.json, 02_export → models/, 03_strategy → optimal_strategy_lr.json
+rf/       01_feature_selection → optimal_features_rf.json, 02_export → models/, 03_strategy → optimal_strategy_rf.json
+xgb/      01_feature_selection → optimal_features_xgb.json, 02_export → models/, 03_strategy → optimal_strategy_xgb.json
+experiments/  reversal_indicators (archived)
+```
+- Run `data/01_build_features` FIRST → `data/latest_features.jsonl`
+- Then `*/01_feature_selection` → `data/optimal_features_*.json`
+- Then `*/02_export` → `models/`
+- Then `*/03_strategy` and `eval/` notebooks (load from `models/`, no retraining)
 - `notebooks/technicals.py` — thin re-export from `polybot_data/services/indicator_engine.py`
 
 ## Critical Rules
