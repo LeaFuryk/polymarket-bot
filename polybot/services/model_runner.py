@@ -1,4 +1,9 @@
-"""Service: per-model trading lifecycle — predict, enter, settle, broadcast."""
+"""Service: per-model trading lifecycle — predict, enter, settle, broadcast.
+
+Dual-mode strategy:
+- Signal mode: BTC moved >= min_btc_move from open → use model prediction
+- Noise mode: BTC hasn't moved enough → bet the cheap side (R/R on coin flips)
+"""
 
 from __future__ import annotations
 
@@ -26,8 +31,12 @@ BET_PCT = 0.02
 class ModelRunner:
     """Owns one model's complete trading lifecycle.
 
-    Uses the Strategy pattern: the TradingStrategy dataclass drives entry
-    decisions (checkpoints, confidence thresholds).
+    Dual-mode strategy:
+    - When BTC has moved >= min_btc_move from candle open, use model prediction
+      with the configured entry checkpoints and confidence thresholds.
+    - When BTC hasn't moved enough (noise candle), bet the cheaper side at
+      noise_entry_elapsed. On coin-flip candles, the cheap side has positive
+      expected value due to payoff asymmetry.
     """
 
     def __init__(
@@ -59,6 +68,9 @@ class ModelRunner:
         self._bet_entries: list[BetEntry] = []
         self._current_candle_id: str | None = None
         self._cash_before_bet: float = 0.0
+        self._candle_open: float | None = None
+        self._mode: str = "waiting"  # "waiting" | "signal" | "noise"
+        self._noise_entered: bool = False
 
     @property
     def name(self) -> str:
@@ -70,12 +82,10 @@ class ModelRunner:
 
     @property
     def equity_history(self) -> list[float]:
-        """Balance after each settlement, for dashboard equity chart."""
         return self._equity_history
 
     @property
     def current_entries(self) -> list[dict]:
-        """Return current candle entries as dicts for initial_state broadcast."""
         return [
             {
                 "type": "model_entry",
@@ -100,10 +110,26 @@ class ModelRunner:
             down_mid = (snapshot.down_bids[0][0] + snapshot.down_asks[0][0]) / 2
             self._portfolio.update_prices(up_mid, down_mid)
 
-        await self._evaluate_entry(snapshot, row)
+        # Track candle open price from first snapshot
+        if self._candle_open is None:
+            self._candle_open = snapshot.btc_price
 
-    async def _evaluate_entry(self, snapshot: IndicatorSnapshot, row: dict) -> None:
-        """Check if the current snapshot triggers a scaling-in entry."""
+        # Determine mode based on BTC move from open
+        btc_move = abs(snapshot.btc_price - self._candle_open) / self._candle_open if self._candle_open > 0 else 0
+
+        if self._mode == "waiting":
+            if btc_move >= self._strategy.min_btc_move:
+                self._mode = "signal"
+            elif snapshot.elapsed_pct >= self._strategy.noise_entry_elapsed:
+                self._mode = "noise"
+
+        if self._mode == "signal":
+            await self._evaluate_signal_entry(snapshot, row)
+        elif self._mode == "noise" and not self._noise_entered:
+            await self._evaluate_noise_entry(snapshot)
+
+    async def _evaluate_signal_entry(self, snapshot: IndicatorSnapshot, row: dict) -> None:
+        """Standard model-based entry with checkpoints and confidence."""
         if self._next_checkpoint >= len(self._strategy.entry_points):
             return
 
@@ -147,6 +173,44 @@ class ModelRunner:
         if ask <= 0 or ask >= MAX_BID:
             return
 
+        await self._place_entry(snapshot, direction, ask, confidence, inference_ms, mode="signal")
+
+    async def _evaluate_noise_entry(self, snapshot: IndicatorSnapshot) -> None:
+        """Bet the cheaper side on noise candles (coin-flip with R/R edge)."""
+        if not snapshot.up_asks or not snapshot.down_asks:
+            return
+
+        up_ask = snapshot.up_asks[0][0]
+        down_ask = snapshot.down_asks[0][0]
+
+        if up_ask <= 0 or down_ask <= 0:
+            return
+
+        # Bet the cheaper side
+        if up_ask <= down_ask:
+            direction = "UP"
+            ask = up_ask
+        else:
+            direction = "DOWN"
+            ask = down_ask
+
+        if ask >= MAX_BID:
+            return
+
+        # Confidence = 0.5 (coin flip — no model prediction)
+        self._noise_entered = True
+        await self._place_entry(snapshot, direction, ask, confidence=0.5, inference_ms=0, mode="noise")
+
+    async def _place_entry(
+        self,
+        snapshot: IndicatorSnapshot,
+        direction: str,
+        ask: float,
+        confidence: float,
+        inference_ms: float,
+        mode: str,
+    ) -> None:
+        """Place a bet entry and broadcast."""
         bet_amount = self._portfolio.state.cash * BET_PCT
         if bet_amount < 0.01:
             return
@@ -154,6 +218,9 @@ class ModelRunner:
         if self._entries_made == 0:
             self._cash_before_bet = self._portfolio.state.cash
             self._current_candle_id = snapshot.candle_id
+
+        if self._first_direction is None:
+            self._first_direction = direction
 
         self._portfolio.buy(direction, amount_usd=bet_amount, price=ask)
         self._entries_made += 1
@@ -169,9 +236,9 @@ class ModelRunner:
         self._bet_entries.append(entry)
 
         self._log.info(
-            "🎯 ENTRY %d/%d | %s @ $%.4f | candle %s | elapsed %.0f%% | conf=%.2f",
+            "🎯 %s ENTRY %d | %s @ $%.4f | candle %s | elapsed %.0f%% | conf=%.2f",
+            mode.upper(),
             self._entries_made,
-            len(self._strategy.entry_points),
             direction,
             ask,
             snapshot.candle_id,
@@ -192,6 +259,7 @@ class ModelRunner:
                 "checkpoint": self._entries_made,
                 "elapsed_pct": round(snapshot.elapsed_pct, 4),
                 "timestamp": snapshot.timestamp,
+                "mode": mode,
             }
         )
 
@@ -203,7 +271,20 @@ class ModelRunner:
 
         if had_position:
             state = self._portfolio.state
-            pnl = state.cash - self._cash_before_bet
+            # Calculate PnL from entries directly, not cash difference.
+            # Cash difference can be corrupted by corrections to previous candles
+            # that change portfolio cash mid-candle.
+            won = self._first_direction == candle.outcome
+            total_cost = sum(e.amount_usd for e in self._bet_entries)
+            if won:
+                total_net_shares = 0.0
+                for e in self._bet_entries:
+                    gross = e.amount_usd / e.price
+                    fee = gross * 0.072 * e.price * (1.0 - e.price)
+                    total_net_shares += gross - fee
+                pnl = total_net_shares - total_cost  # shares pay $1 each
+            else:
+                pnl = -total_cost
 
             record = BetRecord(
                 candle_id=self._current_candle_id or candle.candle_id,
@@ -217,9 +298,10 @@ class ModelRunner:
             await self._bet_store.save_bet(record)
 
             self._log.info(
-                "🕯️ RESOLVED %s | %s | entries=%d | pnl=$%+.2f | W=%d L=%d | cash=$%.2f",
+                "🕯️ RESOLVED %s | %s | mode=%s | entries=%d | pnl=$%+.2f | W=%d L=%d | cash=$%.2f",
                 candle.candle_id,
                 candle.outcome,
+                self._mode,
                 self._entries_made,
                 pnl,
                 state.wins,
@@ -241,10 +323,11 @@ class ModelRunner:
                     "wins": state.wins,
                     "losses": state.losses,
                     "timestamp": _time.time(),
+                    "mode": self._mode,
                 }
             )
 
-        # Track equity history (always, even if no position — balance may change from corrections)
+        # Track equity history
         self._equity_history.append(self._portfolio.state.cash)
 
         self._reset_candle_state()
@@ -261,3 +344,6 @@ class ModelRunner:
         self._bet_entries = []
         self._current_candle_id = None
         self._cash_before_bet = 0.0
+        self._candle_open = None
+        self._mode = "waiting"
+        self._noise_entered = False
