@@ -58,15 +58,15 @@ def _make_test_candles(n=50):
 class TestStrategyConfig:
     def test_auto_name_single_entry(self):
         cfg = StrategyConfig(entry_points=[(0.30, 3)], min_confidence=0.0)
-        assert cfg.name == "1x e30%"
+        assert cfg.name == "1x e30%c3"
 
     def test_auto_name_two_entries(self):
         cfg = StrategyConfig(entry_points=[(0.05, 3), (0.50, 2)], min_confidence=0.0)
-        assert cfg.name == "2x e5%+e50%"
+        assert cfg.name == "2x e5%c3+e50%c2"
 
     def test_auto_name_with_confidence(self):
         cfg = StrategyConfig(entry_points=[(0.30, 3)], min_confidence=0.65)
-        assert cfg.name == "1x e30% conf>0.65"
+        assert cfg.name == "1x e30%c3 conf>0.65"
 
     def test_custom_name_preserved(self):
         cfg = StrategyConfig(entry_points=[(0.30, 3)], min_confidence=0.0, name="custom")
@@ -245,17 +245,18 @@ class TestRunScaling:
         assert result["per_candle_pnl"] == [0.0]
 
     def test_sharpe_returned(self):
+        """Mix of wins and losses produces a finite nonzero Sharpe."""
         candles = [
             _make_candle(
                 f"c{i}",
-                1,
+                1 if i % 3 != 0 else 0,  # 2/3 wins, 1/3 losses for variance
                 [
                     _make_snap(0, 0.10, 1, 0.7),
                     _make_snap(1, 0.20, 1, 0.7),
                     _make_snap(2, 0.30, 1, 0.7),
                 ],
             )
-            for i in range(10)
+            for i in range(12)
         ]
         cfg = StrategyConfig(entry_points=[(0.30, 3)])
         result = run_scaling(cfg, candles)

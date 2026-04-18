@@ -39,7 +39,7 @@ class StrategyConfig:
 
     def __post_init__(self) -> None:
         if not self.name:
-            parts = [f"e{e:.0%}" for e, _ in self.entry_points]
+            parts = [f"e{e:.0%}c{n}" for e, n in self.entry_points]
             prefix = f"{len(self.entry_points)}x"
             self.name = f"{prefix} {'+'.join(parts)}"
             if self.min_confidence > 0:
@@ -194,6 +194,10 @@ def run_scaling(
                 # Ask price filter
                 ask = up_ask if pred == 1 else down_ask
                 if ask is None or not np.isfinite(ask) or ask <= 0 or ask >= max_bid:
+                    continue
+
+                # Bankroll floor guard
+                if balance < bet_per_entry:
                     continue
 
                 # Fire entry
