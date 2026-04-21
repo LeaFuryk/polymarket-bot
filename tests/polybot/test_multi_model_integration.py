@@ -3,7 +3,6 @@
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-
 from polybot.domain.trading_strategy import TradingStrategy
 from polybot.services.agent_service import AgentService
 from polybot.services.model_runner import ModelRunner

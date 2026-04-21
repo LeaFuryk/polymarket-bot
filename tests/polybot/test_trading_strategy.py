@@ -3,7 +3,6 @@
 import json
 
 import pytest
-
 from polybot.domain.trading_strategy import TradingStrategy
 
 

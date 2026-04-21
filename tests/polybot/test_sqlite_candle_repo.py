@@ -1,9 +1,8 @@
 """Tests for SqliteCandleRepository."""
 
-from polybot_data.domain.collection import CandleRecord
-
 from polybot.adapters.sqlite_candle_repo import SqliteCandleRepository
 from polybot.ports.candle_repository import CandleRepository
+from polybot_data.domain.collection import CandleRecord
 
 
 class TestSqliteCandleRepository:

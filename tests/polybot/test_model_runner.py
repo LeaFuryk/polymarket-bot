@@ -4,12 +4,11 @@ import time
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from polybot_data.domain.collection import CandleRecord
-from polybot_data.services.indicator_engine import IndicatorSnapshot
-
 from polybot.domain.trading_strategy import TradingStrategy
 from polybot.services.model_runner import ModelRunner
 from polybot.services.portfolio_service import PortfolioService
+from polybot_data.domain.collection import CandleRecord
+from polybot_data.services.indicator_engine import IndicatorSnapshot
 
 
 def _make_strategy(entry_points=((0.05, 3),), min_confidence=0.0, min_btc_move=0.0, noise_entry_elapsed=0.30):
