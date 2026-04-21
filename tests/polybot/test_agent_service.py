@@ -3,9 +3,8 @@
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from polybot_data.domain.collection import CandleRecord
-
 from polybot.services.agent_service import AgentService
+from polybot_data.domain.collection import CandleRecord
 
 
 def _make_agent(n_runners=2):

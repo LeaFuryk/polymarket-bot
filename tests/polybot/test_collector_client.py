@@ -3,7 +3,6 @@
 import json
 
 import pytest
-
 from polybot.adapters.collector_client import CollectorClient
 
 

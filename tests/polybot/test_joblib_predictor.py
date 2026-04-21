@@ -5,11 +5,10 @@ from pathlib import Path
 
 import joblib
 import numpy as np
-from sklearn.linear_model import LogisticRegression
-from sklearn.preprocessing import StandardScaler
-
 from polybot.adapters.joblib_predictor import JoblibPredictor
 from polybot.ports.predictor import Predictor
+from sklearn.linear_model import LogisticRegression
+from sklearn.preprocessing import StandardScaler
 
 
 class TestJoblibPredictor:
