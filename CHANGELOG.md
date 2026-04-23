@@ -9,6 +9,7 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 - **Optional `dnn` dependency group** — `torch>=2.0,<3.0` as optional extra for DNN model inference. Install with `uv pip install -e ".[dnn]"` (CPU-only: add `--extra-index-url https://download.pytorch.org/whl/cpu`). DNN path is silently skipped when torch is unavailable.
+- **`DnnPredictor` adapter** — PyTorch-based `Predictor` implementation for raw market data (11 columns, no pre-computed indicators). Supports single-snapshot and temporal (buffered) inference modes. Sets `OMP_NUM_THREADS=1` to avoid libomp conflict with XGBoost.
 - **Strategy selection pipeline** — Shared `notebooks/strategy_engine.py` module with `StrategyConfig`, `StrategyGrid` (~3,800 parametric combinations), `run_scaling()` with per-candle PnL and Sharpe, and `WalkForwardEvaluator` (5-fold validation). Replaces 11 hardcoded strategies with exhaustive grid search, selects by mean Sharpe ratio across folds. All three `03_strategy` notebooks (LR, RF, XGB) rewritten to use shared engine.
 
 ### Refactored
