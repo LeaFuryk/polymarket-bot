@@ -8,6 +8,7 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added
+- **DNN startup wiring** — Conditional DNN model runner in `polybot/__main__.py`. Try/except import guard for `DnnPredictor` (skips silently when torch unavailable). When model files exist on disk, creates `DnnPredictor` with own `PortfolioService` + `TradingStrategy` and appends to runners list. Logs active models at startup.
 - **Optional `dnn` dependency group** — `torch>=2.0,<3.0` as optional extra for DNN model inference. Install with `uv pip install -e ".[dnn]"` (CPU-only: add `--extra-index-url https://download.pytorch.org/whl/cpu`). DNN path is silently skipped when torch is unavailable.
 - **`DnnPredictor` adapter** — PyTorch-based `Predictor` implementation for raw market data (11 columns, no pre-computed indicators). Supports single-snapshot and temporal (buffered) inference modes. Sets `OMP_NUM_THREADS=1` to avoid libomp conflict with XGBoost.
 - **DNN architecture R&D notebook** (`notebooks/dnn/01_architecture.ipynb`) — Compares Residual MLP, Temporal Conv1D, and Snapshot Attention architectures on accuracy, Brier score, F1, training time, and inference latency. Residual MLP selected as winner (single-snapshot, best Brier 0.184).
