@@ -13,6 +13,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 
+from polybot.adapters.dnn_models import ResidualBlock, ResidualMLP  # noqa: F401 — needed for torch.load unpickling
 from polybot.ports.predictor import Predictor
 
 # Default number of snapshots per candle (~50 ticks in 5 min).
