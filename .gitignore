@@ -26,6 +26,9 @@ legacy/
 data/
 models/ 
 
+.next/
+.coverage
+
 .DS_Store
 *.swp
 *.swo
