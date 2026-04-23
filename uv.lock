@@ -2400,6 +2400,9 @@ dev = [
     { name = "types-pyyaml" },
     { name = "xgboost" },
 ]
+dnn = [
+    { name = "torch" },
+]
 server = [
     { name = "fastapi" },
     { name = "uvicorn", extra = ["standard"] },
@@ -2431,13 +2434,14 @@ requires-dist = [
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.9.0" },
     { name = "scikit-learn", marker = "extra == 'dev'", specifier = ">=1.8.0" },
     { name = "torch", marker = "extra == 'dev'", specifier = ">=2.11.0" },
+    { name = "torch", marker = "extra == 'dnn'", specifier = ">=2.0,<3.0" },
     { name = "tqdm", marker = "extra == 'dev'", specifier = ">=4.67.3" },
     { name = "types-pyyaml", marker = "extra == 'dev'", specifier = ">=6.0" },
     { name = "uvicorn", extras = ["standard"], marker = "extra == 'server'", specifier = ">=0.32.0" },
     { name = "websockets", specifier = ">=13.0" },
     { name = "xgboost", marker = "extra == 'dev'", specifier = ">=3.2.0" },
 ]
-provides-extras = ["dev", "server"]
+provides-extras = ["dev", "dnn", "server"]
 
 [[package]]
 name = "pre-commit"
