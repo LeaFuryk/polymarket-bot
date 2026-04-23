@@ -1,9 +1,10 @@
-"""Bot entry point — runs LR, RF, XGBoost in parallel on collector WS stream."""
+"""Bot entry point — runs LR, RF, XGBoost (+ optional DNN) in parallel on collector WS stream."""
 
 import asyncio
 import logging
 import os
 from dataclasses import asdict
+from pathlib import Path
 
 from polybot.adapters.collector_client import CollectorClient
 from polybot.adapters.joblib_predictor import JoblibPredictor
@@ -16,6 +17,13 @@ from polybot.services.indicator_service import IndicatorService
 from polybot.services.model_runner import ModelRunner
 from polybot.services.portfolio_service import PortfolioService
 from polybot.ws import Broadcaster, PolybotServer
+
+try:
+    from polybot.adapters.dnn_predictor import DnnPredictor
+
+    _HAS_DNN = True
+except ImportError:
+    _HAS_DNN = False
 
 DB_PATH = os.environ.get("POLYBOT_DB_PATH", "data/collection.db")
 SESSION_PATH = os.environ.get("POLYBOT_SESSION_PATH", "data/sessions.jsonl")
@@ -47,6 +55,16 @@ MODEL_CONFIGS = [
         "bets_dir": "data/bets/XGBoost",
     },
 ]
+
+DNN_CONFIG = {
+    "name": "DNN",
+    "model_path": "models/dnn_v1.pt",
+    "scaler_path": "models/dnn_scaler_v1.joblib",
+    "features_path": "models/dnn_feature_cols_v1.joblib",
+    "strategy_path": "data/optimal_strategy_dnn.json",
+    "bets_dir": "data/bets/DNN",
+    "temporal": False,
+}
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 log = logging.getLogger("polybot")
@@ -87,6 +105,43 @@ async def main() -> None:
             strategy.entry_points,
             strategy.min_confidence,
         )
+
+    # --- Optional DNN runner ---
+    if _HAS_DNN and Path(DNN_CONFIG["model_path"]).exists():
+        dnn_predictor = DnnPredictor(
+            model_path=DNN_CONFIG["model_path"],
+            scaler_path=DNN_CONFIG["scaler_path"],
+            feature_cols_path=DNN_CONFIG["features_path"],
+            temporal=DNN_CONFIG["temporal"],
+        )
+        dnn_portfolio = PortfolioService(initial_cash=INITIAL_CASH)
+        dnn_strategy = TradingStrategy.from_json(DNN_CONFIG["strategy_path"], name=DNN_CONFIG["name"])
+        dnn_bet_store = JsonlBetStore(directory=DNN_CONFIG["bets_dir"])
+
+        dnn_runner = ModelRunner(
+            name=DNN_CONFIG["name"],
+            predictor=dnn_predictor,
+            portfolio=dnn_portfolio,
+            strategy=dnn_strategy,
+            bet_store=dnn_bet_store,
+            broadcaster=broadcaster,
+        )
+        runners.append(dnn_runner)
+        log.info(
+            "🤖 %s: %d features (temporal=%s), strategy=%s, conf>%.1f",
+            DNN_CONFIG["name"],
+            len(dnn_predictor._feature_cols),
+            DNN_CONFIG["temporal"],
+            dnn_strategy.entry_points,
+            dnn_strategy.min_confidence,
+        )
+    elif not _HAS_DNN:
+        log.info("⏭️  DNN model skipped — torch not installed")
+    else:
+        log.info("⏭️  DNN model skipped — %s not found", DNN_CONFIG["model_path"])
+
+    active_names = [r.name for r in runners]
+    log.info("🚀 Active models: %s", ", ".join(active_names))
 
     agent = AgentService(indicators=indicators, runners=runners)
 
