@@ -1,7 +1,6 @@
 """Tests for portfolio domain models."""
 
 import pytest
-
 from polybot.domain.portfolio import PortfolioState, Position
 
 

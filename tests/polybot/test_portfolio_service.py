@@ -1,7 +1,6 @@
 """Tests for PortfolioService."""
 
 import pytest
-
 from polybot.services.portfolio_service import TAKER_FEE_RATE, PortfolioService
 
 

@@ -1,47 +1,18 @@
 "use client";
 
-import { Sidebar } from "./Sidebar";
 import { Header } from "./Header";
 import { useWebSocket } from "@/hooks/useWebSocket";
-import { useFallbackData } from "@/hooks/useFallbackData";
-import { createContext, useContext } from "react";
-import type { WSData } from "@/hooks/useWebSocket";
-import type { SnapshotData } from "@/lib/types";
-
-// Context to share WS data across pages
-const WSContext = createContext<WSData | null>(null);
-
-export function useWSContext(): WSData {
-  const ctx = useContext(WSContext);
-  if (!ctx) throw new Error("useWSContext must be used within AppShell");
-  return ctx;
-}
+import { DashboardContext } from "@/context/DashboardContext";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
-  const ws = useWebSocket();
-
-  // Fallback: fetch dashboard_data.json when WS is offline
-  const isOffline = ws.state === "disconnected";
-  const fallback = useFallbackData(isOffline && !ws.snapshot);
-
-  // Merge fallback data into snapshot if WS hasn't sent one yet
-  const effectiveWs: WSData = {
-    ...ws,
-    snapshot: ws.snapshot ?? fallback.data,
-  };
+  const data = useWebSocket();
 
   return (
-    <WSContext.Provider value={effectiveWs}>
-      <div className="flex h-screen overflow-hidden">
-        <Sidebar />
-        <div className="flex min-w-0 flex-1 flex-col">
-          <Header
-            wsState={ws.state}
-            botVersion={effectiveWs.snapshot?.bot_version}
-          />
-          <main className="flex-1 overflow-y-auto p-4 lg:p-6">{children}</main>
-        </div>
+    <DashboardContext.Provider value={data}>
+      <div className="flex h-screen flex-col overflow-hidden bg-[#080a0e]">
+        <Header wsState={data.wsState} />
+        <main className="flex-1 overflow-y-auto p-4 lg:p-6">{children}</main>
       </div>
-    </WSContext.Provider>
+    </DashboardContext.Provider>
   );
 }

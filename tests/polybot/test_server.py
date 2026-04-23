@@ -4,7 +4,6 @@ import asyncio
 import json
 
 import websockets
-
 from polybot.ws.broadcaster import Broadcaster
 from polybot.ws.server import PolybotServer
 

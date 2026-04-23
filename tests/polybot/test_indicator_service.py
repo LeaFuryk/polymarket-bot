@@ -2,10 +2,9 @@
 
 from unittest.mock import AsyncMock
 
+from polybot.services.indicator_service import IndicatorService
 from polybot_data.domain.collection import CandleRecord
 from polybot_data.services.indicator_engine import IndicatorSnapshot
-
-from polybot.services.indicator_service import IndicatorService
 
 MINIMUM_CANDLES = 21
 

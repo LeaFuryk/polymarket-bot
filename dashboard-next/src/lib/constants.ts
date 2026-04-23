@@ -16,10 +16,19 @@ export const THEME = {
   },
 } as const;
 
-export const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8765";
+export const MODEL_COLORS: Record<string, string> = {
+  LogisticRegression: "#3498db",
+  RandomForest: "#e74c3c",
+  XGBoost: "#e67e22",
+};
 
-export const FORENSICS_API_URL =
-  process.env.NEXT_PUBLIC_FORENSICS_API_URL || "http://localhost:8888/api";
+export const MODEL_SHORT: Record<string, string> = {
+  LogisticRegression: "LR",
+  RandomForest: "RF",
+  XGBoost: "XGB",
+};
+
+export const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8766";
 
 export const RECONNECT_INTERVALS = {
   initial: 1000,
