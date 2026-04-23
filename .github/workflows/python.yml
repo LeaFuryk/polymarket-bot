@@ -9,6 +9,7 @@ on:
       - "collector/**"
       - "tests/**"
       - "pyproject.toml"
+      - ".github/workflows/python.yml"
   pull_request:
     branches: [main]
     paths:
@@ -17,6 +18,7 @@ on:
       - "collector/**"
       - "tests/**"
       - "pyproject.toml"
+      - ".github/workflows/python.yml"
 
 jobs:
   lint:
