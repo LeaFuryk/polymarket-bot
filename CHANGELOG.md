@@ -7,6 +7,9 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+- **Strategy selection pipeline** — Shared `notebooks/strategy_engine.py` module with `StrategyConfig`, `StrategyGrid` (~3,800 parametric combinations), `run_scaling()` with per-candle PnL and Sharpe, and `WalkForwardEvaluator` (5-fold validation). Replaces 11 hardcoded strategies with exhaustive grid search, selects by mean Sharpe ratio across folds. All three `03_strategy` notebooks (LR, RF, XGB) rewritten to use shared engine.
+
 ### Refactored
 - **`agent/helpers`** — Decomposed `load_startup_data` into `StartupLoader` class (`startup_loader.py`) with focused private methods per data source. Extracted `enrich_iteration_summary` into `IterationSummaryEnricher` class (`iteration_enricher.py`) with per-section methods and `_extract` helper. Extracted generic `read_json`/`read_jsonl` into `polybot/utils.py`. Renamed `core.py` → `trading_agent.py`.
 - **`agent/context`** — Made `ws_broadcaster` and `market_history` required fields (always created by factory), removed unnecessary None guards across 7 files.

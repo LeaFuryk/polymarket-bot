@@ -26,6 +26,10 @@ legacy/
 data/
 models/ 
 
+.next/
+.coverage
+docs/superpowers/
+
 .DS_Store
 *.swp
 *.swo
