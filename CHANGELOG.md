@@ -14,6 +14,7 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **`DnnPredictor` unit tests** (`tests/polybot/test_dnn_predictor.py`) — 17 tests covering single-snapshot mode, temporal buffering (accumulation, candle-reset, padding, truncation), optional scaler integration, missing/None column defaults, and `Predictor` protocol conformance.
 - **DNN architecture R&D notebook** (`notebooks/dnn/01_architecture.ipynb`) — Compares Residual MLP, Temporal Conv1D, and Snapshot Attention architectures on accuracy, Brier score, F1, training time, and inference latency. Residual MLP selected as winner (single-snapshot, best Brier 0.184).
 - **DNN export notebook + model artifacts** (`notebooks/dnn/02_export.ipynb`) — Trains Residual MLP on mid-candle data (elapsed <= 0.50) to avoid data leakage. Exports `dnn_v1.pt`, scaler, feature cols, and `optimal_features_dnn.json`. Metrics: 72.6% accuracy, Brier 0.184.
+- **DNN strategy optimization notebook** (`notebooks/dnn/03_strategy.ipynb`) — Grid search (3,815 combinations) + 5-fold walk-forward evaluation via shared `strategy_engine`. Best strategy: 1x e40%c4 conf>0.70 (87% WR, Sharpe 0.036). Exports `optimal_strategy_dnn.json`.
 
 ### Fixed
 - **DNN notebook data leakage** — Both DNN notebooks were using end-of-candle snapshots, leaking outcome information into features (96% accuracy was unrealistic). Fixed by filtering to `elapsed_pct <= 0.50`, matching production inference timing. Architecture winner changed from Snapshot Attention (temporal) to Residual MLP (single-snapshot).
