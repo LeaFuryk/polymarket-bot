@@ -10,8 +10,11 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Added
 - **Optional `dnn` dependency group** — `torch>=2.0,<3.0` as optional extra for DNN model inference. Install with `uv pip install -e ".[dnn]"` (CPU-only: add `--extra-index-url https://download.pytorch.org/whl/cpu`). DNN path is silently skipped when torch is unavailable.
 - **`DnnPredictor` adapter** — PyTorch-based `Predictor` implementation for raw market data (11 columns, no pre-computed indicators). Supports single-snapshot and temporal (buffered) inference modes. Sets `OMP_NUM_THREADS=1` to avoid libomp conflict with XGBoost.
-- **DNN architecture R&D notebook** (`notebooks/dnn/01_architecture.ipynb`) — Compares Residual MLP, Temporal Conv1D, and Snapshot Attention architectures on accuracy, Brier score, F1, training time, and inference latency. Snapshot Attention selected as winner (temporal mode).
-- **DNN export notebook + model artifacts** (`notebooks/dnn/02_export.ipynb`) — Trains Snapshot Attention on full dataset (96.3% accuracy, Brier 0.025), exports `dnn_v1.pt`, scaler, feature cols, and `optimal_features_dnn.json`.
+- **DNN architecture R&D notebook** (`notebooks/dnn/01_architecture.ipynb`) — Compares Residual MLP, Temporal Conv1D, and Snapshot Attention architectures on accuracy, Brier score, F1, training time, and inference latency. Residual MLP selected as winner (single-snapshot, best Brier 0.184).
+- **DNN export notebook + model artifacts** (`notebooks/dnn/02_export.ipynb`) — Trains Residual MLP on mid-candle data (elapsed <= 0.50) to avoid data leakage. Exports `dnn_v1.pt`, scaler, feature cols, and `optimal_features_dnn.json`. Metrics: 72.6% accuracy, Brier 0.184.
+
+### Fixed
+- **DNN notebook data leakage** — Both DNN notebooks were using end-of-candle snapshots, leaking outcome information into features (96% accuracy was unrealistic). Fixed by filtering to `elapsed_pct <= 0.50`, matching production inference timing. Architecture winner changed from Snapshot Attention (temporal) to Residual MLP (single-snapshot).
 - **Strategy selection pipeline** — Shared `notebooks/strategy_engine.py` module with `StrategyConfig`, `StrategyGrid` (~3,800 parametric combinations), `run_scaling()` with per-candle PnL and Sharpe, and `WalkForwardEvaluator` (5-fold validation). Replaces 11 hardcoded strategies with exhaustive grid search, selects by mean Sharpe ratio across folds. All three `03_strategy` notebooks (LR, RF, XGB) rewritten to use shared engine.
 
 ### Refactored
