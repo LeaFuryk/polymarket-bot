@@ -27,8 +27,8 @@ class ModelRunner:
     """Owns one model's complete trading lifecycle.
 
     Signal-only: waits for BTC to move >= min_btc_move from candle open,
-    then evaluates model predictions against entry checkpoints and
-    confidence thresholds.
+    then evaluates edge (model confidence - ask price) against strategy
+    threshold.
     """
 
     def __init__(
@@ -53,10 +53,8 @@ class ModelRunner:
         self._equity_history: list[float] = [portfolio.state.cash]
 
         # Per-candle state
-        self._predictions: list[int] = []
         self._first_direction: str | None = None
         self._entries_made: int = 0
-        self._next_checkpoint: int = 0
         self._bet_entries: list[BetEntry] = []
         self._current_candle_id: str | None = None
         self._cash_before_bet: float = 0.0
@@ -115,45 +113,29 @@ class ModelRunner:
             await self._evaluate_signal_entry(snapshot, row)
 
     async def _evaluate_signal_entry(self, snapshot: IndicatorSnapshot, row: dict) -> None:
-        """Standard model-based entry with checkpoints and confidence."""
-        if self._next_checkpoint >= len(self._strategy.entry_points):
-            return
-
-        min_elapsed, n_consecutive = self._strategy.entry_points[self._next_checkpoint]
-
-        if snapshot.elapsed_pct < min_elapsed:
+        """Edge-based entry: place bet when model confidence exceeds ask price by min_edge."""
+        if self._entries_made >= self._strategy.max_entries:
             return
 
         t0 = _time.perf_counter()
         p_up = self._predictor.predict(row)
         inference_ms = (_time.perf_counter() - t0) * 1000
 
-        pred = 1 if p_up >= 0.5 else 0
-        self._predictions.append(pred)
-
-        if len(self._predictions) < n_consecutive:
-            return
-
-        recent = self._predictions[-n_consecutive:]
-        if not all(p == recent[0] for p in recent):
-            return
-
         confidence = max(p_up, 1.0 - p_up)
-        if confidence < self._strategy.min_confidence:
-            return
-
-        direction = "UP" if pred == 1 else "DOWN"
-
-        if self._first_direction is None:
-            self._first_direction = direction
-        elif direction != self._first_direction:
-            return
+        direction = "UP" if p_up >= 0.5 else "DOWN"
 
         if direction == "UP" and snapshot.up_asks:
             ask = snapshot.up_asks[0][0]
         elif direction == "DOWN" and snapshot.down_asks:
             ask = snapshot.down_asks[0][0]
         else:
+            return
+
+        edge = confidence - ask
+        if edge < self._strategy.min_edge:
+            return
+
+        if self._first_direction is not None and direction != self._first_direction:
             return
 
         if ask <= 0 or ask >= MAX_BID:
@@ -184,7 +166,6 @@ class ModelRunner:
 
         self._portfolio.buy(direction, amount_usd=bet_amount, price=ask)
         self._entries_made += 1
-        self._next_checkpoint += 1
 
         entry = BetEntry(
             price=ask,
@@ -295,10 +276,8 @@ class ModelRunner:
         self._portfolio.reverse_and_resettle(corrected.candle_id, corrected.outcome)
 
     def _reset_candle_state(self) -> None:
-        self._predictions = []
         self._first_direction = None
         self._entries_made = 0
-        self._next_checkpoint = 0
         self._bet_entries = []
         self._current_candle_id = None
         self._cash_before_bet = 0.0

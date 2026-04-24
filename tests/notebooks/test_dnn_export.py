@@ -107,8 +107,8 @@ class TestStrategyConfig:
     def test_strategy_json_has_required_fields(self):
         config = json.loads(STRATEGY_JSON_PATH.read_text())
         assert config["model"] == "dnn"
-        assert "entry_points" in config
-        assert "min_confidence" in config
+        assert "min_edge" in config
+        assert "max_entries" in config
         assert config["eval_method"] == "walk_forward_5_folds"
         assert config["n_folds"] == 5
 
@@ -117,5 +117,5 @@ class TestStrategyConfig:
 
         ts = TradingStrategy.from_json(str(STRATEGY_JSON_PATH), name="DNN")
         assert ts.name == "DNN"
-        assert len(ts.entry_points) >= 1
-        assert ts.min_confidence >= 0.0
+        assert ts.min_edge >= 0.0
+        assert ts.max_entries >= 1

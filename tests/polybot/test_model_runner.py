@@ -11,11 +11,11 @@ from polybot_data.domain.collection import CandleRecord
 from polybot_data.services.indicator_engine import IndicatorSnapshot
 
 
-def _make_strategy(entry_points=((0.05, 3),), min_confidence=0.0, min_btc_move=0.0):
+def _make_strategy(min_edge=0.0, max_entries=1, min_btc_move=0.0):
     return TradingStrategy(
         name="TestModel",
-        entry_points=tuple(entry_points),
-        min_confidence=min_confidence,
+        min_edge=min_edge,
+        max_entries=max_entries,
         min_btc_move=min_btc_move,
     )
 
@@ -57,20 +57,23 @@ def _make_runner(strategy=None, predictor=None):
 
 class TestHandleSnapshot:
     @pytest.mark.asyncio
-    async def test_no_entry_before_checkpoint_elapsed(self):
-        runner = _make_runner()
+    async def test_no_entry_before_btc_move(self):
+        """No entry when BTC hasn't moved enough from candle open."""
+        strategy = _make_strategy(min_btc_move=0.01)  # 1% move required
+        runner = _make_runner(strategy=strategy)
         row = {"feat1": 1.0}
-        snapshot = _make_snapshot(elapsed=0.01)  # before 5%
+        snapshot = _make_snapshot(elapsed=0.06)
         await runner.handle_snapshot(row, snapshot)
         assert runner._entries_made == 0
 
     @pytest.mark.asyncio
-    async def test_entry_after_3_consecutive_predictions(self):
+    async def test_entry_when_edge_exceeds_threshold(self):
+        """Entry placed on first snapshot when edge >= min_edge."""
+        # p_up=0.7, direction=UP, ask=0.60, edge=0.7-0.6=0.10 >= 0.0
         runner = _make_runner()
-        snap = _make_snapshot(elapsed=0.06)
+        snap = _make_snapshot(elapsed=0.06, up_ask=0.60)
         row = {"feat1": 1.0}
-        for _ in range(3):
-            await runner.handle_snapshot(row, snap)
+        await runner.handle_snapshot(row, snap)
         assert runner._entries_made == 1
 
     @pytest.mark.asyncio
@@ -78,8 +81,7 @@ class TestHandleSnapshot:
         runner = _make_runner()
         snap = _make_snapshot(elapsed=0.06)
         row = {"feat1": 1.0}
-        for _ in range(3):
-            await runner.handle_snapshot(row, snap)
+        await runner.handle_snapshot(row, snap)
         runner._broadcaster.broadcast_json.assert_awaited_once()
         msg = runner._broadcaster.broadcast_json.call_args[0][0]
         assert msg["type"] == "model_entry"
@@ -88,24 +90,48 @@ class TestHandleSnapshot:
         assert "inference_ms" in msg
 
     @pytest.mark.asyncio
-    async def test_min_confidence_filters_entry(self):
+    async def test_min_edge_filters_entry(self):
+        """No entry when edge < min_edge."""
         predictor = MagicMock()
-        predictor.predict.return_value = 0.52  # confidence = 0.52, below 0.6
-        strategy = _make_strategy(min_confidence=0.6)
+        predictor.predict.return_value = 0.52  # confidence=0.52, ask=0.60, edge=-0.08
+        strategy = _make_strategy(min_edge=0.05)
         runner = _make_runner(strategy=strategy, predictor=predictor)
+        snap = _make_snapshot(elapsed=0.06, up_ask=0.60)
+        row = {"feat1": 1.0}
+        await runner.handle_snapshot(row, snap)
+        assert runner._entries_made == 0
+
+    @pytest.mark.asyncio
+    async def test_max_entries_caps_entries(self):
+        """No more than max_entries bets per candle."""
+        strategy = _make_strategy(max_entries=2)
+        runner = _make_runner(strategy=strategy)
         snap = _make_snapshot(elapsed=0.06)
         row = {"feat1": 1.0}
-        for _ in range(10):
+        for _ in range(5):
             await runner.handle_snapshot(row, snap)
-        assert runner._entries_made == 0
+        assert runner._entries_made == 2
+
+    @pytest.mark.asyncio
+    async def test_direction_lock_prevents_opposite_entry(self):
+        """After first UP entry, DOWN prediction is skipped."""
+        predictor = MagicMock()
+        predictor.predict.side_effect = [0.7, 0.3]  # UP then DOWN
+        runner = _make_runner(predictor=predictor)
+        snap = _make_snapshot(elapsed=0.06, up_ask=0.60, down_ask=0.40)
+        row = {"feat1": 1.0}
+        await runner.handle_snapshot(row, snap)
+        assert runner._entries_made == 1
+        assert runner._first_direction == "UP"
+        await runner.handle_snapshot(row, snap)
+        assert runner._entries_made == 1  # no second entry (direction locked)
 
     @pytest.mark.asyncio
     async def test_max_bid_filters_entry(self):
         runner = _make_runner()
         snap = _make_snapshot(elapsed=0.06, up_ask=0.90)  # above MAX_BID
         row = {"feat1": 1.0}
-        for _ in range(3):
-            await runner.handle_snapshot(row, snap)
+        await runner.handle_snapshot(row, snap)
         assert runner._entries_made == 0
 
 
@@ -115,8 +141,7 @@ class TestHandleCandleClose:
         runner = _make_runner()
         snap = _make_snapshot(elapsed=0.06)
         row = {"feat1": 1.0}
-        for _ in range(3):
-            await runner.handle_snapshot(row, snap)
+        await runner.handle_snapshot(row, snap)
         assert runner._entries_made == 1
 
         candle = CandleRecord(
@@ -149,8 +174,7 @@ class TestHandleCandleClose:
         runner = _make_runner()
         snap = _make_snapshot(elapsed=0.06)
         row = {"feat1": 1.0}
-        for _ in range(3):
-            await runner.handle_snapshot(row, snap)
+        await runner.handle_snapshot(row, snap)
 
         candle = CandleRecord(
             candle_id="c1",
@@ -167,7 +191,6 @@ class TestHandleCandleClose:
         await runner.handle_candle_close(candle)
 
         assert runner._entries_made == 0
-        assert runner._predictions == []
         assert runner._first_direction is None
 
     @pytest.mark.asyncio

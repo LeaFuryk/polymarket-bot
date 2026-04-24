@@ -49,11 +49,11 @@ def dnn_predictor(dnn_model: tuple[str, str]) -> DnnPredictor:
 
 @pytest.fixture()
 def strategy() -> TradingStrategy:
-    """Strategy with a single entry at 5% elapsed, 1 consecutive, no min confidence."""
+    """Edge-based strategy: min_edge=0.0 means any positive confidence enters."""
     return TradingStrategy(
         name="DNN",
-        entry_points=((0.05, 1),),
-        min_confidence=0.0,
+        min_edge=0.0,
+        max_entries=1,
         min_btc_move=0.0,
     )
 
