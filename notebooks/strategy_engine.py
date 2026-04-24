@@ -1,7 +1,7 @@
 """Shared strategy engine for notebook strategy selection pipelines.
 
 Provides:
-- StrategyConfig: dataclass describing a scaling-in strategy
+- StrategyConfig: dataclass describing an edge-based trading strategy
 - StrategyGrid: generates all valid combinations from parameter ranges
 - run_scaling: back-tests a StrategyConfig on candle data
 - WalkForwardEvaluator: walk-forward cross-validation across strategy grid
@@ -23,27 +23,24 @@ import pandas as pd
 
 @dataclass
 class StrategyConfig:
-    """A scaling-in trading strategy configuration.
+    """An edge-based trading strategy configuration.
+
+    Edge = max(prob, 1-prob) - ask_price.  When edge >= min_edge the model
+    identifies the outcome more confidently than the market price implies.
 
     Args:
-        entry_points: List of (min_elapsed_pct, n_consecutive) tuples.
-            Each entry point triggers when the model predicts consistently
-            for n_consecutive ticks at or after min_elapsed_pct of candle time.
-        min_confidence: Minimum prediction probability required to enter.
-        name: Display name. Auto-generated from entry_points if empty.
+        min_edge: Minimum edge (confidence minus ask) required to enter.
+        max_entries: Maximum number of scale-in entries per candle.
+        name: Display name. Auto-generated from parameters if empty.
     """
 
-    entry_points: list[tuple[float, int]]
-    min_confidence: float = 0.0
+    min_edge: float
+    max_entries: int = 1
     name: str = ""
 
     def __post_init__(self) -> None:
         if not self.name:
-            parts = [f"e{e:.0%}c{n}" for e, n in self.entry_points]
-            prefix = f"{len(self.entry_points)}x"
-            self.name = f"{prefix} {'+'.join(parts)}"
-            if self.min_confidence > 0:
-                self.name += f" conf>{self.min_confidence:.2f}"
+            self.name = f"edge>={self.min_edge:.2f} x{self.max_entries}"
 
 
 # ---------------------------------------------------------------------------
@@ -55,64 +52,30 @@ class StrategyGrid:
     """Generate all valid StrategyConfig combinations from parameter ranges.
 
     Args:
-        elapsed_values: Candidate elapsed-pct thresholds for entries.
-            Defaults to [0.05, 0.10, ..., 0.80] (16 values).
-        n_consecutive_values: Candidate consecutive-tick counts.
-            Defaults to [1, 2, 3, 4, 5].
-        confidence_values: Candidate min_confidence thresholds.
-            Defaults to [0.0, 0.50, 0.55, 0.60, 0.65, 0.70, 0.75].
-        max_entries: Maximum number of scale-in entries (1 or 2).
-        min_elapsed_gap: Minimum gap between two entry elapsed values.
-        max_elapsed: Maximum allowed elapsed value for any entry.
+        edge_values: Candidate min_edge thresholds.
+            Defaults to [0.0, 0.02, 0.05, 0.08, 0.10, 0.15, 0.20].
+        max_entries_values: Candidate max_entries counts.
+            Defaults to [1, 2].
     """
 
     def __init__(
         self,
-        elapsed_values: list[float] | None = None,
-        n_consecutive_values: list[int] | None = None,
-        confidence_values: list[float] | None = None,
-        max_entries: int = 2,
-        min_elapsed_gap: float = 0.10,
-        max_elapsed: float = 0.80,
+        edge_values: list[float] | None = None,
+        max_entries_values: list[int] | None = None,
     ) -> None:
-        if elapsed_values is None:
-            elapsed_values = [round(v, 2) for v in np.arange(0.05, 0.85, 0.05)]
-        if n_consecutive_values is None:
-            n_consecutive_values = [1, 2, 3, 4, 5]
-        if confidence_values is None:
-            confidence_values = [0.0, 0.50, 0.55, 0.60, 0.65, 0.70, 0.75]
+        if edge_values is None:
+            edge_values = [0.0, 0.02, 0.05, 0.08, 0.10, 0.15, 0.20]
+        if max_entries_values is None:
+            max_entries_values = [1, 2]
 
-        self.elapsed_values = elapsed_values
-        self.n_consecutive_values = n_consecutive_values
-        self.confidence_values = confidence_values
-        self.max_entries = max_entries
-        self.min_elapsed_gap = min_elapsed_gap
-        self.max_elapsed = max_elapsed
+        self.edge_values = edge_values
+        self.max_entries_values = max_entries_values
 
     def generate(self) -> list[StrategyConfig]:
-        """Return all valid StrategyConfig combinations.
-
-        For two-entry strategies, n_consecutive is shared across both entry
-        points (one value applied uniformly), keeping the grid size manageable.
-        """
+        """Return all valid StrategyConfig combinations (product of edge x max_entries)."""
         configs: list[StrategyConfig] = []
-        valid_elapsed = [e for e in self.elapsed_values if e <= self.max_elapsed + 1e-9]
-
-        # Single-entry strategies: vary elapsed, n_consecutive, and confidence independently
-        for e1, n1, conf in itertools.product(valid_elapsed, self.n_consecutive_values, self.confidence_values):
-            configs.append(StrategyConfig(entry_points=[(e1, n1)], min_confidence=conf))
-
-        # Two-entry strategies: vary elapsed pairs, shared n_consecutive, and confidence
-        if self.max_entries >= 2:
-            for e1, e2, n_c, conf in itertools.product(
-                valid_elapsed,
-                valid_elapsed,
-                self.n_consecutive_values,
-                self.confidence_values,
-            ):
-                if e2 > e1 + self.min_elapsed_gap:
-                    configs.append(StrategyConfig(entry_points=[(e1, n_c), (e2, n_c)], min_confidence=conf))
-
+        for edge, max_ent in itertools.product(self.edge_values, self.max_entries_values):
+            configs.append(StrategyConfig(min_edge=edge, max_entries=max_ent))
         return configs
 
 
@@ -134,6 +97,17 @@ def run_scaling(
         candle_id (str), truth (int: 1=UP/0=DOWN),
         snapshots (list of dicts with tick, elapsed_pct, pred, prob, up_ask, down_ask)
 
+    For each snapshot the engine computes:
+        confidence = max(prob, 1-prob)
+        direction  = 1 if prob >= 0.5 else 0
+        ask        = up_ask if direction==1 else down_ask
+        edge       = confidence - ask
+
+    An entry fires when:
+        - edge >= strategy.min_edge
+        - entries_made < strategy.max_entries
+        - direction agrees with the first entry (direction lock)
+
     Returns a dict with:
         balance, wins, total_bets, win_rate, max_drawdown, candles_entered,
         history (list of balance checkpoints), per_candle_pnl (one float per candle),
@@ -149,81 +123,67 @@ def run_scaling(
     per_candle_pnl: list[float] = []
     max_drawdown = 0.0
 
-    entry_points = strategy.entry_points  # [(elapsed, n_consec), ...]
-
     for candle in candle_data:
         truth: int = candle["truth"]
         snapshots: list[dict] = candle["snapshots"]
         candle_pnl = 0.0
         first_direction: int | None = None  # direction locked on first entry
-        triggered = [False] * len(entry_points)
+        entries_made = 0
 
-        for i, snap in enumerate(snapshots):
-            elapsed: float = snap["elapsed_pct"]
+        for snap in snapshots:
+            prob: float = snap["prob"]
+            up_ask: float = snap["up_ask"]
+            down_ask: float = snap["down_ask"]
 
-            for idx, (min_elapsed, n_consecutive) in enumerate(entry_points):
-                if triggered[idx]:
-                    continue
+            confidence = max(prob, 1.0 - prob)
+            direction = 1 if prob >= 0.5 else 0
+            ask = up_ask if direction == 1 else down_ask
+            edge = confidence - ask
 
-                # Must have reached the elapsed threshold
-                if elapsed < min_elapsed - 1e-9:
-                    continue
+            # Edge threshold
+            if edge < strategy.min_edge - 1e-9:
+                continue
 
-                # Need at least n_consecutive ticks available (look back)
-                if i < n_consecutive - 1:
-                    continue
+            # Max entries cap
+            if entries_made >= strategy.max_entries:
+                continue
 
-                # Check last n_consecutive ticks all predict the same direction
-                recent = snapshots[i - n_consecutive + 1 : i + 1]
-                preds = [s["pred"] for s in recent]
-                if len(set(preds)) != 1:
-                    continue  # not all the same direction
+            # Direction consistency: must agree with first entry direction
+            if first_direction is not None and direction != first_direction:
+                continue
 
-                pred: int = preds[-1]
-                up_ask: float = snap["up_ask"]
-                down_ask: float = snap["down_ask"]
+            # Ask price filter
+            if ask is None or not np.isfinite(ask) or ask <= 0 or ask >= max_bid:
+                continue
 
-                # Confidence filter (check all recent ticks)
-                if any(max(s["prob"], 1.0 - s["prob"]) < strategy.min_confidence for s in recent):
-                    continue
+            # Bankroll floor guard
+            if balance < bet_per_entry:
+                continue
 
-                # Direction consistency: must agree with first entry direction
-                if first_direction is not None and pred != first_direction:
-                    continue
+            # Fire entry
+            entries_made += 1
+            total_bets += 1
+            if first_direction is None:
+                first_direction = direction
 
-                # Ask price filter
-                ask = up_ask if pred == 1 else down_ask
-                if ask is None or not np.isfinite(ask) or ask <= 0 or ask >= max_bid:
-                    continue
+            # Settle bet
+            if direction == truth:
+                profit = bet_per_entry * (1.0 / ask - 1.0)
+                balance += profit
+                candle_pnl += profit
+                wins += 1
+            else:
+                balance -= bet_per_entry
+                candle_pnl -= bet_per_entry
 
-                # Bankroll floor guard
-                if balance < bet_per_entry:
-                    continue
+            # Update drawdown incrementally
+            if balance > peak:
+                peak = balance
+            dd = (peak - balance) / peak if peak > 0 else 0.0
+            if dd > max_drawdown:
+                max_drawdown = dd
 
-                # Fire entry
-                triggered[idx] = True
-                total_bets += 1
-                if first_direction is None:
-                    first_direction = pred
-
-                # Settle bet
-                if pred == truth:
-                    profit = bet_per_entry * (1.0 / ask - 1.0)
-                    balance += profit
-                    candle_pnl += profit
-                    wins += 1
-                else:
-                    balance -= bet_per_entry
-                    candle_pnl -= bet_per_entry
-
-                # Update drawdown incrementally
-                if balance > peak:
-                    peak = balance
-                dd = (peak - balance) / peak if peak > 0 else 0.0
-                if dd > max_drawdown:
-                    max_drawdown = dd
-
-        if any(triggered):
+        if entries_made > 0:
             candles_entered += 1
 
         per_candle_pnl.append(candle_pnl)
