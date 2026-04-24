@@ -60,6 +60,7 @@ DNN_CONFIG = {
     "name": "DNN",
     "model_path": "models/dnn_v1.pt",
     "scaler_path": "models/dnn_scaler_v1.joblib",
+    "calibrator_path": "models/dnn_calibrator_v1.joblib",
     "features_path": "models/dnn_feature_cols_v1.joblib",
     "strategy_path": "data/optimal_strategy_dnn.json",
     "bets_dir": "data/bets/DNN",
@@ -108,9 +109,11 @@ async def main() -> None:
 
     # --- Optional DNN runner ---
     if _HAS_DNN and Path(DNN_CONFIG["model_path"]).exists():
+        _cal_path = DNN_CONFIG["calibrator_path"]
         dnn_predictor = DnnPredictor(
             model_path=DNN_CONFIG["model_path"],
             scaler_path=DNN_CONFIG["scaler_path"],
+            calibrator_path=_cal_path if Path(_cal_path).exists() else None,
             feature_cols_path=DNN_CONFIG["features_path"],
             temporal=DNN_CONFIG["temporal"],
         )

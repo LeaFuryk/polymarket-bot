@@ -38,6 +38,7 @@ class DnnPredictor(Predictor):
         model_path: str,
         feature_cols_path: str,
         scaler_path: str | None = None,
+        calibrator_path: str | None = None,
         temporal: bool = False,
         seq_len: int = _DEFAULT_SEQ_LEN,
         logger: logging.Logger | None = None,
@@ -45,6 +46,7 @@ class DnnPredictor(Predictor):
         self._log = logger or logging.getLogger(__name__)
         self._feature_cols: list[str] = joblib.load(feature_cols_path)
         self._scaler = joblib.load(scaler_path) if scaler_path else None
+        self._calibrator = joblib.load(calibrator_path) if calibrator_path else None
         self._temporal = temporal
         self._seq_len = seq_len
 
@@ -81,11 +83,17 @@ class DnnPredictor(Predictor):
     # Internal
     # ------------------------------------------------------------------
 
+    def _calibrate(self, raw_prob: float) -> float:
+        if self._calibrator is None:
+            return raw_prob
+        return float(self._calibrator.predict([raw_prob])[0])
+
     def _predict_single(self, features: list[float]) -> float:
         tensor = torch.tensor([features], dtype=torch.float32)
         with torch.no_grad():
             logit = self._model(tensor)
-        return float(torch.sigmoid(logit).item())
+        raw = float(torch.sigmoid(logit).item())
+        return self._calibrate(raw)
 
     def _predict_temporal(self, features: list[float], candle_id: str | None) -> float:
         # Reset buffer on candle boundary.
@@ -103,4 +111,5 @@ class DnnPredictor(Predictor):
         tensor = torch.tensor([buf], dtype=torch.float32)  # (1, seq_len, n_features)
         with torch.no_grad():
             logit = self._model(tensor)
-        return float(torch.sigmoid(logit).item())
+        raw = float(torch.sigmoid(logit).item())
+        return self._calibrate(raw)
