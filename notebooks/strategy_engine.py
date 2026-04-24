@@ -138,6 +138,11 @@ def run_scaling(
             confidence = max(prob, 1.0 - prob)
             direction = 1 if prob >= 0.5 else 0
             ask = up_ask if direction == 1 else down_ask
+
+            # Ask price filter (before edge computation to avoid None arithmetic)
+            if ask is None or not np.isfinite(ask) or ask <= 0 or ask >= max_bid:
+                continue
+
             edge = confidence - ask
 
             # Edge threshold
@@ -150,10 +155,6 @@ def run_scaling(
 
             # Direction consistency: must agree with first entry direction
             if first_direction is not None and direction != first_direction:
-                continue
-
-            # Ask price filter
-            if ask is None or not np.isfinite(ask) or ask <= 0 or ask >= max_bid:
                 continue
 
             # Bankroll floor guard
