@@ -11,13 +11,12 @@ from polybot_data.domain.collection import CandleRecord
 from polybot_data.services.indicator_engine import IndicatorSnapshot
 
 
-def _make_strategy(entry_points=((0.05, 3),), min_confidence=0.0, min_btc_move=0.0, noise_entry_elapsed=0.30):
+def _make_strategy(entry_points=((0.05, 3),), min_confidence=0.0, min_btc_move=0.0):
     return TradingStrategy(
         name="TestModel",
         entry_points=tuple(entry_points),
         min_confidence=min_confidence,
         min_btc_move=min_btc_move,
-        noise_entry_elapsed=noise_entry_elapsed,
     )
 
 

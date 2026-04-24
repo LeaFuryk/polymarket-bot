@@ -20,6 +20,9 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **DNN export validation tests** (`tests/notebooks/test_dnn_export.py`) — 8 tests validating exported model artifacts: model loads and produces output, scaler loads, feature cols match expected 11, DnnPredictor loads artifacts, feature/strategy JSON have required fields, TradingStrategy.from_json() succeeds.
 - **DNN model architecture module** (`polybot/adapters/dnn_models.py`) — Shared ResidualMLP definition importable by both DnnPredictor and notebooks, fixing torch.load unpickling of `__main__`-scoped classes.
 
+### Removed
+- **Noise entry strategy** — Removed cheap-side coin-flip betting from all models. The noise mode (bet the cheaper side when BTC hasn't moved enough at 30% elapsed) lost $720 across 2,267 bets (41% WR). Models now only enter on signal (actual model predictions). Removed `noise_entry_elapsed` from `TradingStrategy`, `_evaluate_noise_entry` from `ModelRunner`.
+
 ### Fixed
 - **DNN probability calibration** — Raw sigmoid output was biased (~0.77 UP always), causing signal entries to buy $0.01 UP tokens at 99% elapsed (4% WR). Added isotonic calibration (`IsotonicRegression`) fitted on validation predictions. Calibrator exported as `models/dnn_calibrator_v1.joblib`, loaded by `DnnPredictor` via new `calibrator_path` parameter. Brier improved from 0.1815 to 0.1762.
 - **DNN model pickling** — Model was exported with class reference `__main__.ResidualMLP` (from notebook), making it unloadable outside the notebook. Fixed by defining architectures in `polybot/adapters/dnn_models.py` and importing from there in the export notebook. DnnPredictor imports the module before `torch.load()` to ensure classes are in scope.
