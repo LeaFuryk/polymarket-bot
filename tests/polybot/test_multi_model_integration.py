@@ -26,8 +26,7 @@ async def test_three_runners_independent_portfolios():
             name=name,
             entry_points=((0.05, 1),),  # 1 consecutive for simplicity
             min_confidence=0.0,
-            min_btc_move=0.0,  # disable dual-mode for this test
-            noise_entry_elapsed=1.0,
+            min_btc_move=0.0,
         )
         runner = ModelRunner(
             name=name,

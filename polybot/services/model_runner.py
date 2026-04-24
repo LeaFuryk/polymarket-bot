@@ -1,9 +1,4 @@
-"""Service: per-model trading lifecycle — predict, enter, settle, broadcast.
-
-Dual-mode strategy:
-- Signal mode: BTC moved >= min_btc_move from open → use model prediction
-- Noise mode: BTC hasn't moved enough → bet the cheap side (R/R on coin flips)
-"""
+"""Service: per-model trading lifecycle — predict, enter, settle, broadcast."""
 
 from __future__ import annotations
 
@@ -31,12 +26,9 @@ BET_PCT = 0.02
 class ModelRunner:
     """Owns one model's complete trading lifecycle.
 
-    Dual-mode strategy:
-    - When BTC has moved >= min_btc_move from candle open, use model prediction
-      with the configured entry checkpoints and confidence thresholds.
-    - When BTC hasn't moved enough (noise candle), bet the cheaper side at
-      noise_entry_elapsed. On coin-flip candles, the cheap side has positive
-      expected value due to payoff asymmetry.
+    Signal-only: waits for BTC to move >= min_btc_move from candle open,
+    then evaluates model predictions against entry checkpoints and
+    confidence thresholds.
     """
 
     def __init__(
@@ -69,8 +61,7 @@ class ModelRunner:
         self._current_candle_id: str | None = None
         self._cash_before_bet: float = 0.0
         self._candle_open: float | None = None
-        self._mode: str = "waiting"  # "waiting" | "signal" | "noise"
-        self._noise_entered: bool = False
+        self._signal_active: bool = False
 
     @property
     def name(self) -> str:
@@ -114,19 +105,14 @@ class ModelRunner:
         if self._candle_open is None:
             self._candle_open = snapshot.btc_price
 
-        # Determine mode based on BTC move from open
-        btc_move = abs(snapshot.btc_price - self._candle_open) / self._candle_open if self._candle_open > 0 else 0
-
-        if self._mode == "waiting":
+        # Activate signal mode once BTC has moved enough from candle open
+        if not self._signal_active:
+            btc_move = abs(snapshot.btc_price - self._candle_open) / self._candle_open if self._candle_open > 0 else 0
             if btc_move >= self._strategy.min_btc_move:
-                self._mode = "signal"
-            elif snapshot.elapsed_pct >= self._strategy.noise_entry_elapsed:
-                self._mode = "noise"
+                self._signal_active = True
 
-        if self._mode == "signal":
+        if self._signal_active:
             await self._evaluate_signal_entry(snapshot, row)
-        elif self._mode == "noise" and not self._noise_entered:
-            await self._evaluate_noise_entry(snapshot)
 
     async def _evaluate_signal_entry(self, snapshot: IndicatorSnapshot, row: dict) -> None:
         """Standard model-based entry with checkpoints and confidence."""
@@ -174,32 +160,6 @@ class ModelRunner:
             return
 
         await self._place_entry(snapshot, direction, ask, confidence, inference_ms, mode="signal")
-
-    async def _evaluate_noise_entry(self, snapshot: IndicatorSnapshot) -> None:
-        """Bet the cheaper side on noise candles (coin-flip with R/R edge)."""
-        if not snapshot.up_asks or not snapshot.down_asks:
-            return
-
-        up_ask = snapshot.up_asks[0][0]
-        down_ask = snapshot.down_asks[0][0]
-
-        if up_ask <= 0 or down_ask <= 0:
-            return
-
-        # Bet the cheaper side
-        if up_ask <= down_ask:
-            direction = "UP"
-            ask = up_ask
-        else:
-            direction = "DOWN"
-            ask = down_ask
-
-        if ask >= MAX_BID:
-            return
-
-        # Confidence = 0.5 (coin flip — no model prediction)
-        self._noise_entered = True
-        await self._place_entry(snapshot, direction, ask, confidence=0.5, inference_ms=0, mode="noise")
 
     async def _place_entry(
         self,
@@ -298,10 +258,9 @@ class ModelRunner:
             await self._bet_store.save_bet(record)
 
             self._log.info(
-                "🕯️ RESOLVED %s | %s | mode=%s | entries=%d | pnl=$%+.2f | W=%d L=%d | cash=$%.2f",
+                "🕯️ RESOLVED %s | %s | entries=%d | pnl=$%+.2f | W=%d L=%d | cash=$%.2f",
                 candle.candle_id,
                 candle.outcome,
-                self._mode,
                 self._entries_made,
                 pnl,
                 state.wins,
@@ -323,7 +282,6 @@ class ModelRunner:
                     "wins": state.wins,
                     "losses": state.losses,
                     "timestamp": _time.time(),
-                    "mode": self._mode,
                 }
             )
 
@@ -345,5 +303,4 @@ class ModelRunner:
         self._current_candle_id = None
         self._cash_before_bet = 0.0
         self._candle_open = None
-        self._mode = "waiting"
-        self._noise_entered = False
+        self._signal_active = False

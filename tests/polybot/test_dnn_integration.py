@@ -55,7 +55,6 @@ def strategy() -> TradingStrategy:
         entry_points=((0.05, 1),),
         min_confidence=0.0,
         min_btc_move=0.0,
-        noise_entry_elapsed=1.0,
     )
 
 
