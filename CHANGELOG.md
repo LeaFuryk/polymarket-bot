@@ -7,6 +7,9 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+- **Edge-based strategy engine** — Rewrote `notebooks/strategy_engine.py` to use edge-based parameters (edge = max(prob, 1-prob) - ask_price) instead of elapsed/consecutive/confidence parameters. `StrategyConfig` now takes `min_edge` and `max_entries` fields. `StrategyGrid` generates a simple cartesian product (7 edge thresholds x 2 max_entries = 14 configs by default). `run_scaling()` computes per-snapshot edge and fires entries when edge >= threshold with direction lock. `WalkForwardEvaluator` unchanged.
+
 ### Added
 - **Dashboard DNN support** — Added DNN model (purple `#9b59b6`) to the multi-model dashboard. Portfolio cards and bet history table now derive model lists dynamically from received data instead of hardcoded arrays, supporting any number of models.
 - **DNN integration tests** (`tests/polybot/test_dnn_integration.py`) — 5 tests covering the full DnnPredictor-to-ModelRunner-to-AgentService pipeline: single-snapshot prediction triggers entry, broadcast contains model name, candle-close settlement computes PnL, AgentService fans out to DNN runner alongside mocked runners, and broadcast messages carry `model='DNN'`.
