@@ -7,6 +7,9 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+- **Edge-based TradingStrategy** — Replaced `entry_points` / `min_confidence` fields with `min_edge` (confidence - ask_price threshold) and `max_entries` (scaling-in cap per candle). `from_json()` now raises `ValueError` on old-format configs containing `entry_points`, prompting users to re-run the strategy notebook.
+
 ### Added
 - **Dashboard DNN support** — Added DNN model (purple `#9b59b6`) to the multi-model dashboard. Portfolio cards and bet history table now derive model lists dynamically from received data instead of hardcoded arrays, supporting any number of models.
 - **DNN integration tests** (`tests/polybot/test_dnn_integration.py`) — 5 tests covering the full DnnPredictor-to-ModelRunner-to-AgentService pipeline: single-snapshot prediction triggers entry, broadcast contains model name, candle-close settlement computes PnL, AgentService fans out to DNN runner alongside mocked runners, and broadcast messages carry `model='DNN'`.
