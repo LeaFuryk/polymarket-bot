@@ -24,8 +24,8 @@ async def test_three_runners_independent_portfolios():
     for name, p_up in [("LR", 0.7), ("RF", 0.3), ("XGB", 0.8)]:
         strategy = TradingStrategy(
             name=name,
-            entry_points=((0.05, 1),),  # 1 consecutive for simplicity
-            min_confidence=0.0,
+            min_edge=0.0,
+            max_entries=1,
             min_btc_move=0.0,
         )
         runner = ModelRunner(

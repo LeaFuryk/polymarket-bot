@@ -100,11 +100,11 @@ async def main() -> None:
         )
         runners.append(runner)
         log.info(
-            "🤖 %s: %d features, strategy=%s, conf>%.1f",
+            "🤖 %s: %d features, min_edge=%.3f, max_entries=%d",
             cfg["name"],
             len(predictor._feature_cols),
-            strategy.entry_points,
-            strategy.min_confidence,
+            strategy.min_edge,
+            strategy.max_entries,
         )
 
     # --- Optional DNN runner ---
@@ -131,12 +131,12 @@ async def main() -> None:
         )
         runners.append(dnn_runner)
         log.info(
-            "🤖 %s: %d features (temporal=%s), strategy=%s, conf>%.1f",
+            "🤖 %s: %d features (temporal=%s), min_edge=%.3f, max_entries=%d",
             DNN_CONFIG["name"],
             len(dnn_predictor._feature_cols),
             DNN_CONFIG["temporal"],
-            dnn_strategy.entry_points,
-            dnn_strategy.min_confidence,
+            dnn_strategy.min_edge,
+            dnn_strategy.max_entries,
         )
     elif not _HAS_DNN:
         log.info("⏭️  DNN model skipped — torch not installed")

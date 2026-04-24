@@ -8,6 +8,7 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Changed
+- **Edge-based ModelRunner entry logic** — Rewrote `ModelRunner._evaluate_signal_entry` to use edge-based evaluation (edge = confidence - ask_price). Removed `_predictions` list, `_next_checkpoint`, and consecutive-ticks logic. Each snapshot computes edge directly and enters when `edge >= strategy.min_edge`, respecting `strategy.max_entries` cap and direction lock. Updated startup log lines in `polybot/__main__.py` to display `min_edge` and `max_entries`.
 - **Edge-based TradingStrategy** — Replaced `entry_points` / `min_confidence` fields with `min_edge` (confidence - ask_price threshold) and `max_entries` (scaling-in cap per candle). `from_json()` now raises `ValueError` on old-format configs containing `entry_points`, prompting users to re-run the strategy notebook.
 - **Edge-based strategy engine** — Rewrote `notebooks/strategy_engine.py` to use edge-based parameters (edge = max(prob, 1-prob) - ask_price) instead of elapsed/consecutive/confidence parameters. `StrategyConfig` now takes `min_edge` and `max_entries` fields. `StrategyGrid` generates a simple cartesian product (7 edge thresholds x 2 max_entries = 14 configs by default). `run_scaling()` computes per-snapshot edge and fires entries when edge >= threshold with direction lock. `WalkForwardEvaluator` unchanged.
 
