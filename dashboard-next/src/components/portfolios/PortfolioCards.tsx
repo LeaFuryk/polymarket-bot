@@ -3,12 +3,26 @@
 import { useDashboard } from "@/context/DashboardContext";
 import { MODEL_COLORS, MODEL_SHORT } from "@/lib/constants";
 
+const MODEL_ORDER: Record<string, number> = {
+  LogisticRegression: 0,
+  RandomForest: 1,
+  XGBoost: 2,
+  DNN: 3,
+};
+
 export function PortfolioCards() {
   const { portfolios } = useDashboard();
-  const models = ["LogisticRegression", "RandomForest", "XGBoost"];
+  const models = Object.keys(portfolios).sort(
+    (a, b) => (MODEL_ORDER[a] ?? 99) - (MODEL_ORDER[b] ?? 99),
+  );
 
   return (
-    <div className="grid grid-cols-3 gap-4">
+    <div
+      className="grid gap-4"
+      style={{
+        gridTemplateColumns: `repeat(${Math.max(models.length, 1)}, minmax(0, 1fr))`,
+      }}
+    >
       {models.map((model) => {
         const p = portfolios[model];
         if (!p) {

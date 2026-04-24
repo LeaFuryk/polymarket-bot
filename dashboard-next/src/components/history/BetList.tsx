@@ -4,13 +4,27 @@ import { useState } from "react";
 import { useDashboard } from "@/context/DashboardContext";
 import { MODEL_COLORS, MODEL_SHORT, THEME } from "@/lib/constants";
 import { BetDetail } from "./BetDetail";
-import type { ModelName, PastBet } from "@/lib/types";
+import type { PastBet } from "@/lib/types";
 
-const MODELS: ModelName[] = ["LogisticRegression", "RandomForest", "XGBoost"];
+const MODEL_ORDER: Record<string, number> = {
+  LogisticRegression: 0,
+  RandomForest: 1,
+  XGBoost: 2,
+  DNN: 3,
+};
 
 export function BetList() {
   const { pastBets } = useDashboard();
   const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  // Derive model list from settlement data
+  const modelSet = new Set<string>();
+  for (const bet of pastBets) {
+    for (const m of Object.keys(bet.settlements)) modelSet.add(m);
+  }
+  const models = [...modelSet].sort(
+    (a, b) => (MODEL_ORDER[a] ?? 99) - (MODEL_ORDER[b] ?? 99),
+  );
 
   if (pastBets.length === 0) {
     return (
@@ -30,7 +44,7 @@ export function BetList() {
       <div className="mb-2 flex items-center gap-4 px-4 font-mono text-xs text-white/30">
         <span className="w-16">Time</span>
         <span className="w-14 text-center">Result</span>
-        {MODELS.map((model) => (
+        {models.map((model) => (
           <span
             key={model}
             className="w-28"
@@ -47,6 +61,7 @@ export function BetList() {
           <BetRow
             key={bet.candle_id}
             bet={bet}
+            models={models}
             expanded={expandedId === bet.candle_id}
             onToggle={() =>
               setExpandedId(expandedId === bet.candle_id ? null : bet.candle_id)
@@ -60,10 +75,12 @@ export function BetList() {
 
 function BetRow({
   bet,
+  models,
   expanded,
   onToggle,
 }: {
   bet: PastBet;
+  models: string[];
   expanded: boolean;
   onToggle: () => void;
 }) {
@@ -93,8 +110,8 @@ function BetRow({
         >
           {bet.outcome}
         </span>
-        {MODELS.map((model) => {
-          const s = bet.settlements[model];
+        {models.map((model) => {
+          const s = bet.settlements[model as keyof typeof bet.settlements];
           if (!s) {
             return (
               <span key={model} className="w-28 text-white/15">
