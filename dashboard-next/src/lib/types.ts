@@ -2,7 +2,11 @@
 
 // --- Model identification ---
 
-export type ModelName = "LogisticRegression" | "RandomForest" | "XGBoost";
+export type ModelName =
+  | "LogisticRegression"
+  | "RandomForest"
+  | "XGBoost"
+  | "DNN";
 
 // --- Collector events (forwarded by polybot) ---
 
