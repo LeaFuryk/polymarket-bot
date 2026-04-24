@@ -20,12 +20,14 @@ export const MODEL_COLORS: Record<string, string> = {
   LogisticRegression: "#3498db",
   RandomForest: "#e74c3c",
   XGBoost: "#e67e22",
+  DNN: "#9b59b6",
 };
 
 export const MODEL_SHORT: Record<string, string> = {
   LogisticRegression: "LR",
   RandomForest: "RF",
   XGBoost: "XGB",
+  DNN: "DNN",
 };
 
 export const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8766";
