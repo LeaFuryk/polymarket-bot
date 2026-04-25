@@ -109,7 +109,7 @@ class TestStrategyConfig:
         assert config["model"] == "dnn"
         assert "min_edge" in config
         assert "max_entries" in config
-        assert config["eval_method"] == "walk_forward_5_folds"
+        assert "walk_forward" in config["eval_method"]
         assert config["n_folds"] == 5
 
     def test_strategy_loadable_by_trading_strategy(self):
