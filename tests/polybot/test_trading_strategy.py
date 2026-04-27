@@ -29,7 +29,7 @@ class TestTradingStrategy:
         path.write_text(json.dumps(config))
 
         s = TradingStrategy.from_json(str(path), name="LR")
-        assert s.min_edge == 0.0
+        assert s.min_edge == 0.05
         assert s.max_entries == 1
         assert s.min_btc_move == 0.0003
 

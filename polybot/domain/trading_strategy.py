@@ -32,7 +32,7 @@ class TradingStrategy:
 
         return cls(
             name=name,
-            min_edge=float(config.get("min_edge", 0.0)),
+            min_edge=float(config.get("min_edge", 0.05)),
             max_entries=int(config.get("max_entries", 1)),
             min_btc_move=float(config.get("min_btc_move", 0.0003)),
         )
