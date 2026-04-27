@@ -9,7 +9,6 @@ Provides:
 
 from __future__ import annotations
 
-import itertools
 from dataclasses import dataclass
 from typing import Any
 
@@ -49,34 +48,25 @@ class StrategyConfig:
 
 
 class StrategyGrid:
-    """Generate all valid StrategyConfig combinations from parameter ranges.
+    """Generate strategy configs to evaluate.
 
-    Args:
-        edge_values: Candidate min_edge thresholds.
-            Defaults to [0.0, 0.02, 0.05, 0.08, 0.10, 0.15, 0.20].
-        max_entries_values: Candidate max_entries counts.
-            Defaults to [1, 2].
+    min_edge is fixed at 0.05 (edge >= 0.05 is profitable across all models).
+    Only max_entries varies.
     """
 
     def __init__(
         self,
-        edge_values: list[float] | None = None,
+        min_edge: float = 0.05,
         max_entries_values: list[int] | None = None,
     ) -> None:
-        if edge_values is None:
-            edge_values = [0.0, 0.02, 0.05, 0.08, 0.10, 0.15, 0.20]
+        self.min_edge = min_edge
         if max_entries_values is None:
             max_entries_values = [1, 2]
-
-        self.edge_values = edge_values
         self.max_entries_values = max_entries_values
 
     def generate(self) -> list[StrategyConfig]:
-        """Return all valid StrategyConfig combinations (product of edge x max_entries)."""
-        configs: list[StrategyConfig] = []
-        for edge, max_ent in itertools.product(self.edge_values, self.max_entries_values):
-            configs.append(StrategyConfig(min_edge=edge, max_entries=max_ent))
-        return configs
+        """Return one config per max_entries value, all with fixed min_edge."""
+        return [StrategyConfig(min_edge=self.min_edge, max_entries=m) for m in self.max_entries_values]
 
 
 # ---------------------------------------------------------------------------

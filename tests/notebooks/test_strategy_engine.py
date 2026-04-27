@@ -84,47 +84,34 @@ class TestStrategyConfig:
 
 class TestStrategyGrid:
     def test_default_grid_count(self):
-        """Default: 7 edge values x 2 max_entries = 14 configs."""
+        """Default: fixed min_edge=0.05, 2 max_entries values = 2 configs."""
         grid = StrategyGrid()
         strategies = grid.generate()
-        assert len(strategies) == 14
+        assert len(strategies) == 2
 
-    def test_custom_grid_count(self):
-        grid = StrategyGrid(
-            edge_values=[0.0, 0.05, 0.10],
-            max_entries_values=[1, 2, 3],
-        )
+    def test_all_have_fixed_edge(self):
+        grid = StrategyGrid()
+        for s in grid.generate():
+            assert s.min_edge == 0.05
+
+    def test_custom_edge(self):
+        grid = StrategyGrid(min_edge=0.10, max_entries_values=[1, 2, 3])
         strategies = grid.generate()
-        assert len(strategies) == 9
+        assert len(strategies) == 3
+        for s in strategies:
+            assert s.min_edge == 0.10
 
     def test_single_max_entries(self):
-        grid = StrategyGrid(
-            edge_values=[0.0, 0.05],
-            max_entries_values=[1],
-        )
+        grid = StrategyGrid(max_entries_values=[1])
         strategies = grid.generate()
-        assert len(strategies) == 2
-        for s in strategies:
-            assert s.max_entries == 1
+        assert len(strategies) == 1
+        assert strategies[0].max_entries == 1
 
     def test_all_configs_have_names(self):
         grid = StrategyGrid()
         for s in grid.generate():
             assert s.name
             assert "edge>=" in s.name
-            assert s.min_edge >= 0.0
-
-    def test_generates_cartesian_product(self):
-        grid = StrategyGrid(
-            edge_values=[0.05, 0.10],
-            max_entries_values=[1, 2],
-        )
-        strategies = grid.generate()
-        pairs = [(s.min_edge, s.max_entries) for s in strategies]
-        assert (0.05, 1) in pairs
-        assert (0.05, 2) in pairs
-        assert (0.10, 1) in pairs
-        assert (0.10, 2) in pairs
 
 
 # ---------------------------------------------------------------------------
