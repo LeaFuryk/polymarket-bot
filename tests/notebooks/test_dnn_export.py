@@ -21,7 +21,7 @@ FEATURE_COLS_PATH = REPO_ROOT / "models" / "dnn_feature_cols_v1.joblib"
 FEATURES_JSON_PATH = REPO_ROOT / "data" / "optimal_features_dnn.json"
 STRATEGY_JSON_PATH = REPO_ROOT / "data" / "optimal_strategy_dnn.json"
 
-EXPECTED_FEATURE_COLS = [
+RAW_COLS = [
     "btc_price",
     "elapsed_pct",
     "market_volume",
@@ -33,29 +33,9 @@ EXPECTED_FEATURE_COLS = [
     "down_best_ask",
     "down_bid_depth",
     "down_ask_depth",
-    "prior_return",
-    "consecutive_streak",
-    "streak_magnitude",
-    "rolling_volatility",
-    "candle_momentum",
-    "ma_crossover",
-    "trend_consistency",
-    "reversal_regime",
-    "rsi",
-    "bollinger_pct_b",
-    "stochastic_k",
-    "adx",
-    "return_autocorrelation",
-    "multi_candle_return_3",
-    "multi_candle_return_6",
-    "regime_score",
-    "mean_reversion_signal",
-    "prior_reversal_rate",
-    "volume_momentum",
-    "volume_trend",
-    "volume_price_correlation",
-    "relative_volume",
 ]
+PRIOR_CANDLE_COLS = [f"candle_{i}_{feat}" for i in range(21) for feat in ("open", "high", "low", "close", "volume")]
+EXPECTED_FEATURE_COLS = RAW_COLS + PRIOR_CANDLE_COLS  # 116 features
 
 artifacts_exist = pytest.mark.skipif(
     not MODEL_PATH.exists(), reason="DNN artifacts not on disk (run 02_export.ipynb first)"
@@ -70,8 +50,7 @@ class TestModelArtifacts:
     def test_model_loads_and_produces_output(self):
         model = torch.load(MODEL_PATH, weights_only=False)
         model.eval()
-        # ContextConditionedTCN expects (batch, seq_len, 33) or (batch, 33)
-        x = torch.randn(1, 33)
+        x = torch.randn(1, len(EXPECTED_FEATURE_COLS))
         with torch.no_grad():
             out = model(x)
         assert out.shape == (1, 1)
@@ -88,7 +67,7 @@ class TestModelArtifacts:
 
         cols = joblib.load(FEATURE_COLS_PATH)
         assert cols == EXPECTED_FEATURE_COLS
-        assert len(cols) == 33
+        assert len(cols) == 116
 
     def test_dnn_predictor_loads_artifacts(self):
         from polybot.adapters.dnn_predictor import DnnPredictor
@@ -98,12 +77,11 @@ class TestModelArtifacts:
             model_path=str(MODEL_PATH),
             feature_cols_path=str(FEATURE_COLS_PATH),
             scaler_path=str(SCALER_PATH),
-            temporal=True,
+            temporal=False,
         )
         assert isinstance(pred, Predictor)
 
         row = {col: 1.0 for col in EXPECTED_FEATURE_COLS}
-        row["candle_id"] = "test"
         p = pred.predict(row)
         assert 0.0 <= p <= 1.0
 
@@ -112,11 +90,11 @@ class TestModelArtifacts:
 class TestFeatureConfig:
     def test_features_json_has_required_fields(self):
         config = json.loads(FEATURES_JSON_PATH.read_text())
-        assert config["model"] == "dnn_v2"
-        assert config["n_features"] == 33
+        assert config["model"] == "dnn_v3"
+        assert config["n_features"] == 116
         assert config["features"] == EXPECTED_FEATURE_COLS
         assert config["architecture"] == "ContextConditionedTCN"
-        assert config["temporal"] is True
+        assert config["temporal"] is False
 
     def test_metrics_present(self):
         config = json.loads(FEATURES_JSON_PATH.read_text())

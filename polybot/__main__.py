@@ -64,7 +64,7 @@ DNN_CONFIG = {
     "features_path": "models/dnn_feature_cols_v1.joblib",
     "strategy_path": "data/optimal_strategy_dnn.json",
     "bets_dir": "data/bets/DNN",
-    "temporal": True,
+    "temporal": False,
 }
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
