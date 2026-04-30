@@ -213,7 +213,8 @@ class TestHandleCandleClose:
 
 
 class TestHandleCorrection:
-    def test_correction_calls_reverse_and_resettle(self):
+    @pytest.mark.asyncio
+    async def test_correction_reverses_and_resettles(self):
         runner = _make_runner()
         # Manually buy to create a settlement record
         runner._portfolio.buy("UP", amount_usd=20.0, price=0.60)
@@ -231,5 +232,114 @@ class TestHandleCorrection:
             outcome="DOWN",
             final_ret=-0.0007,
         )
-        runner.handle_correction(corrected)
+        await runner.handle_correction(corrected)
         # Should not raise — reverse_and_resettle handles it
+
+    @pytest.mark.asyncio
+    async def test_correction_updates_bet_store(self):
+        """Correction rewrites the persisted bet record."""
+        runner = _make_runner()
+        snap = _make_snapshot(elapsed=0.06, up_ask=0.60)
+        row = {"feat1": 1.0}
+        await runner.handle_snapshot(row, snap)
+
+        candle = CandleRecord(
+            candle_id="c1",
+            start_time=0,
+            end_time=300,
+            open=70000,
+            high=70100,
+            low=69900,
+            close=70050,
+            volume=50,
+            outcome="UP",
+            final_ret=0.0007,
+        )
+        await runner.handle_candle_close(candle)
+        assert runner._settled_bets.get("c1") is not None
+
+        corrected = CandleRecord(
+            candle_id="c1",
+            start_time=0,
+            end_time=300,
+            open=70000,
+            high=70100,
+            low=69900,
+            close=69950,
+            volume=50,
+            outcome="DOWN",
+            final_ret=-0.0007,
+        )
+        await runner.handle_correction(corrected)
+
+        runner._bet_store.update_bet.assert_awaited_once()
+        args = runner._bet_store.update_bet.call_args[0]
+        assert args[0] == "c1"  # candle_id
+        assert args[1] == "DOWN"  # new_outcome
+        assert args[2] is False  # new_won (direction was UP, outcome now DOWN)
+        assert args[3] < 0  # pnl is negative (lost)
+
+    @pytest.mark.asyncio
+    async def test_correction_broadcasts_model_correction(self):
+        """Correction broadcasts updated portfolio state to dashboard."""
+        runner = _make_runner()
+        snap = _make_snapshot(elapsed=0.06, up_ask=0.60)
+        row = {"feat1": 1.0}
+        await runner.handle_snapshot(row, snap)
+
+        candle = CandleRecord(
+            candle_id="c1",
+            start_time=0,
+            end_time=300,
+            open=70000,
+            high=70100,
+            low=69900,
+            close=70050,
+            volume=50,
+            outcome="UP",
+            final_ret=0.0007,
+        )
+        await runner.handle_candle_close(candle)
+
+        corrected = CandleRecord(
+            candle_id="c1",
+            start_time=0,
+            end_time=300,
+            open=70000,
+            high=70100,
+            low=69900,
+            close=69950,
+            volume=50,
+            outcome="DOWN",
+            final_ret=-0.0007,
+        )
+        await runner.handle_correction(corrected)
+
+        calls = runner._broadcaster.broadcast_json.call_args_list
+        correction_msg = calls[-1][0][0]
+        assert correction_msg["type"] == "model_correction"
+        assert correction_msg["model"] == "TestModel"
+        assert correction_msg["candle_id"] == "c1"
+        assert correction_msg["outcome"] == "DOWN"
+        assert correction_msg["won"] is False
+
+    @pytest.mark.asyncio
+    async def test_correction_without_bet_is_noop(self):
+        """Correction on candle with no bet doesn't update store or broadcast."""
+        runner = _make_runner()
+        corrected = CandleRecord(
+            candle_id="c99",
+            start_time=0,
+            end_time=300,
+            open=70000,
+            high=70100,
+            low=69900,
+            close=69950,
+            volume=50,
+            outcome="DOWN",
+            final_ret=-0.0007,
+        )
+        await runner.handle_correction(corrected)
+        runner._bet_store.update_bet.assert_not_awaited()
+        for call in runner._broadcaster.broadcast_json.call_args_list:
+            assert call[0][0].get("type") != "model_correction"

@@ -37,7 +37,7 @@ class AgentService:
             return None
         if msg_type == "candle_correction":
             candle = CandleRecord.from_ws(msg)
-            self._on_candle_correction(candle)
+            await self._on_candle_correction(candle)
             return None
         return None
 
@@ -54,14 +54,14 @@ class AgentService:
             await runner.handle_candle_close(candle)
         await self._indicators.on_candle_close(candle)
 
-    def _on_candle_correction(self, corrected: CandleRecord) -> None:
+    async def _on_candle_correction(self, corrected: CandleRecord) -> None:
         for i, c in enumerate(self._indicators.prior_candles):
             if c.candle_id == corrected.candle_id:
                 old_outcome = c.outcome
                 self._indicators.prior_candles[i] = corrected
                 if old_outcome != corrected.outcome:
                     for runner in self._runners:
-                        runner.handle_correction(corrected)
+                        await runner.handle_correction(corrected)
                     self._log.warning(
                         "🔄 Correction applied | %s | %s→%s",
                         corrected.candle_id,

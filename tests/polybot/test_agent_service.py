@@ -20,7 +20,7 @@ def _make_agent(n_runners=2):
         r.name = f"Model{i}"
         r.handle_snapshot = AsyncMock()
         r.handle_candle_close = AsyncMock()
-        r.handle_correction = MagicMock()
+        r.handle_correction = AsyncMock()
         runners.append(r)
 
     agent = AgentService(indicators=indicators, runners=runners)

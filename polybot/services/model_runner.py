@@ -61,6 +61,9 @@ class ModelRunner:
         self._candle_open: float | None = None
         self._signal_active: bool = False
 
+        # Settled bet entries for correction recalculation (candle_id → (direction, entries))
+        self._settled_bets: dict[str, tuple[str, list[BetEntry]]] = {}
+
     @property
     def name(self) -> str:
         return self._name
@@ -237,6 +240,10 @@ class ModelRunner:
                 timestamp=_time.time(),
             )
             await self._bet_store.save_bet(record)
+            self._settled_bets[candle.candle_id] = (
+                self._first_direction or "",
+                list(self._bet_entries),
+            )
 
             self._log.info(
                 "🕯️ RESOLVED %s | %s | entries=%d | pnl=$%+.2f | W=%d L=%d | cash=$%.2f",
@@ -271,9 +278,45 @@ class ModelRunner:
 
         self._reset_candle_state()
 
-    def handle_correction(self, corrected: CandleRecord) -> None:
-        """Reverse and re-settle if outcome changed."""
+    async def handle_correction(self, corrected: CandleRecord) -> None:
+        """Reverse portfolio, update persisted bet, broadcast correction."""
         self._portfolio.reverse_and_resettle(corrected.candle_id, corrected.outcome)
+
+        settled = self._settled_bets.get(corrected.candle_id)
+        if settled is None:
+            return  # no bet was placed on this candle
+
+        direction, entries = settled
+        won = direction == corrected.outcome
+        total_cost = sum(e.amount_usd for e in entries)
+        if won:
+            total_net_shares = 0.0
+            for e in entries:
+                gross = e.amount_usd / e.price
+                fee = gross * 0.072 * e.price * (1.0 - e.price)
+                total_net_shares += gross - fee
+            pnl = round(total_net_shares - total_cost, 4)
+        else:
+            pnl = round(-total_cost, 4)
+
+        await self._bet_store.update_bet(corrected.candle_id, corrected.outcome, won, pnl)
+
+        state = self._portfolio.state
+        await self._broadcaster.broadcast_json(
+            {
+                "type": "model_correction",
+                "model": self._name,
+                "candle_id": corrected.candle_id,
+                "outcome": corrected.outcome,
+                "direction": direction,
+                "won": won,
+                "pnl": pnl,
+                "cash": round(state.cash, 4),
+                "wins": state.wins,
+                "losses": state.losses,
+                "timestamp": _time.time(),
+            }
+        )
 
     def _reset_candle_state(self) -> None:
         self._first_direction = None
