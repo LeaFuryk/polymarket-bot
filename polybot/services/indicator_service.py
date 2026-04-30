@@ -61,6 +61,20 @@ class IndicatorService:
             self._snapshots_so_far,
         )
 
+        # Prior candle OHLCV (21 candles × 5 features = 105 columns)
+        prior_ohlcv = {}
+        prior = self._prior_candles[-MINIMUM_CANDLES:]
+        for i, candle in enumerate(prior):
+            prior_ohlcv[f"candle_{i}_open"] = candle.open
+            prior_ohlcv[f"candle_{i}_high"] = candle.high
+            prior_ohlcv[f"candle_{i}_low"] = candle.low
+            prior_ohlcv[f"candle_{i}_close"] = candle.close
+            prior_ohlcv[f"candle_{i}_volume"] = candle.volume
+        # Pad with zeros if fewer than 21 candles available
+        for i in range(len(prior), MINIMUM_CANDLES):
+            for feat in ("open", "high", "low", "close", "volume"):
+                prior_ohlcv[f"candle_{i}_{feat}"] = 0.0
+
         return {
             "candle_id": snapshot.candle_id,
             "timestamp": snapshot.timestamp,
@@ -76,6 +90,7 @@ class IndicatorService:
             "down_ask_depth": snapshot.down_asks[0][1] if snapshot.down_asks else None,
             "market_volume": snapshot.market_volume,
             **indicators,
+            **prior_ohlcv,
         }
 
     async def on_candle_close(self, candle: CandleRecord) -> None:
