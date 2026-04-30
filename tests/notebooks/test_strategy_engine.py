@@ -143,7 +143,8 @@ class TestRunScaling:
         )
         cfg = StrategyConfig(min_edge=0.10, max_entries=1)
         result = run_scaling(cfg, [candle])
-        assert result["balance"] == 990.0
+        # Bet = 2% of $1000 = $20. Loss = -$20.
+        assert result["balance"] == 980.0
         assert result["wins"] == 0
 
     def test_edge_filter_skips_low_edge(self):

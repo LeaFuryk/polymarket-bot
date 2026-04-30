@@ -74,29 +74,26 @@ class StrategyGrid:
 # ---------------------------------------------------------------------------
 
 
+TAKER_FEE_RATE = 0.072
+BET_PCT = 0.02
+
+
 def run_scaling(
     strategy: StrategyConfig,
     candle_data: list[dict],
-    bet_per_entry: float = 10.0,
     max_bid: float = 0.85,
     starting_balance: float = 1000.0,
 ) -> dict:
     """Back-test a StrategyConfig on a list of candles.
 
+    Matches live bot logic exactly:
+    - Bet size: 2% of current cash (compounding)
+    - Fee: 7.2% taker fee on shares (same as Polymarket)
+    - PnL: winning shares pay $1 each minus fees; losing bets lose full wager
+
     Each candle dict must have:
         candle_id (str), truth (int: 1=UP/0=DOWN),
         snapshots (list of dicts with tick, elapsed_pct, pred, prob, up_ask, down_ask)
-
-    For each snapshot the engine computes:
-        confidence = max(prob, 1-prob)
-        direction  = 1 if prob >= 0.5 else 0
-        ask        = up_ask if direction==1 else down_ask
-        edge       = confidence - ask
-
-    An entry fires when:
-        - edge >= strategy.min_edge
-        - entries_made < strategy.max_entries
-        - direction agrees with the first entry (direction lock)
 
     Returns a dict with:
         balance, wins, total_bets, win_rate, max_drawdown, candles_entered,
@@ -117,8 +114,10 @@ def run_scaling(
         truth: int = candle["truth"]
         snapshots: list[dict] = candle["snapshots"]
         candle_pnl = 0.0
-        first_direction: int | None = None  # direction locked on first entry
+        first_direction: int | None = None
         entries_made = 0
+        # Track entries for fee-aware settlement (same as ModelRunner._bet_entries)
+        candle_entries: list[tuple[float, float]] = []  # (ask, amount_usd)
 
         for snap in snapshots:
             prob: float = snap["prob"]
@@ -143,12 +142,13 @@ def run_scaling(
             if entries_made >= strategy.max_entries:
                 continue
 
-            # Direction consistency: must agree with first entry direction
+            # Direction consistency
             if first_direction is not None and direction != first_direction:
                 continue
 
-            # Bankroll floor guard
-            if balance < bet_per_entry:
+            # Bet size: 2% of current cash (matches ModelRunner.BET_PCT)
+            bet_amount = balance * BET_PCT
+            if bet_amount < 0.01:
                 continue
 
             # Fire entry
@@ -157,25 +157,35 @@ def run_scaling(
             if first_direction is None:
                 first_direction = direction
 
-            # Settle bet
-            if direction == truth:
-                profit = bet_per_entry * (1.0 / ask - 1.0)
-                balance += profit
-                candle_pnl += profit
-                wins += 1
-            else:
-                balance -= bet_per_entry
-                candle_pnl -= bet_per_entry
+            balance -= bet_amount
+            candle_entries.append((ask, bet_amount))
 
-            # Update drawdown incrementally
+        # Settle all entries at candle close (matches ModelRunner.handle_candle_close)
+        if candle_entries:
+            candles_entered += 1
+            won = first_direction == truth
+            total_cost = sum(amt for _, amt in candle_entries)
+
+            if won:
+                wins += 1
+                total_net_shares = 0.0
+                for ask, amt in candle_entries:
+                    gross_shares = amt / ask
+                    fee_shares = gross_shares * TAKER_FEE_RATE * ask * (1.0 - ask)
+                    total_net_shares += gross_shares - fee_shares
+                pnl = total_net_shares - total_cost  # shares pay $1 each
+            else:
+                pnl = -total_cost
+
+            balance += total_cost + pnl  # restore cost then apply PnL
+            candle_pnl = pnl
+
+            # Update drawdown
             if balance > peak:
                 peak = balance
             dd = (peak - balance) / peak if peak > 0 else 0.0
             if dd > max_drawdown:
                 max_drawdown = dd
-
-        if entries_made > 0:
-            candles_entered += 1
 
         per_candle_pnl.append(candle_pnl)
         history.append(balance)
@@ -219,7 +229,6 @@ class WalkForwardEvaluator:
         strategies: List of StrategyConfig objects to evaluate.
         candle_data: List of candle dicts in chronological order.
         n_folds: Number of folds to split data into.
-        bet_per_entry: Fixed bet amount per entry.
         max_bid: Maximum allowed ask price.
     """
 
@@ -228,13 +237,11 @@ class WalkForwardEvaluator:
         strategies: list[StrategyConfig],
         candle_data: list[dict],
         n_folds: int = 5,
-        bet_per_entry: float = 10.0,
         max_bid: float = 0.85,
     ) -> None:
         self.strategies = strategies
         self.candle_data = candle_data
         self.n_folds = n_folds
-        self.bet_per_entry = bet_per_entry
         self.max_bid = max_bid
 
     def _split_folds(self) -> list[list[dict]]:
@@ -278,7 +285,6 @@ class WalkForwardEvaluator:
                 result = run_scaling(
                     cfg,
                     fold,
-                    bet_per_entry=self.bet_per_entry,
                     max_bid=self.max_bid,
                 )
                 fold_sharpes.append(result["sharpe"])

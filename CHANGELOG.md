@@ -7,6 +7,9 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+- **Notebook evaluation aligned with live bot** — `run_scaling()` now matches the bot exactly: 2% compounding bet size (was fixed $10), 7.2% Polymarket taker fee on wins (was 0%), and per-candle settlement with fee-aware PnL. Previous notebook results were inflated by ignoring fees. With fees, only LR is profitable (+9.0%); RF and XGB lose money despite 55% WR.
+
 ### Changed
 - **DNN v2: ContextConditionedTCN** — Replaced DNN v1 (ResidualMLP on 11 raw features) with ContextConditionedTCN: FiLM-conditioned temporal convolution using 33 features (11 raw snapshot + 22 cross-candle indicators). Cross-candle indicators (trend, momentum, regime) modulate temporal processing via Feature-wise Linear Modulation. +13.4% return on unseen data (vs -0.4% for v1) when evaluated with actual trading strategy. DNN v1 preserved in `models/dnn_v1_raw/`.
 - **Edge-based ModelRunner entry logic** — Rewrote `ModelRunner._evaluate_signal_entry` to use edge-based evaluation (edge = confidence - ask_price). Removed `_predictions` list, `_next_checkpoint`, and consecutive-ticks logic. Each snapshot computes edge directly and enters when `edge >= strategy.min_edge`, respecting `strategy.max_entries` cap and direction lock. Updated startup log lines in `polybot/__main__.py` to display `min_edge` and `max_entries`.
