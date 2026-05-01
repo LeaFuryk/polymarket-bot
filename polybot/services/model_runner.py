@@ -341,3 +341,4 @@ class ModelRunner:
         self._cash_before_bet = 0.0
         self._candle_open = None
         self._signal_active = False
+        self._last_prediction = None
