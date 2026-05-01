@@ -143,21 +143,54 @@ async def main() -> None:
     else:
         log.info("⏭️  DNN model skipped — %s not found", DNN_CONFIG["model_path"])
 
+    # --- Consensus runner (DNN + majority vote) ---
+    consensus_runner: ModelRunner | None = None
+    consensus_strategy_path = "data/optimal_strategy_consensus.json"
+    if Path(consensus_strategy_path).exists() and _HAS_DNN and any(r.name == "DNN" for r in runners):
+        from polybot.adapters.consensus_predictor import ConsensusPredictor
+
+        consensus_strategy = TradingStrategy.from_json(consensus_strategy_path, name="Consensus")
+        consensus_predictor = ConsensusPredictor(
+            dnn_name="DNN",
+            edge_threshold=consensus_strategy.edge_threshold,
+            min_agreement=consensus_strategy.min_agreement,
+        )
+        consensus_portfolio = PortfolioService(initial_cash=INITIAL_CASH)
+        consensus_bet_store = JsonlBetStore(directory="data/bets/Consensus")
+
+        consensus_runner = ModelRunner(
+            name="Consensus",
+            predictor=consensus_predictor,
+            portfolio=consensus_portfolio,
+            strategy=consensus_strategy,
+            bet_store=consensus_bet_store,
+            broadcaster=broadcaster,
+            is_ensemble=True,
+        )
+        log.info(
+            "🤖 Consensus: DNN + majority agree, edge_threshold=%.3f, min_agreement=%d",
+            consensus_strategy.edge_threshold,
+            consensus_strategy.min_agreement,
+        )
+    else:
+        log.info("⏭️  Consensus skipped — requires DNN + strategy config")
+
     active_names = [r.name for r in runners]
     log.info("🚀 Active models: %s", ", ".join(active_names))
 
-    agent = AgentService(indicators=indicators, runners=runners)
+    agent = AgentService(indicators=indicators, runners=runners, consensus_runner=consensus_runner)
 
     def build_initial_state() -> dict:
+        all_runners = runners + ([consensus_runner] if consensus_runner else [])
         all_entries: list[dict] = []
-        for r in runners:
+        for r in all_runners:
             all_entries.extend(r.current_entries)
         return {
             "type": "initial_state",
             "candles": [asdict(c) for c in indicators.prior_candles],
             "snapshots_so_far": [asdict(s) for s in indicators.snapshots_so_far],
-            "portfolios": {r.name: r.portfolio.session_summary() for r in runners},
-            "equity_history": {r.name: r.equity_history for r in runners},
+            "portfolios": {r.name: r.portfolio.session_summary() for r in all_runners},
+            "equity_history": {r.name: r.equity_history for r in all_runners},
             "current_entries": all_entries,
         }
 
@@ -173,7 +206,8 @@ async def main() -> None:
     try:
         await client.run()
     finally:
-        for runner in runners:
+        all_runners = runners + ([consensus_runner] if consensus_runner else [])
+        for runner in all_runners:
             summary = runner.portfolio.session_summary()
             summary["model"] = runner.name
             log.info(
