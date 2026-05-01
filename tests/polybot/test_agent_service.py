@@ -161,3 +161,87 @@ class TestProcessCorrection:
         await agent.process(msg)
         for r in runners:
             r.handle_correction.assert_not_called()
+
+
+class TestConsensusRunner:
+    @pytest.mark.asyncio
+    async def test_consensus_receives_predictions(self):
+        agent, indicators, runners = _make_agent(n_runners=2)
+        consensus = MagicMock()
+        consensus.name = "Consensus"
+        consensus.handle_snapshot = AsyncMock()
+        consensus.handle_candle_close = AsyncMock()
+        consensus.handle_correction = AsyncMock()
+
+        for r in runners:
+            r.last_prediction = 0.65
+
+        agent_with_consensus = AgentService(indicators=indicators, runners=runners, consensus_runner=consensus)
+        msg = {
+            "type": "snapshot",
+            "candle_id": "c1",
+            "timestamp": 1.0,
+            "elapsed_pct": 0.5,
+            "btc_price": 70000,
+            "btc_bid": 69999,
+            "btc_ask": 70001,
+            "up_bids": [[0.58, 100]],
+            "up_asks": [[0.60, 100]],
+            "down_bids": [[0.38, 100]],
+            "down_asks": [[0.40, 100]],
+            "market_volume": 50,
+        }
+        await agent_with_consensus.process(msg)
+
+        consensus.handle_snapshot.assert_awaited_once()
+        call_args = consensus.handle_snapshot.call_args
+        predictions = call_args[1].get("predictions") if call_args[1] else call_args[0][2]
+        assert "Model0" in predictions
+        assert "Model1" in predictions
+
+    @pytest.mark.asyncio
+    async def test_consensus_settled_on_candle_close(self):
+        agent, indicators, runners = _make_agent(n_runners=1)
+        consensus = MagicMock()
+        consensus.name = "Consensus"
+        consensus.handle_candle_close = AsyncMock()
+        consensus.handle_correction = AsyncMock()
+
+        agent_with_consensus = AgentService(indicators=indicators, runners=runners, consensus_runner=consensus)
+        msg = {
+            "type": "candle_close",
+            "candle_id": "c1",
+            "start_time": 0,
+            "end_time": 300,
+            "open": 70000,
+            "high": 70100,
+            "low": 69900,
+            "close": 70050,
+            "volume": 50,
+            "outcome": "UP",
+            "final_ret": 0.001,
+        }
+        await agent_with_consensus.process(msg)
+        consensus.handle_candle_close.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_no_consensus_still_works(self):
+        """Existing behavior when no consensus runner provided."""
+        agent, indicators, runners = _make_agent(n_runners=2)
+        msg = {
+            "type": "snapshot",
+            "candle_id": "c1",
+            "timestamp": 1.0,
+            "elapsed_pct": 0.5,
+            "btc_price": 70000,
+            "btc_bid": 69999,
+            "btc_ask": 70001,
+            "up_bids": [[0.58, 100]],
+            "up_asks": [[0.60, 100]],
+            "down_bids": [[0.38, 100]],
+            "down_asks": [[0.40, 100]],
+            "market_volume": 50,
+        }
+        await agent.process(msg)
+        for r in runners:
+            r.handle_snapshot.assert_awaited_once()
