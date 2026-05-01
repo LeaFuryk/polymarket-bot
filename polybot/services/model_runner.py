@@ -40,6 +40,7 @@ class ModelRunner:
         bet_store: BetStore,
         broadcaster: MessageRelay,
         logger: logging.Logger | None = None,
+        is_ensemble: bool = False,
     ) -> None:
         self._name = name
         self._predictor = predictor
@@ -48,6 +49,8 @@ class ModelRunner:
         self._bet_store = bet_store
         self._broadcaster = broadcaster
         self._log = logger or logging.getLogger(f"{__name__}.{name}")
+        self._is_ensemble = is_ensemble
+        self._last_prediction: float | None = None
 
         # Equity history: balance after each settlement (for dashboard chart)
         self._equity_history: list[float] = [portfolio.state.cash]
@@ -77,6 +80,10 @@ class ModelRunner:
         return self._equity_history
 
     @property
+    def last_prediction(self) -> float | None:
+        return self._last_prediction
+
+    @property
     def current_entries(self) -> list[dict]:
         return [
             {
@@ -95,7 +102,9 @@ class ModelRunner:
             for e in self._bet_entries
         ]
 
-    async def handle_snapshot(self, row: dict, snapshot: IndicatorSnapshot) -> None:
+    async def handle_snapshot(
+        self, row: dict, snapshot: IndicatorSnapshot, predictions: dict[str, float] | None = None
+    ) -> None:
         """Predict, evaluate entry, broadcast if triggered."""
         if snapshot.up_bids and snapshot.up_asks and snapshot.down_bids and snapshot.down_asks:
             up_mid = (snapshot.up_bids[0][0] + snapshot.up_asks[0][0]) / 2
@@ -113,16 +122,22 @@ class ModelRunner:
                 self._signal_active = True
 
         if self._signal_active:
-            await self._evaluate_signal_entry(snapshot, row)
+            await self._evaluate_signal_entry(snapshot, row, predictions)
 
-    async def _evaluate_signal_entry(self, snapshot: IndicatorSnapshot, row: dict) -> None:
+    async def _evaluate_signal_entry(
+        self, snapshot: IndicatorSnapshot, row: dict, predictions: dict[str, float] | None = None
+    ) -> None:
         """Edge-based entry: place bet when model confidence exceeds ask price by min_edge."""
         if self._entries_made >= self._strategy.max_entries:
             return
 
         t0 = _time.perf_counter()
-        p_up = self._predictor.predict(row)
+        if self._is_ensemble and predictions is not None:
+            p_up = self._predictor.predict_ensemble(predictions, row, snapshot)
+        else:
+            p_up = self._predictor.predict(row)
         inference_ms = (_time.perf_counter() - t0) * 1000
+        self._last_prediction = p_up
 
         confidence = max(p_up, 1.0 - p_up)
         direction = "UP" if p_up >= 0.5 else "DOWN"

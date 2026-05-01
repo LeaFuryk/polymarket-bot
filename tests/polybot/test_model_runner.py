@@ -343,3 +343,36 @@ class TestHandleCorrection:
         runner._bet_store.update_bet.assert_not_awaited()
         for call in runner._broadcaster.broadcast_json.call_args_list:
             assert call[0][0].get("type") != "model_correction"
+
+
+class TestEnsembleMode:
+    @pytest.mark.asyncio
+    async def test_last_prediction_set_after_snapshot(self):
+        runner = _make_runner()
+        snap = _make_snapshot(elapsed=0.06, up_ask=0.60)
+        row = {"feat1": 1.0}
+        await runner.handle_snapshot(row, snap)
+        assert runner.last_prediction is not None
+        assert 0.0 <= runner.last_prediction <= 1.0
+
+    @pytest.mark.asyncio
+    async def test_ensemble_uses_predict_ensemble(self):
+        ensemble_predictor = MagicMock()
+        ensemble_predictor.predict_ensemble.return_value = 0.7
+
+        runner = ModelRunner(
+            name="Consensus",
+            predictor=ensemble_predictor,
+            portfolio=PortfolioService(initial_cash=1000.0),
+            strategy=_make_strategy(),
+            bet_store=AsyncMock(),
+            broadcaster=AsyncMock(),
+            is_ensemble=True,
+        )
+        snap = _make_snapshot(elapsed=0.06, up_ask=0.60)
+        row = {"feat1": 1.0}
+        predictions = {"LR": 0.6, "RF": 0.7, "XGB": 0.65, "DNN": 0.72}
+        await runner.handle_snapshot(row, snap, predictions=predictions)
+
+        ensemble_predictor.predict_ensemble.assert_called_once_with(predictions, row, snap)
+        assert runner.last_prediction == 0.7
