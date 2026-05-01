@@ -17,6 +17,6 @@ class EnsemblePredictor(Protocol):
         predictions: dict[str, float],
         row: dict,
         snapshot: IndicatorSnapshot,
-    ) -> float:
-        """Return P(UP) in [0, 1]. 0.5 = neutral (no bet)."""
+    ) -> float | None:
+        """Return P(UP) in [0, 1], or None to skip."""
         ...

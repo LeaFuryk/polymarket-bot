@@ -14,10 +14,6 @@ if TYPE_CHECKING:
 class ConsensusPredictor(EnsemblePredictor):
     """Bets when DNN has edge and majority of other models agree on direction."""
 
-    # Returned when Consensus decides to skip — must be low enough
-    # that ModelRunner's edge check (confidence - ask) never triggers.
-    SKIP = 0.0
-
     def __init__(
         self,
         dnn_name: str = "DNN",
@@ -35,30 +31,33 @@ class ConsensusPredictor(EnsemblePredictor):
         predictions: dict[str, float],
         row: dict,
         snapshot: IndicatorSnapshot,
-    ) -> float:
-        dnn_prob = predictions.get(self._dnn_name, 0.5)
+    ) -> float | None:
+        dnn_prob = predictions.get(self._dnn_name)
+        if dnn_prob is None:
+            return None
+
         dnn_conf = max(dnn_prob, 1.0 - dnn_prob)
         dnn_dir = 1 if dnn_prob >= 0.5 else 0
 
         # Get ask price for DNN's direction
         if dnn_dir == 1:
             if not snapshot.up_asks:
-                return self.SKIP
+                return None
             ask = snapshot.up_asks[0][0]
         else:
             if not snapshot.down_asks:
-                return self.SKIP
+                return None
             ask = snapshot.down_asks[0][0]
 
         # DNN edge check
         edge = dnn_conf - ask
         if edge < self._edge_threshold:
-            return self.SKIP
+            return None
 
         # Count agreement from other models
         others = {k: v for k, v in predictions.items() if k != self._dnn_name}
         agrees = sum(1 for v in others.values() if (v >= 0.5) == (dnn_dir == 1))
         if agrees < self._min_agreement:
-            return self.SKIP
+            return None
 
         return dnn_prob

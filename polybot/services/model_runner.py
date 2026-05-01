@@ -139,6 +139,9 @@ class ModelRunner:
         inference_ms = (_time.perf_counter() - t0) * 1000
         self._last_prediction = p_up
 
+        if p_up is None:
+            return
+
         confidence = max(p_up, 1.0 - p_up)
         direction = "UP" if p_up >= 0.5 else "DOWN"
 

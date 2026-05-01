@@ -38,13 +38,13 @@ class TestConsensusPredictor:
         p = ConsensusPredictor(dnn_name="DNN", edge_threshold=0.07, min_agreement=2)
         preds = {"LR": 0.40, "RF": 0.60, "XGB": 0.35, "DNN": 0.74}
         result = p.predict_ensemble(preds, {}, _make_snapshot(up_ask=0.60))
-        assert result == ConsensusPredictor.SKIP
+        assert result is None
 
     def test_skip_when_dnn_edge_too_low(self):
         p = ConsensusPredictor(dnn_name="DNN", edge_threshold=0.07, min_agreement=2)
         preds = {"LR": 0.62, "RF": 0.71, "XGB": 0.60, "DNN": 0.55}
         result = p.predict_ensemble(preds, {}, _make_snapshot(up_ask=0.50))
-        assert result == ConsensusPredictor.SKIP
+        assert result is None
 
     def test_down_direction(self):
         p = ConsensusPredictor(dnn_name="DNN", edge_threshold=0.07, min_agreement=2)
@@ -69,4 +69,10 @@ class TestConsensusPredictor:
             market_volume=50.0,
         )
         result = p.predict_ensemble(preds, {}, snap)
-        assert result == ConsensusPredictor.SKIP
+        assert result is None
+
+    def test_skip_when_dnn_prediction_missing(self):
+        p = ConsensusPredictor(dnn_name="DNN", edge_threshold=0.07, min_agreement=2)
+        preds = {"LR": 0.62, "RF": 0.71, "XGB": 0.60}
+        result = p.predict_ensemble(preds, {}, _make_snapshot())
+        assert result is None
