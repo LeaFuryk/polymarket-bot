@@ -1,0 +1,18 @@
+{
+  "model": "consensus",
+  "strategy": "DNN + majority agree",
+  "min_edge": 0.05,
+  "max_entries": 1,
+  "min_btc_move": 0.0,
+  "edge_threshold": 0.07,
+  "min_agreement": 2,
+  "dnn_name": "DNN",
+  "eval_method": "ensemble_gating_experiment",
+  "metrics": {
+    "bets": 309,
+    "win_rate": 0.612,
+    "return_pct": 24.0,
+    "max_dd": 0.066,
+    "sharpe": 0.042
+  }
+}

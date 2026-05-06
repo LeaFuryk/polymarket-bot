@@ -19,6 +19,8 @@ class TradingStrategy:
     min_edge: float  # minimum edge (confidence - ask) to enter (e.g. 0.05)
     max_entries: int  # max scaling-in entries per candle (e.g. 2)
     min_btc_move: float  # minimum BTC move from open to use model (e.g. 0.0003 = 0.03%)
+    edge_threshold: float = 0.05  # consensus: minimum edge for agreement threshold
+    min_agreement: int = 2  # consensus: minimum number of models that must agree
 
     @classmethod
     def from_json(cls, path: str, name: str) -> TradingStrategy:
@@ -35,4 +37,6 @@ class TradingStrategy:
             min_edge=float(config.get("min_edge", 0.05)),
             max_entries=int(config.get("max_entries", 1)),
             min_btc_move=float(config.get("min_btc_move", 0.0003)),
+            edge_threshold=float(config.get("edge_threshold", 0.05)),
+            min_agreement=int(config.get("min_agreement", 2)),
         )

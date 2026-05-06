@@ -20,10 +20,12 @@ class AgentService:
         self,
         indicators: IndicatorService,
         runners: list[ModelRunner],
+        consensus_runner: ModelRunner | None = None,
         logger: logging.Logger | None = None,
     ) -> None:
         self._indicators = indicators
         self._runners = runners
+        self._consensus = consensus_runner
         self._log = logger or logging.getLogger(__name__)
 
     async def process(self, msg: dict) -> dict | None:
@@ -47,11 +49,18 @@ class AgentService:
             return None
         for runner in self._runners:
             await runner.handle_snapshot(row, snapshot)
+
+        if self._consensus is not None:
+            predictions = {r.name: r.last_prediction for r in self._runners if r.last_prediction is not None}
+            await self._consensus.handle_snapshot(row, snapshot, predictions=predictions)
+
         return row
 
     async def _on_candle_close(self, candle: CandleRecord) -> None:
         for runner in self._runners:
             await runner.handle_candle_close(candle)
+        if self._consensus is not None:
+            await self._consensus.handle_candle_close(candle)
         await self._indicators.on_candle_close(candle)
 
     async def _on_candle_correction(self, corrected: CandleRecord) -> None:
@@ -62,6 +71,8 @@ class AgentService:
                 if old_outcome != corrected.outcome:
                     for runner in self._runners:
                         await runner.handle_correction(corrected)
+                    if self._consensus is not None:
+                        await self._consensus.handle_correction(corrected)
                     self._log.warning(
                         "🔄 Correction applied | %s | %s→%s",
                         corrected.candle_id,
